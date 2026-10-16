@@ -9,4 +9,5 @@
 
 ## Dominio
 - Reglamento de puntos y convocatorias: `docs/regimen-interno.pdf` (fuente de verdad).
+- Plan por fases y decisiones cerradas: `docs/plan.md`.
 - Uso principal: iPad en horizontal durante partidos; registro rápido y tolerante a cortes de red.
