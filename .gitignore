@@ -1,0 +1,22 @@
+# Secretos
+.env
+.env.*
+!.env.example
+
+# Node / Next
+node_modules/
+.next/
+out/
+.yarn/*
+!.yarn/releases
+!.yarn/patches
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.coverage
+
+# Memoria local de ECC
+.ecc/memory/
