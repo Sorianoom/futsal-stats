@@ -30,7 +30,7 @@ def _match_out(match: Match, held_on: object) -> MatchOut:
 
 
 @router.post("/matches", response_model=Envelope[MatchOut], status_code=201)
-async def create_match(payload: MatchCreate, db: SessionDep, _: HeadCoach) -> Envelope[MatchOut]:
+async def create_match(payload: MatchCreate, db: SessionDep, _: CurrentUser) -> Envelope[MatchOut]:
     match = await points_repo.create_match(db, payload.held_on, payload.opponent)
     await db.commit()
     return ok(_match_out(match, payload.held_on))

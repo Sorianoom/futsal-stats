@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import register_error_handlers
-from app.api.routes import auth, callup, matches, movements, players, sessions
+from app.api.routes import auth, callup, matches, movements, players, sessions, stints, sync
 from app.auth.passwords import warm_up
 from app.auth.rate_limit import LoginGuard
 from app.config import get_settings
@@ -42,7 +42,14 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(auth.router)
     app.include_router(players.router)
-    for router in (sessions.router, movements.router, matches.router, callup.router):
+    for router in (
+        sessions.router,
+        movements.router,
+        matches.router,
+        callup.router,
+        sync.router,
+        stints.router,
+    ):
         app.include_router(router)
 
     @app.get("/health")

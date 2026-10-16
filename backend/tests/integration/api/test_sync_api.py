@@ -1,0 +1,279 @@
+import uuid
+from typing import Any
+
+from httpx import AsyncClient
+
+from app.domain.roles import Role
+from tests.integration.api.conftest import Login, MakePlayer
+
+
+async def new_match(client: AsyncClient, headers: dict[str, str]) -> str:
+    response = await client.post(
+        "/matches", json={"held_on": "2026-10-17", "opponent": "Rival FS"}, headers=headers
+    )
+    return str(response.json()["data"]["id"])
+
+
+def event(
+    seq: int,
+    kind: str = "goal",
+    player_id: object = None,
+    part: int = 1,
+    t: int = 100,
+    voids: object = None,
+    id_: object = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "id": str(id_ or uuid.uuid4()),
+        "seq": seq,
+        "kind": kind,
+        "part": part,
+        "t": t,
+        "player_id": str(player_id) if player_id else None,
+        "voids_event_id": str(voids) if voids else None,
+    }
+    return body
+
+
+async def sync(client, headers, match_id, **streams):  # type: ignore[no-untyped-def]
+    body = {"events": [], "lineup_events": [], "ratings": [], **streams}
+    return await client.post(f"/matches/{match_id}/sync", json=body, headers=headers)
+
+
+async def test_assistant_coach_syncs_events_and_they_come_back_in_order(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    head = await login(Role.HEAD_COACH)
+    assistant = await login(Role.ASSISTANT_COACH)
+    match_id = await new_match(client, head)
+    player = await make_player(7)
+    second = event(2, "shot", player.id, t=200)
+    first = event(1, "goal", player.id, t=100)
+
+    response = await sync(client, assistant, match_id, events=[second, first])
+    stored = await client.get(f"/matches/{match_id}/events", headers=assistant)
+
+    data = response.json()["data"]
+    assert response.status_code == 200
+    assert sorted(data["accepted"]) == sorted([first["id"], second["id"]])
+    assert data["duplicates"] == [] and data["rejected"] == []
+    assert [e["id"] for e in stored.json()["data"]] == [first["id"], second["id"]]
+
+
+async def test_resending_the_same_batch_stores_nothing_twice(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    batch = [event(1, "goal", player.id), event(2, "foul", player.id)]
+    await sync(client, headers, match_id, events=batch)
+
+    again = await sync(client, headers, match_id, events=batch)
+    stored = await client.get(f"/matches/{match_id}/events", headers=headers)
+
+    data = again.json()["data"]
+    assert data["accepted"] == [] and data["rejected"] == []
+    assert sorted(data["duplicates"]) == sorted(e["id"] for e in batch)
+    assert len(stored.json()["data"]) == 2
+
+
+async def test_a_mixed_batch_separates_new_from_already_stored(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    old, new = event(1, "goal", player.id), event(2, "shot", player.id)
+    await sync(client, headers, match_id, events=[old])
+
+    response = await sync(client, headers, match_id, events=[old, new])
+
+    data = response.json()["data"]
+    assert (data["accepted"], data["duplicates"]) == ([new["id"]], [old["id"]])
+
+
+async def test_an_unknown_player_rejects_only_that_item(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    good, bad = event(1, "goal", player.id), event(2, "goal", uuid.uuid4())
+
+    response = await sync(client, headers, match_id, events=[good, bad])
+
+    data = response.json()["data"]
+    assert data["accepted"] == [good["id"]]
+    assert data["rejected"] == [{"id": bad["id"], "reason": "unknown_player"}]
+
+
+async def test_a_seq_taken_by_another_event_is_rejected(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    await sync(client, headers, match_id, events=[event(1, "goal", player.id)])
+    clash = event(1, "shot", player.id)
+
+    response = await sync(client, headers, match_id, events=[clash])
+
+    assert response.json()["data"]["rejected"] == [{"id": clash["id"], "reason": "seq_conflict"}]
+
+
+async def test_an_event_id_already_used_in_another_match_is_rejected(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    first_match, second_match = await new_match(client, headers), await new_match(client, headers)
+    player = await make_player(7)
+    shared = event(1, "goal", player.id)
+    await sync(client, headers, first_match, events=[shared])
+
+    response = await sync(client, headers, second_match, events=[shared])
+
+    assert response.json()["data"]["rejected"] == [{"id": shared["id"], "reason": "id_conflict"}]
+
+
+async def test_undo_voids_an_event_and_bad_undos_are_rejected(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    goal = event(1, "goal", player.id)
+    undo = event(2, "undo", voids=goal["id"])
+    undo_again = event(3, "undo", voids=goal["id"])
+    undo_ghost = event(4, "undo", voids=uuid.uuid4())
+
+    response = await sync(client, headers, match_id, events=[goal, undo, undo_again, undo_ghost])
+
+    data = response.json()["data"]
+    assert sorted(data["accepted"]) == sorted([goal["id"], undo["id"]])
+    assert {r["id"]: r["reason"] for r in data["rejected"]} == {
+        undo_again["id"]: "already_voided",
+        undo_ghost["id"]: "void_target_missing",
+    }
+
+
+async def test_lineup_events_and_ratings_are_accepted_and_idempotent(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    players = [await make_player(n) for n in range(1, 6)]
+    lineup = {
+        "id": str(uuid.uuid4()),
+        "seq": 1,
+        "payload": {"type": "part_started", "part": 1, "starters": [str(p.id) for p in players]},
+    }
+    rating = {"id": str(uuid.uuid4()), "part": 1, "t": 300, "stars": 4}
+
+    first = await sync(client, headers, match_id, lineup_events=[lineup], ratings=[rating])
+    again = await sync(client, headers, match_id, lineup_events=[lineup], ratings=[rating])
+
+    assert sorted(first.json()["data"]["accepted"]) == sorted([lineup["id"], rating["id"]])
+    assert sorted(again.json()["data"]["duplicates"]) == sorted([lineup["id"], rating["id"]])
+
+
+async def test_sync_status_tells_the_client_where_to_resume(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    await sync(
+        client,
+        headers,
+        match_id,
+        events=[event(5, "goal", player.id), event(9, "shot", player.id)],
+        ratings=[{"id": str(uuid.uuid4()), "part": 1, "t": 10, "stars": 5}],
+    )
+
+    response = await client.get(f"/matches/{match_id}/sync-status", headers=headers)
+
+    assert response.json()["data"] == {
+        "events": {"count": 2, "last_seq": 9},
+        "lineup_events": {"count": 0, "last_seq": None},
+        "ratings": {"count": 1},
+    }
+
+
+async def test_invalid_items_are_a_validation_error_for_the_whole_request(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    player = await make_player(7)
+    ghost = uuid.uuid4()
+
+    invalid = [
+        event(1, "goal", player.id, part=3),
+        event(1, "goal", player.id, t=-1),
+        event(1, "goal", None),
+        event(1, "rival_goal", player.id),
+        event(1, "undo", None),
+        event(1, "goal", player.id, voids=ghost),
+        event(-1, "goal", player.id),
+        {**event(1, "goal", player.id), "kind": "dance"},
+    ]
+    responses = [await sync(client, headers, match_id, events=[bad]) for bad in invalid]
+
+    assert [r.status_code for r in responses] == [422] * len(invalid)
+
+
+async def test_rival_goals_have_no_player_and_are_accepted(
+    client: AsyncClient, login: Login
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    rival = event(1, "rival_goal", None)
+
+    response = await sync(client, headers, match_id, events=[rival])
+
+    assert response.json()["data"]["accepted"] == [rival["id"]]
+
+
+async def test_lineup_payload_and_rating_validation(client: AsyncClient, login: Login) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+
+    bad_type = await sync(
+        client,
+        headers,
+        match_id,
+        lineup_events=[{"id": str(uuid.uuid4()), "seq": 1, "payload": {"type": "dance"}}],
+    )
+    bad_stars = await sync(
+        client,
+        headers,
+        match_id,
+        ratings=[{"id": str(uuid.uuid4()), "part": 1, "t": 1, "stars": 6}],
+    )
+
+    assert bad_type.status_code == 422
+    assert bad_stars.status_code == 422
+
+
+async def test_batches_are_capped(client: AsyncClient, login: Login) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+
+    response = await sync(
+        client, headers, match_id, events=[event(n, "rival_goal") for n in range(501)]
+    )
+
+    assert response.status_code == 422
+
+
+async def test_unknown_match_and_missing_credentials(client: AsyncClient, login: Login) -> None:
+    headers = await login()
+
+    unknown = await sync(client, headers, uuid.uuid4())
+    anonymous = await client.post(f"/matches/{uuid.uuid4()}/sync", json={})
+    events = await client.get(f"/matches/{uuid.uuid4()}/events", headers=headers)
+
+    assert unknown.status_code == 404
+    assert anonymous.status_code == 401
+    assert events.status_code == 404
