@@ -1,0 +1,42 @@
+{
+  "description": "Partido completo: 2 cambios y una roja en la parte 1; 4 jugadores y un cambio en la parte 2. Valores calculados a mano.",
+  "lineup_events": [
+    { "type": "part_started", "part": 1, "starters": ["p1", "p2", "p3", "p4", "p5"] },
+    { "type": "substituted", "t": 300, "player_out": "p1", "player_in": "p6" },
+    { "type": "substituted", "t": 600, "player_out": "p2", "player_in": "p7" },
+    { "type": "sent_off", "t": 900, "player_id": "p3" },
+    { "type": "part_ended", "t": 1200 },
+    { "type": "part_started", "part": 2, "starters": ["p6", "p7", "p4", "p5"] },
+    { "type": "substituted", "t": 200, "player_out": "p6", "player_in": "p1" },
+    { "type": "part_ended", "t": 1200 }
+  ],
+  "goals": [
+    { "part": 1, "t": 100, "for_team": true },
+    { "part": 1, "t": 700, "for_team": false },
+    { "part": 1, "t": 1000, "for_team": true },
+    { "part": 2, "t": 200, "for_team": true }
+  ],
+  "ratings": [
+    { "part": 1, "t": 250, "stars": 5 },
+    { "part": 2, "t": 1100, "stars": 3 }
+  ],
+  "expected": {
+    "sent_off": ["p3"],
+    "seconds_by_player": {
+      "p1": 1300,
+      "p2": 600,
+      "p3": 900,
+      "p4": 2400,
+      "p5": 2400,
+      "p6": 1100,
+      "p7": 1800
+    },
+    "quintets": [
+      { "players": ["p1", "p2", "p3", "p4", "p5"], "seconds": 300, "goals_for": 1, "goals_against": 0, "rating_count": 1, "rating_total": 5 },
+      { "players": ["p2", "p3", "p4", "p5", "p6"], "seconds": 300, "goals_for": 0, "goals_against": 0, "rating_count": 0, "rating_total": 0 },
+      { "players": ["p3", "p4", "p5", "p6", "p7"], "seconds": 300, "goals_for": 0, "goals_against": 1, "rating_count": 0, "rating_total": 0 },
+      { "players": ["p4", "p5", "p6", "p7"], "seconds": 500, "goals_for": 1, "goals_against": 0, "rating_count": 0, "rating_total": 0 },
+      { "players": ["p1", "p4", "p5", "p7"], "seconds": 1000, "goals_for": 1, "goals_against": 0, "rating_count": 1, "rating_total": 3 }
+    ]
+  }
+}
