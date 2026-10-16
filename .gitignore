@@ -20,3 +20,4 @@ __pycache__/
 
 # Memoria local de ECC
 .ecc/memory/
+*:Zone.Identifier
