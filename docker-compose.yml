@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: futsal
+      POSTGRES_PASSWORD: futsal
+      POSTGRES_DB: futsal
+    ports:
+      - "54329:5432"
+    volumes:
+      - futsal_pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U futsal -d futsal"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  futsal_pgdata:
