@@ -7,9 +7,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
-from app.db.models import User
+from app.db.catalog_repo import seed_catalog
+from app.db.models import Player, User
 from app.db.session import get_session
 from app.db.users_repo import create_user
+from app.domain.points.callup import PlayerStatus, Position
 from app.domain.roles import Role
 from app.main import create_app
 
@@ -22,6 +24,7 @@ TEST_SETTINGS = Settings(
 
 MakeUser = Callable[..., Awaitable[User]]
 Login = Callable[..., Awaitable[dict[str, str]]]
+MakePlayer = Callable[..., Awaitable[Player]]
 
 
 @pytest.fixture
@@ -59,3 +62,26 @@ def login(client: AsyncClient, make_user: MakeUser) -> Login:
         return {"Authorization": f"Bearer {token}"}
 
     return _login
+
+
+@pytest.fixture
+def make_player(session: AsyncSession) -> MakePlayer:
+    async def _make(
+        dorsal: int,
+        position: Position = Position.FIELD,
+        status: PlayerStatus = PlayerStatus.AVAILABLE,
+        name: str | None = None,
+    ) -> Player:
+        player = Player(
+            name=name or f"Jugador {dorsal}", dorsal=dorsal, position=position, status=status
+        )
+        session.add(player)
+        await session.flush()
+        return player
+
+    return _make
+
+
+@pytest.fixture(autouse=True)
+async def seeded_catalog(session: AsyncSession) -> None:
+    await seed_catalog(session)
