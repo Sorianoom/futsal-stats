@@ -47,6 +47,11 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: yarn lint
+      # LayoutProps y similares los genera Next; en un checkout limpio hay que pedirlos.
+      - run: yarn next typegen
       - run: yarn typecheck
       - run: yarn test
       - run: yarn build
+        env:
+          # El build de producción exige una URL https; aquí solo comprueba que compila.
+          NEXT_PUBLIC_API_URL: https://api.example.com
