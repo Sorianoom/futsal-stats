@@ -7,7 +7,12 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
     environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
-    coverage: { provider: "v8", include: ["src/**"] },
+    coverage: {
+      provider: "v8",
+      include: ["src/**"],
+      exclude: ["src/components/ui/**", "src/test/**", "**/*.test.{ts,tsx}"],
+    },
   },
 });
