@@ -12,6 +12,7 @@ import { ROLE_LABEL } from "@/lib/labels";
 const NAV_ITEMS = [
   { href: "/", label: "Inicio" },
   { href: "/plantilla", label: "Plantilla" },
+  { href: "/convocatoria", label: "Convocatoria", headCoachOnly: true },
 ];
 
 const LOGOUT_ERROR = "No se pudo cerrar la sesión. Comprueba la conexión e inténtalo de nuevo.";
@@ -25,6 +26,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.headCoachOnly || user?.role === "head_coach",
+  );
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -42,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="flex w-60 shrink-0 flex-col gap-2 border-r bg-card p-4">
         <p className="px-2 pb-4 text-xl font-bold">Futsal Stats</p>
         <nav aria-label="Principal" className="flex flex-1 flex-col gap-2">
-          {NAV_ITEMS.map(({ href, label }) => (
+          {visibleItems.map(({ href, label }) => (
             <Link
               key={href}
               href={href}

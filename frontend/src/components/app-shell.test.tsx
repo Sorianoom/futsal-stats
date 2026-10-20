@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/client";
-import { renderWithAuth } from "@/test/render-with-auth";
+import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
 
 import { AppShell } from "./app-shell";
 
@@ -30,6 +30,20 @@ describe("AppShell", () => {
     renderWithAuth(<AppShell>contenido</AppShell>);
 
     expect(screen.getByRole("link", { name: "Plantilla" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("el entrenador ve la convocatoria en el menú y el segundo entrenador no", () => {
+    const { unmount } = renderWithAuth(<AppShell>contenido</AppShell>);
+    expect(screen.getByRole("link", { name: "Convocatoria" })).toHaveAttribute(
+      "href",
+      "/convocatoria",
+    );
+    unmount();
+
+    renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("assistant_coach") });
+
+    expect(screen.queryByRole("link", { name: "Convocatoria" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Plantilla" })).toBeInTheDocument();
   });
 
   it("cierra la sesión desde el botón", async () => {
