@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import type { Match } from "@/lib/api/match-types";
 import { createMatch } from "@/lib/api/matches";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { todayInMadrid } from "@/lib/weeks";
 
 const MAX_OPPONENT_LENGTH = 100;
@@ -35,6 +36,7 @@ function NewMatchForm({ busy, setBusy, onClose, onCreated }: FormProps) {
   const [opponentError, setOpponentError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+  const keyFor = useIdempotencyKey();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,7 +50,7 @@ function NewMatchForm({ busy, setBusy, onClose, onCreated }: FormProps) {
     setBusy(true);
     let created: Match;
     try {
-      created = await createMatch({ held_on: date, opponent: name });
+      created = await createMatch({ held_on: date, opponent: name }, keyFor(`${date}|${name}`));
     } catch (failure) {
       setServerError(failureMessage(failure));
       setBusy(false);

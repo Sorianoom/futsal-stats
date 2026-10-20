@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/points";
 import type { Exclusion, Infraction } from "@/lib/api/types";
 import { SELECT_CLASS } from "@/lib/form-styles";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { SANCTION_LABEL, sanctionText } from "@/lib/labels";
 import { formatShortDay, shiftWeek, weekStartOf } from "@/lib/weeks";
 
@@ -132,6 +133,7 @@ function RedCardItem({
   const [confirming, setConfirming] = useState(false);
   const [exclusionError, setExclusionError] = useState<string | null>(null);
   // Cerrojos síncronos: el estado de React llega tarde para frenar un doble toque.
+  const keyFor = useIdempotencyKey();
   const registerLock = useRef(false);
   const confirmLock = useRef(false);
 
@@ -141,13 +143,16 @@ function RedCardItem({
     setRegistering(true);
     setRegisterError(null);
     try {
-      await registerInfraction({
-        player_id: playerId,
-        infraction_code: RED_INFRACTION,
-        occurred_on: match.held_on,
-        in_match: true,
-        session_id: match.session_id,
-      });
+      await registerInfraction(
+        {
+          player_id: playerId,
+          infraction_code: RED_INFRACTION,
+          occurred_on: match.held_on,
+          in_match: true,
+          session_id: match.session_id,
+        },
+        keyFor(`${playerId}|${match.id}`),
+      );
       setRegistered(true);
     } catch (failure) {
       if (isClearRejection(failure)) {

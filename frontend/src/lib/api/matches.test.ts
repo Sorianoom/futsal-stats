@@ -25,6 +25,14 @@ describe("API de partidos", () => {
     expect(api.calls[1].body).toEqual({ held_on: "2026-10-21", opponent: "Rival FS" });
   });
 
+  it("createMatch envía la clave de idempotencia", async () => {
+    const api = mockApi({ "POST /matches": { data: { id: "m1" } } });
+
+    await createMatch({ held_on: "2026-10-21", opponent: "Rival FS" }, "k-match");
+
+    expect(api.calls[0].headers.get("Idempotency-Key")).toBe("k-match");
+  });
+
   it("lee los eventos y la alineación de un partido", async () => {
     const api = mockApi({
       "GET /matches/m1/events": { data: [] },

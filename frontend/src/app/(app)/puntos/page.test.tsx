@@ -86,6 +86,26 @@ const registered = (overrides: Partial<InfractionRegistered> = {}): InfractionRe
   ...overrides,
 });
 
+
+/** Falla el primer POST como un corte de red y registra la clave de cada intento. */
+function failFirstPosts(count: number, keys: (string | null)[]) {
+  const original = globalThis.fetch;
+  let failures = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        keys.push(new Headers(init.headers).get("Idempotency-Key"));
+        if (failures < count) {
+          failures += 1;
+          throw new TypeError("Failed to fetch");
+        }
+      }
+      return original(input, init);
+    }),
+  );
+}
+
 async function openForm() {
   await screen.findByText("Ana Ruiz");
   await userEvent.click(screen.getByRole("button", { name: "Registrar falta" }));
@@ -420,6 +440,28 @@ describe("PuntosPage", () => {
 
     await waitFor(() => expect(server.count("DELETE", "/movements/m1")).toBe(1));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reintenta el registro con la misma clave de idempotencia y la cambia si cambia la falta", async () => {
+    const keys: (string | null)[] = [];
+    api({ "POST /movements/infractions": () => ({ data: registered() }) });
+    renderWithAuth(<PuntosPage />);
+    const dialog = await openForm();
+    await userEvent.selectOptions(within(dialog).getByLabelText("Jugador"), "p1");
+    await userEvent.selectOptions(within(dialog).getByLabelText("Falta"), "L-a");
+    failFirstPosts(2, keys);
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    await within(dialog).findByRole("alert");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    await waitFor(() => expect(keys).toHaveLength(2));
+    await userEvent.selectOptions(within(dialog).getByLabelText("Falta"), "G-h");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => expect(keys).toHaveLength(3));
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it("el segundo entrenador no ve la pantalla ni hace peticiones", () => {

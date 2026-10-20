@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import { registerInfraction } from "@/lib/api/points";
 import type { Infraction, InfractionRegistered, NewInfraction, Player } from "@/lib/api/types";
 import { SELECT_CLASS } from "@/lib/form-styles";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { todayInMadrid } from "@/lib/weeks";
 
 const SAVE_ERROR = "No se pudo registrar la falta. Inténtalo de nuevo.";
@@ -77,6 +78,7 @@ function InfractionForm({
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const today = todayInMadrid();
+  const keyFor = useIdempotencyKey();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,7 +99,10 @@ function InfractionForm({
     setServerError(null);
     let registered: InfractionRegistered;
     try {
-      registered = await registerInfraction(infraction);
+      registered = await registerInfraction(
+        infraction,
+        keyFor([playerId, code, date, inMatch, trimmedReason].join("|")),
+      );
     } catch (failure) {
       setServerError(failureMessage(failure));
       onSubmittingChange(false);

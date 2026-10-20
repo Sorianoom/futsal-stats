@@ -114,6 +114,40 @@ describe("PartidoPage: lista de partidos", () => {
     });
   });
 
+  it("reintenta la creación del partido con la misma clave de idempotencia", async () => {
+    const keys: (string | null)[] = [];
+    const original = globalThis.fetch;
+    api({ "POST /matches": () => ({ data: { ...MATCH, id: "m9", opponent: "Betis" } }) });
+    renderWithAuth(<PartidoPage />);
+    await screen.findByRole("link", { name: /Rival FS/ });
+    await userEvent.click(screen.getByRole("button", { name: "Nuevo partido" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText("Rival"), "Betis");
+    let failed = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          keys.push(new Headers(init.headers).get("Idempotency-Key"));
+          if (!failed) {
+            failed = true;
+            throw new TypeError("Failed to fetch");
+          }
+        }
+        return original(input, init);
+      }),
+    );
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+    await within(dialog).findByRole("alert");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/partido?id=m9"));
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBeTruthy();
+  });
+
   it("pide el rival antes de crear el partido", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);

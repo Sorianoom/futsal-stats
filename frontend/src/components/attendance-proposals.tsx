@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { registerInfraction } from "@/lib/api/points";
 import type { AttendanceProposal, TeamSession } from "@/lib/api/types";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { sanctionText } from "@/lib/labels";
 
 const REGISTER_ERROR = "No se pudo registrar la falta. Inténtalo de nuevo.";
@@ -39,19 +40,23 @@ function ProposalItem({
 }: ProposalItemProps) {
   const [phase, setPhase] = useState<Phase>("pending");
   const [error, setError] = useState<string | null>(null);
+  const keyFor = useIdempotencyKey();
 
   async function accept() {
     setPhase("saving");
     setError(null);
     onSavingChange(true);
     try {
-      await registerInfraction({
-        player_id: proposal.player_id,
-        infraction_code: proposal.infraction_code,
-        occurred_on: session.held_on,
-        session_id: session.id,
-        in_match: false,
-      });
+      await registerInfraction(
+        {
+          player_id: proposal.player_id,
+          infraction_code: proposal.infraction_code,
+          occurred_on: session.held_on,
+          session_id: session.id,
+          in_match: false,
+        },
+        keyFor(`${proposal.player_id}|${proposal.infraction_code}|${session.id}`),
+      );
       setPhase("done");
     } catch (failure) {
       setError(failure instanceof ApiError && failure.code === "network" ? UNCERTAIN_ERROR : REGISTER_ERROR);

@@ -297,6 +297,38 @@ describe("rojas en el resumen del partido", () => {
     expect(server.calls.filter((c) => c.path === "/movements/infractions")).toHaveLength(0);
   });
 
+  it("tras comprobar y reintentar, la falta «o» se manda con la misma clave de idempotencia", async () => {
+    const keys: (string | null)[] = [];
+    api({ "POST /movements/infractions": registered });
+    renderWithAuth(<PartidoPage />);
+    const reds = await redsSection();
+    const register = await reds.findByRole("button", { name: "Registrar falta «o» a Dani Ruiz" });
+    const original = globalThis.fetch;
+    let failed = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          keys.push(new Headers(init.headers).get("Idempotency-Key"));
+          if (!failed) {
+            failed = true;
+            throw new TypeError("Failed to fetch");
+          }
+        }
+        return original(input, init);
+      }),
+    );
+    await userEvent.click(register);
+    await userEvent.click(await reds.findByRole("button", { name: "Comprobar falta «o» de Dani Ruiz" }));
+
+    await userEvent.click(await reds.findByRole("button", { name: "Registrar falta «o» a Dani Ruiz" }));
+
+    expect(await reds.findByText("Falta «o» registrada")).toBeInTheDocument();
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBeTruthy();
+  });
+
   it("si al comprobar resulta que la falta sí llegó al servidor la da por registrada", async () => {
     api();
     renderWithAuth(<PartidoPage />);

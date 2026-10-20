@@ -14,8 +14,8 @@ export function listMatches(): Promise<Match[]> {
   return apiData<Match[]>("/matches");
 }
 
-export function createMatch(match: NewMatch): Promise<Match> {
-  return apiData<Match>("/matches", { method: "POST", body: match });
+export function createMatch(match: NewMatch, idempotencyKey?: string): Promise<Match> {
+  return apiData<Match>("/matches", { method: "POST", body: match, idempotencyKey });
 }
 
 export function listMatchEvents(matchId: string): Promise<LoggedEvent[]> {

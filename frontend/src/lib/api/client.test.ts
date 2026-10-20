@@ -39,6 +39,16 @@ describe("apiData", () => {
     expect(api.calls[0].headers.has("Authorization")).toBe(false);
   });
 
+  it("envía Idempotency-Key solo cuando se indica", async () => {
+    const api = mockApi({ "POST /x": { data: null } });
+
+    await apiData("/x", { method: "POST", body: {}, idempotencyKey: "clave-1" });
+    await apiData("/x", { method: "POST", body: {} });
+
+    expect(api.calls[0].headers.get("Idempotency-Key")).toBe("clave-1");
+    expect(api.calls[1].headers.has("Idempotency-Key")).toBe(false);
+  });
+
   it("serializa el cuerpo como JSON", async () => {
     const api = mockApi({ "POST /x": { data: null } });
 

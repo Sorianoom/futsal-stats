@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import { createSession } from "@/lib/api/points";
 import type { SessionKind, TeamSession } from "@/lib/api/types";
 import { SELECT_CLASS } from "@/lib/form-styles";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { SESSION_KIND_LABEL } from "@/lib/labels";
 import { todayInMadrid } from "@/lib/weeks";
 
@@ -36,6 +37,7 @@ function SessionForm({ busy, setBusy, onClose, onCreated }: FormProps) {
   const [notes, setNotes] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+  const keyFor = useIdempotencyKey();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,7 +51,8 @@ function SessionForm({ busy, setBusy, onClose, onCreated }: FormProps) {
     setBusy(true);
     let created: TeamSession;
     try {
-      created = await createSession({ kind, held_on: date, notes: notes.trim() || null });
+      const body = { kind, held_on: date, notes: notes.trim() || null };
+      created = await createSession(body, keyFor(JSON.stringify(body)));
     } catch (failure) {
       setServerError(failureMessage(failure));
       setBusy(false);

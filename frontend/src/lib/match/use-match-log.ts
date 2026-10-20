@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api/client";
 import { syncMatch } from "@/lib/api/matches";
 
 import { undoTarget, type EventKind } from "./events";
-import { newId } from "./ids";
+import { newId } from "@/lib/ids";
 import type { LineupEvent } from "./lineup";
 import { nextSeq } from "./sequence";
 

@@ -24,8 +24,8 @@ export function listSessions(week: string): Promise<TeamSession[]> {
   return apiData<TeamSession[]>(`/sessions?week=${week}`);
 }
 
-export function createSession(session: NewSession): Promise<TeamSession> {
-  return apiData<TeamSession>("/sessions", { method: "POST", body: session });
+export function createSession(session: NewSession, idempotencyKey?: string): Promise<TeamSession> {
+  return apiData<TeamSession>("/sessions", { method: "POST", body: session, idempotencyKey });
 }
 
 export function getAttendance(sessionId: string): Promise<AttendanceRecord[]> {
@@ -46,10 +46,12 @@ export function registerWins(
   sessionId: string,
   kind: WinKind,
   playerIds: string[],
+  idempotencyKey?: string,
 ): Promise<MovementsCreated> {
   return apiData<MovementsCreated>(`/sessions/${sessionId}/wins`, {
     method: "POST",
     body: { kind, player_ids: playerIds },
+    idempotencyKey,
   });
 }
 
@@ -58,10 +60,14 @@ export function listMovements(week: string, playerId?: string): Promise<Movement
   return apiData<Movement[]>(`/movements?week=${week}${player}`);
 }
 
-export function registerInfraction(infraction: NewInfraction): Promise<InfractionRegistered> {
+export function registerInfraction(
+  infraction: NewInfraction,
+  idempotencyKey?: string,
+): Promise<InfractionRegistered> {
   return apiData<InfractionRegistered>("/movements/infractions", {
     method: "POST",
     body: infraction,
+    idempotencyKey,
   });
 }
 

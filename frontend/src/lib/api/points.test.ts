@@ -114,4 +114,25 @@ describe("API de puntos", () => {
     expect(api.calls[0].body).toEqual({ player_id: "p1", match_id: "m2", kind: "no_play" });
     expect(api.calls[1].path).toBe("/exclusions?match_id=m2");
   });
+
+  it("las altas con efectos envían la clave de idempotencia que se les da", async () => {
+    const api = mockApi({
+      "POST /sessions": { data: { id: "s1" } },
+      "POST /sessions/s1/wins": { data: { movements: [] } },
+      "POST /movements/infractions": { data: { movement: { id: "m1" }, escalations: [] } },
+    });
+
+    await createSession({ kind: "training", held_on: "2026-10-20", notes: null }, "k-session");
+    await registerWins("s1", "exercise", ["p1"], "k-wins");
+    await registerInfraction(
+      { player_id: "p1", infraction_code: "a", occurred_on: "2026-10-20", in_match: false },
+      "k-infraction",
+    );
+
+    expect(api.calls.map((c) => c.headers.get("Idempotency-Key"))).toEqual([
+      "k-session",
+      "k-wins",
+      "k-infraction",
+    ]);
+  });
 });

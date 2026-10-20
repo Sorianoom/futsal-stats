@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/client";
 import { registerWins } from "@/lib/api/points";
 import type { Player, TeamSession, WinKind } from "@/lib/api/types";
 import { SELECT_CLASS } from "@/lib/form-styles";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { WIN_KIND_LABEL } from "@/lib/labels";
 
 const SAVE_ERROR = "No se pudieron registrar las victorias. Inténtalo de nuevo.";
@@ -34,6 +35,7 @@ function WinsForm({ session, players, busy, setBusy, onClose }: FormProps) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [registeredCount, setRegisteredCount] = useState<number | null>(null);
+  const keyFor = useIdempotencyKey();
 
   function toggle(playerId: string) {
     const next = new Set(selected);
@@ -52,7 +54,12 @@ function WinsForm({ session, players, busy, setBusy, onClose }: FormProps) {
     setError(null);
     setBusy(true);
     try {
-      await registerWins(session.id, kind, playerIds);
+      await registerWins(
+        session.id,
+        kind,
+        playerIds,
+        keyFor([session.id, kind, ...playerIds].join("|")),
+      );
     } catch (failure) {
       setError(failureMessage(failure));
       setBusy(false);

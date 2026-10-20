@@ -46,6 +46,8 @@ interface RawResult<T> {
 export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  /** UUID de la intención: repetir la petición con la misma clave no repite sus efectos. */
+  idempotencyKey?: string;
   /** false para login y refresco: no se envía token ni se reintenta ante un 401. */
   auth?: boolean;
 }
@@ -75,10 +77,11 @@ function isEnvelope(value: unknown): value is Envelope<unknown> {
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions): Promise<RawResult<T>> {
-  const { method = "GET", body, auth = true } = options;
+  const { method = "GET", body, auth = true, idempotencyKey } = options;
   const headers = new Headers();
   if (body !== undefined) headers.set("Content-Type", "application/json");
   if (auth && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
 
   let response: Response;
   try {

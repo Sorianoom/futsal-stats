@@ -42,6 +42,26 @@ const saved = (proposals: AttendanceSaved["proposals"] = []): MockHandler => ({
   data: { saved: 2, proposals },
 });
 
+
+/** Falla el primer POST como un corte de red y registra la clave de cada intento. */
+function failFirstPosts(count: number, keys: (string | null)[]) {
+  const original = globalThis.fetch;
+  let failures = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        keys.push(new Headers(init.headers).get("Idempotency-Key"));
+        if (failures < count) {
+          failures += 1;
+          throw new TypeError("Failed to fetch");
+        }
+      }
+      return original(input, init);
+    }),
+  );
+}
+
 async function openAttendance() {
   await screen.findByText("Táctica");
   await userEvent.click(screen.getByRole("button", { name: "Pasar lista: Entreno 20 oct" }));
@@ -539,6 +559,71 @@ describe("EntrenosPage", () => {
       expect(server.calls.some((c) => c.path === "/sessions?week=2026-10-26")).toBe(true),
     );
     expect(screen.getByText("26 oct – 1 nov 2026")).toBeInTheDocument();
+  });
+
+  it("reintenta las victorias con la misma clave de idempotencia", async () => {
+    const keys: (string | null)[] = [];
+    api({ "POST /sessions/s1/wins": () => ({ data: { movements: [] } }) });
+    renderWithAuth(<EntrenosPage />);
+    await screen.findByText("Táctica");
+    await userEvent.click(screen.getByRole("button", { name: "Victorias: Entreno 20 oct" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByLabelText("Ana Ruiz"));
+    failFirstPosts(1, keys);
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+    await within(dialog).findByRole("alert");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await within(dialog).findByText(/Victoria registrada/);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBeTruthy();
+  });
+
+  it("reintenta la creación de la sesión con la misma clave de idempotencia", async () => {
+    const keys: (string | null)[] = [];
+    api({ "POST /sessions": () => ({ data: SESSION }) });
+    renderWithAuth(<EntrenosPage />);
+    await screen.findByText("Táctica");
+    await userEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
+    const dialog = screen.getByRole("dialog");
+    failFirstPosts(1, keys);
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+    await within(dialog).findByRole("alert");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBeTruthy();
+  });
+
+  it("al aceptar una falta propuesta reintenta con la misma clave de idempotencia", async () => {
+    const keys: (string | null)[] = [];
+    api({
+      "PUT /sessions/s1/attendance": saved([
+        { player_id: "p1", infraction_code: "G-a", description: "No asistir", points: -5, sanction: null },
+      ]),
+      "POST /movements/infractions": () => ({
+        data: { movement: { id: "m1" }, escalations: [], sanction: null },
+      }),
+    });
+    renderWithAuth(<EntrenosPage />);
+    const dialog = await openAttendance();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar lista" }));
+    await within(dialog).findByText(/No asistir/);
+    failFirstPosts(1, keys);
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Aceptar falta de Ana Ruiz" }));
+    await within(dialog).findByRole("alert");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Aceptar falta de Ana Ruiz" }));
+
+    expect(await within(dialog).findByText("Registrada")).toBeInTheDocument();
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBeTruthy();
   });
 
   it("el segundo entrenador no ve la pantalla ni hace peticiones", () => {
