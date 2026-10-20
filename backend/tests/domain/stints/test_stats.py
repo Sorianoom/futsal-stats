@@ -7,6 +7,7 @@ from app.domain.stints.stats import (
     QuintetRating,
     StatsError,
     build_segments,
+    has_segment,
     quintet_stats,
     seconds_by_player,
 )
@@ -120,3 +121,13 @@ def test_rating_average_is_none_without_ratings() -> None:
 def test_rating_outside_one_to_five_stars_is_an_error(stars: int) -> None:
     with pytest.raises(StatsError):
         quintet_stats(build_segments(one_substitution_match()), [], [QuintetRating(1, 100, stars)])
+
+
+def test_has_segment_follows_the_same_rule_as_the_assignment_of_events() -> None:
+    segments = build_segments(one_substitution_match())
+
+    assert has_segment(segments, 1, 0)
+    assert has_segment(segments, 1, 600)  # el segundo del cambio pertenece al que entra
+    assert has_segment(segments, 1, 1200)  # el último segundo de la parte
+    assert not has_segment(segments, 1, 1201)
+    assert not has_segment(segments, 2, 100)

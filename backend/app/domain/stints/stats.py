@@ -87,6 +87,15 @@ def build_segments(stints: Iterable[Stint]) -> tuple[LineupSegment, ...]:
     )
 
 
+def has_segment(segments: Sequence[LineupSegment], part: int, t: int) -> bool:
+    """Si algún tramo cubre ese instante (misma regla que usa `quintet_stats` para asignar)."""
+    try:
+        _locate(segments, part, t)
+    except StatsError:
+        return False
+    return True
+
+
 def _locate(segments: Sequence[LineupSegment], part: int, t: int) -> LineupSegment:
     in_part = [s for s in segments if s.part == part]
     for segment in in_part:

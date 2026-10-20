@@ -96,6 +96,15 @@ async def count_ratings(db: AsyncSession, match_id: uuid.UUID) -> int:
     return (await db.execute(query)).scalar_one()
 
 
+async def list_ratings(db: AsyncSession, match_id: uuid.UUID) -> list[QuintetRatingRow]:
+    query = (
+        select(QuintetRatingRow)
+        .where(QuintetRatingRow.match_id == match_id)
+        .order_by(QuintetRatingRow.part, QuintetRatingRow.t)
+    )
+    return list((await db.execute(query)).scalars().all())
+
+
 async def list_stints(db: AsyncSession, match_id: uuid.UUID) -> list[StintRow]:
     query = (
         select(StintRow)
