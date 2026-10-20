@@ -1,4 +1,4 @@
-import type { EventKind } from "@/lib/match/events";
+import type { EventKind, MatchEvent } from "@/lib/match/events";
 import type { LineupEvent } from "@/lib/match/lineup";
 
 export interface Match {
@@ -19,6 +19,9 @@ export interface LineupEventRecord {
   seq: number;
   payload: LineupEvent;
 }
+
+/** Evento del partido con su número de secuencia, tal y como lo devuelve la API. */
+export type LoggedEvent = MatchEvent & { seq: number };
 
 export interface EventIn {
   id: string;

@@ -1,9 +1,8 @@
-import type { MatchEvent } from "@/lib/match/events";
-
 import { apiData } from "./client";
 import type {
   FinalizeResult,
   LineupEventRecord,
+  LoggedEvent,
   Match,
   NewMatch,
   SyncBatch,
@@ -18,8 +17,8 @@ export function createMatch(match: NewMatch): Promise<Match> {
   return apiData<Match>("/matches", { method: "POST", body: match });
 }
 
-export function listMatchEvents(matchId: string): Promise<MatchEvent[]> {
-  return apiData<MatchEvent[]>(`/matches/${encodeURIComponent(matchId)}/events`);
+export function listMatchEvents(matchId: string): Promise<LoggedEvent[]> {
+  return apiData<LoggedEvent[]>(`/matches/${encodeURIComponent(matchId)}/events`);
 }
 
 export function listLineupEvents(matchId: string): Promise<LineupEventRecord[]> {
