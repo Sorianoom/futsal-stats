@@ -44,7 +44,7 @@ interface RawResult<T> {
 }
 
 export interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   /** false para login y refresco: no se envía token ni se reintenta ante un 401. */
   auth?: boolean;
