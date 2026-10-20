@@ -1,4 +1,4 @@
-import type { PlayerStats, QuintetStats } from "@/lib/api/stats-types";
+import type { PlayerStats, QuintetStats, SeasonPlayerStats } from "@/lib/api/stats-types";
 import { formatClock } from "@/lib/match/clock";
 
 const PLAYER_COLUMNS = [
@@ -103,6 +103,52 @@ export function QuintetStatsTable({ quintets, nameOf }: QuintetStatsTableProps) 
               <td className={CELL}>{formatClock(quintet.seconds)}</td>
               <td className={CELL}>{`${quintet.goals_for} – ${quintet.goals_against}`}</td>
               <td className={CELL}>{ratingText(quintet)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const SEASON_COLUMNS = [
+  { short: "PJ", title: "Partidos jugados" },
+  { short: "Min", title: "Minutos" },
+  { short: "Min/p", title: "Minutos por partido jugado" },
+  ...PLAYER_COLUMNS.slice(1),
+] as const;
+
+function perMatch(player: SeasonPlayerStats): string {
+  if (player.matches_played === 0) return formatClock(0);
+  return formatClock(Math.round(player.seconds / player.matches_played));
+}
+
+export function SeasonStatsTable({ players }: { players: readonly SeasonPlayerStats[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border bg-card">
+      <table aria-label="Temporada" className="w-full">
+        <thead>
+          <tr className="border-b">
+            <th className={HEADER_CELL}>Jugador</th>
+            {SEASON_COLUMNS.map((column) => (
+              <th key={column.title} title={column.title} className={HEADER_CELL}>
+                {column.short}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((player) => (
+            <tr key={player.player_id} className="border-b last:border-0">
+              <td className="px-3 py-3 text-lg font-medium">{`${player.dorsal} · ${player.name}`}</td>
+              <td className={CELL}>{player.matches_played}</td>
+              <td className={CELL}>{formatClock(player.seconds)}</td>
+              <td className={CELL}>{perMatch(player)}</td>
+              {actionsOf(player).map((value, index) => (
+                <td key={PLAYER_COLUMNS[index + 1].title} className={CELL}>
+                  {value}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>

@@ -32,3 +32,15 @@ export interface MatchStats {
   quintets: QuintetStats[];
   warnings: string[];
 }
+
+export interface SeasonPlayerStats extends PlayerStats {
+  /** Partidos en los que estuvo en pista algún segundo. */
+  matches_played: number;
+}
+
+/** Acumulado de todos los partidos cerrados. */
+export interface SeasonStats {
+  matches: number;
+  players: SeasonPlayerStats[];
+  warnings: string[];
+}

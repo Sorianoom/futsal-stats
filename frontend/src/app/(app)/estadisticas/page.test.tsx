@@ -1,8 +1,9 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Match } from "@/lib/api/match-types";
-import type { MatchStats } from "@/lib/api/stats-types";
+import type { MatchStats, SeasonStats } from "@/lib/api/stats-types";
 import { mockApi, type MockHandler } from "@/test/mock-api";
 import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
 
@@ -75,19 +76,59 @@ const STATS: MatchStats = {
   warnings: [],
 };
 
+const SEASON: SeasonStats = {
+  matches: 2,
+  warnings: [],
+  players: [
+    {
+      player_id: "p1",
+      name: "Ana Ruiz",
+      dorsal: 9,
+      matches_played: 2,
+      seconds: 4800,
+      goals: 4,
+      assists: 2,
+      shots: 12,
+      turnovers: 6,
+      steals: 8,
+      fouls: 3,
+      yellows: 1,
+      reds: 0,
+    },
+    {
+      player_id: "p2",
+      name: "Bea Soto",
+      dorsal: 7,
+      matches_played: 1,
+      seconds: 305,
+      goals: 0,
+      assists: 0,
+      shots: 0,
+      turnovers: 0,
+      steals: 0,
+      fouls: 0,
+      yellows: 0,
+      reds: 1,
+    },
+  ],
+};
+
 let matches: Match[];
 let stats: MatchStats;
+let season: SeasonStats;
 
 beforeEach(() => {
   navigation.search = "id=m1";
   matches = [MATCH, OLDER];
   stats = STATS;
+  season = SEASON;
 });
 
 function api(extra: Record<string, MockHandler> = {}) {
   return mockApi({
     "GET /matches": () => ({ data: matches }),
     "GET /matches/m1/stats": () => ({ data: stats }),
+    "GET /stats/players": () => ({ data: season }),
     ...extra,
   });
 }
@@ -124,6 +165,92 @@ describe("EstadisticasPage: lista de partidos", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar los partidos");
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+});
+
+describe("EstadisticasPage: temporada", () => {
+  beforeEach(() => {
+    navigation.search = "";
+  });
+
+  it("acumula por jugador partidos jugados, minutos, minutos por partido y acciones", async () => {
+    api();
+    renderWithAuth(<EstadisticasPage />);
+
+    const table = await screen.findByRole("table", { name: "Temporada" });
+    const ana = within(table).getByText("9 · Ana Ruiz").closest("tr") as HTMLElement;
+
+    expect(within(ana).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "9 · Ana Ruiz",
+      "2",
+      "80:00",
+      "40:00",
+      "4",
+      "2",
+      "12",
+      "6",
+      "8",
+      "3",
+      "1",
+      "0",
+    ]);
+    const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
+    expect(within(bea).getAllByRole("cell")[3]).toHaveTextContent("05:05");
+  });
+
+  it("dice de cuántos partidos cerrados sale el acumulado", async () => {
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByText("Acumulado de 2 partidos cerrados")).toBeInTheDocument();
+  });
+
+  it("con un solo partido cerrado habla en singular", async () => {
+    season = { ...SEASON, matches: 1 };
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByText("Acumulado de 1 partido cerrado")).toBeInTheDocument();
+  });
+
+  it("sin partidos cerrados lo explica en vez de enseñar una tabla vacía", async () => {
+    season = { matches: 0, players: [], warnings: [] };
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByText(/Todavía no hay partidos cerrados/)).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Temporada" })).not.toBeInTheDocument();
+  });
+
+  it("si falla el acumulado avisa y reintenta sin esconder la lista de partidos", async () => {
+    let fail = true;
+    api({
+      "GET /stats/players": () =>
+        fail
+          ? { status: 500, error: { code: "internal_error", message: "Fallo" } }
+          : { data: season },
+    });
+    renderWithAuth(<EstadisticasPage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("No se pudo cargar el acumulado");
+    expect(await screen.findByRole("link", { name: /Rival FS/ })).toBeInTheDocument();
+    fail = false;
+    await userEvent.click(within(alert).getByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByRole("table", { name: "Temporada" })).toBeInTheDocument();
+  });
+
+  it("muestra los avisos del acumulado", async () => {
+    season = { ...SEASON, warnings: ["1 partido(s) con eventos incoherentes no cuentan en el acumulado"] };
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByText(/eventos incoherentes/)).toBeInTheDocument();
   });
 });
 
