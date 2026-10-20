@@ -181,16 +181,38 @@ async def test_an_edit_that_overlaps_is_rejected_with_the_problem(
     assert "solapa" in response.json()["error"]["message"]
 
 
-async def test_a_new_non_overlapping_stint_can_be_added_and_deleted(
+async def test_a_sixth_player_on_court_at_once_is_rejected(
     client: AsyncClient, login: Login, make_player: MakePlayer
 ) -> None:
     head = await login(Role.HEAD_COACH)
     match_id, players = await prepared_match(client, head, make_player)
     await client.post(f"/matches/{match_id}/finalize", headers=head)
 
-    created = await client.post(
+    response = await client.post(
         f"/matches/{match_id}/stints",
         json={"player_id": str(players[0].id), "part": 1, "start_s": 600, "end_s": 700},
+        headers=head,
+    )
+
+    assert response.status_code == 422
+    assert "a la vez" in response.json()["error"]["message"]
+
+
+async def test_a_new_stint_into_a_free_slot_can_be_added_and_deleted(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    head = await login(Role.HEAD_COACH)
+    match_id, players = await prepared_match(client, head, make_player)
+    await client.post(f"/matches/{match_id}/finalize", headers=head)
+    stints = (await client.get(f"/matches/{match_id}/stints", headers=head)).json()["data"]
+    second_part_of_p2 = next(
+        s for s in stints if s["player_id"] == str(players[1].id) and s["part"] == 2
+    )
+    await client.delete(f"/stints/{second_part_of_p2['id']}", headers=head)
+
+    created = await client.post(
+        f"/matches/{match_id}/stints",
+        json={"player_id": str(players[0].id), "part": 2, "start_s": 0, "end_s": 100},
         headers=head,
     )
     deleted = await client.delete(f"/stints/{created.json()['data']['id']}", headers=head)
@@ -198,7 +220,7 @@ async def test_a_new_non_overlapping_stint_can_be_added_and_deleted(
 
     assert created.status_code == 201
     assert deleted.status_code == 200
-    assert len(listing.json()["data"]) == 11
+    assert len(listing.json()["data"]) == 10  # 11 tramos menos el de p2 que se borró
 
 
 async def test_stint_edits_validate_the_payload_and_the_references(

@@ -65,3 +65,34 @@ def test_validate_reports_every_problem() -> None:
         validate_stints([Stint("p1", 3, 0, 300), Stint("p2", 1, 500, 100)])
 
     assert len(error.value.problems) == 2
+
+
+def test_six_players_on_court_at_the_same_time_is_rejected() -> None:
+    stints = [Stint(f"p{n}", 1, 0, 600) for n in range(1, 6)] + [Stint("p6", 1, 300, 400)]
+
+    with pytest.raises(StintValidationError, match="a la vez"):
+        validate_stints(stints)
+
+
+def test_five_at_once_and_replacements_are_fine() -> None:
+    stints = [Stint(f"p{n}", 1, 0, 600) for n in range(1, 5)]
+    stints += [Stint("p5", 1, 0, 300), Stint("p6", 1, 300, 600)]
+
+    validate_stints(stints)
+
+
+def test_the_limit_is_checked_per_part() -> None:
+    first = [Stint(f"p{n}", 1, 0, 600) for n in range(1, 6)]
+    second = [Stint(f"p{n}", 2, 0, 600) for n in range(1, 6)]
+
+    validate_stints(first + second)
+
+
+def test_the_message_says_when_and_where_there_are_too_many() -> None:
+    stints = [Stint(f"p{n}", 2, 0, 600) for n in range(1, 6)] + [Stint("p6", 2, 100, 200)]
+
+    with pytest.raises(StintValidationError) as caught:
+        validate_stints(stints)
+
+    assert "parte 2" in str(caught.value)
+    assert "6 jugadores" in str(caught.value)

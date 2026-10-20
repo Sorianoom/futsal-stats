@@ -1,10 +1,12 @@
-"""Validación de tramos editados a mano: formato correcto y sin solapes por jugador."""
+"""Validación de tramos editados a mano: formato, sin solapes por jugador y máximo 5 a la vez."""
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import combinations
 
 from app.domain.stints.models import VALID_PARTS, Stint
+
+MAX_ON_COURT = 5
 
 
 class StintValidationError(ValueError):
@@ -29,6 +31,19 @@ def find_overlaps(stints: Iterable[Stint]) -> tuple[Overlap, ...]:
     )
 
 
+def find_overcrowded(stints: Iterable[Stint]) -> tuple[tuple[int, int, int], ...]:
+    """(parte, segundo, jugadores) donde hay más de 5 en pista, en cada inicio de tramo."""
+    items = tuple(stints)
+    found: list[tuple[int, int, int]] = []
+    for part in sorted({s.part for s in items}):
+        in_part = [s for s in items if s.part == part]
+        for t in sorted({s.start for s in in_part}):
+            on_court = sum(1 for s in in_part if s.start <= t < s.end)
+            if on_court > MAX_ON_COURT:
+                found.append((part, t, on_court))
+    return tuple(found)
+
+
 def _format_problems(stint: Stint) -> list[str]:
     label = f"{stint.player_id} parte {stint.part} [{stint.start}-{stint.end}]"
     problems: list[str] = []
@@ -48,6 +63,11 @@ def validate_stints(stints: Iterable[Stint]) -> None:
         f"{o.player_id} se solapa en la parte {o.first.part}: "
         f"[{o.first.start}-{o.first.end}] y [{o.second.start}-{o.second.end}]"
         for o in find_overlaps(items)
+    )
+    problems.extend(
+        f"hay {count} jugadores en pista a la vez en la parte {part} desde el segundo {t} "
+        f"(máximo {MAX_ON_COURT})"
+        for part, t, count in find_overcrowded(items)
     )
     if problems:
         raise StintValidationError(problems)
