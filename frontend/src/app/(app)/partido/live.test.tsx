@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -466,6 +466,7 @@ describe("panel en vivo", () => {
       }),
     );
 
+    await act(async () => {}); // vacía los efectos pendientes: el listener ya está puesto
     document.dispatchEvent(new Event("visibilitychange"));
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Falta" }));

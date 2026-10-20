@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -370,6 +370,7 @@ describe("PartidoPage: pantalla de un partido", () => {
     renderWithAuth(<PartidoPage />);
     await screen.findByLabelText("Ana Ruiz");
 
+    await act(async () => {}); // vacía los efectos pendientes: el listener ya está puesto
     document.dispatchEvent(new Event("visibilitychange"));
 
     await waitFor(() => expect(server.count("GET", "/matches/m1/lineup-events")).toBe(2));
