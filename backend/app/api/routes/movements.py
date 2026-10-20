@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import HeadCoach, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
+from app.api.idempotency import IdempotencyKey, run_idempotent
 from app.api.mappers import sanction_out
 from app.db import points_repo
 from app.db.catalog_repo import load_catalog
@@ -33,34 +34,33 @@ def _not_found(what: str) -> ApiError:
     "/movements/infractions", response_model=Envelope[InfractionRegistered], status_code=201
 )
 async def register_infraction(
-    payload: InfractionIn, db: SessionDep, head_coach: HeadCoach
+    payload: InfractionIn, db: SessionDep, head_coach: HeadCoach, key: IdempotencyKey
 ) -> Envelope[InfractionRegistered]:
-    catalog = await load_catalog(db)
-    infraction = catalog.get(payload.infraction_code)
-    if infraction is None:
-        raise _not_found("Falta")
-    if await points_repo.find_missing_players(db, [payload.player_id]):
-        raise _not_found("Jugador")
-    if payload.session_id and await points_repo.get_session_row(db, payload.session_id) is None:
-        raise _not_found("Sesión")
+    async def action() -> InfractionRegistered:
+        catalog = await load_catalog(db)
+        infraction = catalog.get(payload.infraction_code)
+        if infraction is None:
+            raise _not_found("Falta")
+        if await points_repo.find_missing_players(db, [payload.player_id]):
+            raise _not_found("Jugador")
+        if payload.session_id and await points_repo.get_session_row(db, payload.session_id) is None:
+            raise _not_found("Sesión")
 
-    movement = movement_for_infraction(
-        str(payload.player_id),
-        payload.occurred_on,
-        infraction,
-        session_id=str(payload.session_id) if payload.session_id else None,
-        in_match=payload.in_match,
-        reason=payload.reason,
-    )
-    (row,) = await points_repo.add_movements(db, [movement], head_coach.id)
-    await db.commit()
+        movement = movement_for_infraction(
+            str(payload.player_id),
+            payload.occurred_on,
+            infraction,
+            session_id=str(payload.session_id) if payload.session_id else None,
+            in_match=payload.in_match,
+            reason=payload.reason,
+        )
+        (row,) = await points_repo.add_movements(db, [movement], head_coach.id)
 
-    week_moves = await points_repo.week_movements(db, movement.applies_week)
-    escalations = propose_escalations(
-        movement.player_id, movement.applies_week, week_moves, catalog
-    )
-    return ok(
-        InfractionRegistered(
+        week_moves = await points_repo.week_movements(db, movement.applies_week)
+        escalations = propose_escalations(
+            movement.player_id, movement.applies_week, week_moves, catalog
+        )
+        return InfractionRegistered(
             movement=MovementOut.model_validate(row),
             escalations=[
                 EscalationOut(
@@ -70,6 +70,9 @@ async def register_infraction(
             ],
             sanction=sanction_out(infraction.sanction),
         )
+
+    return await run_idempotent(
+        db, key, head_coach, "POST /movements/infractions", payload, InfractionRegistered, action
     )
 
 

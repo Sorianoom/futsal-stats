@@ -32,6 +32,39 @@ async def test_preflight_from_an_allowed_origin_is_accepted_with_credentials(
     assert response.headers["access-control-allow-credentials"] == "true"
 
 
+@pytest.mark.parametrize("method", ["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def test_preflight_accepts_every_method_the_frontend_uses(
+    application: FastAPI, method: str
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=application), base_url="http://t") as http:
+        response = await http.options(
+            "/sessions/1/attendance",
+            headers={
+                "Origin": ALLOWED_ORIGIN,
+                "Access-Control-Request-Method": method,
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert method in response.headers["access-control-allow-methods"]
+
+
+async def test_preflight_accepts_the_idempotency_key_header(application: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=application), base_url="http://t") as http:
+        response = await http.options(
+            "/movements/infractions",
+            headers={
+                "Origin": ALLOWED_ORIGIN,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type,idempotency-key",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "idempotency-key" in response.headers["access-control-allow-headers"].lower()
+
+
 async def test_preflight_from_another_origin_gets_no_cors_headers(application: FastAPI) -> None:
     async with AsyncClient(transport=ASGITransport(app=application), base_url="http://t") as http:
         response = await http.options(

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.deps import CurrentUser, HeadCoach, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
+from app.api.idempotency import IdempotencyKey, run_idempotent
 from app.db import points_repo
 from app.db.models import Match
 from app.schemas.points import ExclusionCreate, ExclusionOut, MatchCreate, MatchOut
@@ -30,10 +31,14 @@ def _match_out(match: Match, held_on: object) -> MatchOut:
 
 
 @router.post("/matches", response_model=Envelope[MatchOut], status_code=201)
-async def create_match(payload: MatchCreate, db: SessionDep, _: CurrentUser) -> Envelope[MatchOut]:
-    match = await points_repo.create_match(db, payload.held_on, payload.opponent)
-    await db.commit()
-    return ok(_match_out(match, payload.held_on))
+async def create_match(
+    payload: MatchCreate, db: SessionDep, user: CurrentUser, key: IdempotencyKey
+) -> Envelope[MatchOut]:
+    async def action() -> MatchOut:
+        match = await points_repo.create_match(db, payload.held_on, payload.opponent)
+        return _match_out(match, payload.held_on)
+
+    return await run_idempotent(db, key, user, "POST /matches", payload, MatchOut, action)
 
 
 @router.get("/matches", response_model=Envelope[list[MatchOut]])

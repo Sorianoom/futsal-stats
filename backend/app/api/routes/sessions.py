@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import HeadCoach, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
+from app.api.idempotency import IdempotencyKey, run_idempotent
 from app.api.mappers import sanction_out
 from app.db import points_repo
 from app.db.catalog_repo import load_attendance_rules, load_catalog
@@ -44,11 +45,13 @@ async def _require_players(db: SessionDep, player_ids: list[uuid.UUID]) -> None:
 
 @router.post("", response_model=Envelope[SessionOut], status_code=201)
 async def create_session(
-    payload: SessionCreate, db: SessionDep, _: HeadCoach
+    payload: SessionCreate, db: SessionDep, head_coach: HeadCoach, key: IdempotencyKey
 ) -> Envelope[SessionOut]:
-    row = await points_repo.create_session(db, payload.kind, payload.held_on, payload.notes)
-    await db.commit()
-    return ok(SessionOut.model_validate(row))
+    async def action() -> SessionOut:
+        row = await points_repo.create_session(db, payload.kind, payload.held_on, payload.notes)
+        return SessionOut.model_validate(row)
+
+    return await run_idempotent(db, key, head_coach, "POST /sessions", payload, SessionOut, action)
 
 
 @router.get("", response_model=Envelope[list[SessionOut]])
@@ -108,16 +111,24 @@ async def get_attendance(
 
 @router.post("/{session_id}/wins", response_model=Envelope[MovementsCreated], status_code=201)
 async def register_wins(
-    session_id: uuid.UUID, payload: WinsIn, db: SessionDep, head_coach: HeadCoach
+    session_id: uuid.UUID,
+    payload: WinsIn,
+    db: SessionDep,
+    head_coach: HeadCoach,
+    key: IdempotencyKey,
 ) -> Envelope[MovementsCreated]:
-    team_session = await _existing_session(db, session_id)
-    await _require_players(db, payload.player_ids)
-    movements = award_wins(
-        [str(pid) for pid in payload.player_ids],
-        payload.kind,
-        team_session.held_on,
-        str(session_id),
+    async def action() -> MovementsCreated:
+        team_session = await _existing_session(db, session_id)
+        await _require_players(db, payload.player_ids)
+        movements = award_wins(
+            [str(pid) for pid in payload.player_ids],
+            payload.kind,
+            team_session.held_on,
+            str(session_id),
+        )
+        rows = await points_repo.add_movements(db, movements, head_coach.id)
+        return MovementsCreated(movements=[MovementOut.model_validate(r) for r in rows])
+
+    return await run_idempotent(
+        db, key, head_coach, f"POST /sessions/{session_id}/wins", payload, MovementsCreated, action
     )
-    rows = await points_repo.add_movements(db, movements, head_coach.id)
-    await db.commit()
-    return ok(MovementsCreated(movements=[MovementOut.model_validate(r) for r in rows]))

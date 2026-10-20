@@ -11,8 +11,8 @@ from app.auth.rate_limit import LoginGuard
 from app.config import get_settings
 from app.db.session import dispose_engine
 
-ALLOWED_METHODS = ["GET", "POST", "PATCH", "DELETE"]
-ALLOWED_HEADERS = ["Authorization", "Content-Type"]
+ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+ALLOWED_HEADERS = ["Authorization", "Content-Type", "Idempotency-Key"]
 
 
 @asynccontextmanager
