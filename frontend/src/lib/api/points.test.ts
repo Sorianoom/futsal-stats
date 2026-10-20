@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { mockApi } from "@/test/mock-api";
 
 import {
+  createExclusion,
   createSession,
   deleteMovement,
+  listExclusions,
   getAttendance,
   getCallup,
   listInfractions,
@@ -98,5 +100,18 @@ describe("API de puntos", () => {
     expect(api.calls[0].body).toEqual(infraction);
     expect(api.count("DELETE", "/movements/m1")).toBe(1);
     expect(api.count("GET", "/catalog/infractions")).toBe(1);
+  });
+
+  it("createExclusion y listExclusions usan /exclusions", async () => {
+    const api = mockApi({
+      "POST /exclusions": { data: { id: "x1" } },
+      "GET /exclusions": { data: [] },
+    });
+
+    await createExclusion("p1", "m2", "no_play");
+    await listExclusions("m2");
+
+    expect(api.calls[0].body).toEqual({ player_id: "p1", match_id: "m2", kind: "no_play" });
+    expect(api.calls[1].path).toBe("/exclusions?match_id=m2");
   });
 });

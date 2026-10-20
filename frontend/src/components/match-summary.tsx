@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 
+import { RedCards } from "@/components/red-cards";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { finalizeMatch } from "@/lib/api/matches";
+import type { LoggedEvent, Match } from "@/lib/api/match-types";
 import type { Player } from "@/lib/api/types";
 import { formatClock } from "@/lib/match/clock";
 import { secondsByPlayer, type Stint } from "@/lib/match/lineup";
@@ -13,11 +15,13 @@ const CONFLICT = 409;
 const CLOSE_ERROR = "No se pudo cerrar el partido. Inténtalo de nuevo.";
 
 interface MatchSummaryProps {
-  matchId: string;
+  match: Match;
   players: readonly Player[];
   /** Tramos de toda la alineación, calculados en local: los minutos se ven sin esperar al servidor. */
   stints: readonly Stint[];
   score: { for: number; against: number };
+  /** Rojas efectivas del partido (sin las deshechas). */
+  reds: readonly LoggedEvent[];
   /** El servidor ya tiene los tramos de este partido. */
   alreadyClosed: boolean;
   /** Anotaciones que aún no han llegado al servidor. */
@@ -26,10 +30,11 @@ interface MatchSummaryProps {
 }
 
 export function MatchSummary({
-  matchId,
+  match,
   players,
   stints,
   score,
+  reds,
   alreadyClosed,
   pending,
   blocked,
@@ -38,17 +43,20 @@ export function MatchSummary({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const names = new Map(players.map((player) => [player.id, player.name]));
+  const nameOf = (playerId: string) => names.get(playerId) ?? "Jugador desconocido";
   const seconds = secondsByPlayer(stints);
-  const played = players
-    .filter((player) => (seconds[player.id] ?? 0) > 0)
-    .sort((a, b) => (seconds[b.id] ?? 0) - (seconds[a.id] ?? 0));
+  const played = Object.entries(seconds)
+    .filter(([, total]) => total > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([id, total]) => ({ id, name: nameOf(id), total }));
 
   async function close(force: boolean) {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await finalizeMatch(matchId, force);
+      await finalizeMatch(match.id, force);
       setClosed(true);
     } catch (failure) {
       // Que ya estuviera cerrado es el resultado buscado: se pasa a ofrecer rehacer el cierre.
@@ -80,11 +88,13 @@ export function MatchSummary({
               className="flex items-center justify-between rounded-xl border bg-card p-3 text-lg"
             >
               <span>{player.name}</span>
-              <span className="font-semibold tabular-nums">{formatClock(seconds[player.id] ?? 0)}</span>
+              <span className="font-semibold tabular-nums">{formatClock(player.total)}</span>
             </li>
           ))}
         </ul>
       </div>
+
+      {reds.length > 0 ? <RedCards match={match} reds={reds} nameOf={nameOf} /> : null}
 
       {error ? (
         <p role="alert" className="text-base text-destructive">
@@ -93,21 +103,24 @@ export function MatchSummary({
       ) : null}
 
       {closed ? (
-        <Button variant="outline" size="lg" disabled={busy || pending > 0 || blocked} onClick={() => void close(true)}>
+        <Button
+          variant="outline"
+          size="lg"
+          disabled={busy || pending > 0 || blocked}
+          onClick={() => void close(true)}
+        >
           Rehacer cierre
         </Button>
       ) : (
-        <div className="space-y-2">
-          <Button size="lg" disabled={busy || pending > 0 || blocked} onClick={() => void close(false)}>
-            Cerrar partido
-          </Button>
-          {pending > 0 ? (
-            <p className="text-base text-muted-foreground">
-              {`Espera a que se envíen las anotaciones (${pending}) para cerrar el partido`}
-            </p>
-          ) : null}
-        </div>
+        <Button size="lg" disabled={busy || pending > 0 || blocked} onClick={() => void close(false)}>
+          Cerrar partido
+        </Button>
       )}
+      {pending > 0 ? (
+        <p className="text-base text-muted-foreground">
+          {`Espera a que se envíen las anotaciones (${pending}) para cerrar el partido`}
+        </p>
+      ) : null}
     </section>
   );
 }

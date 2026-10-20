@@ -281,4 +281,68 @@ describe("fin del partido", () => {
     expect(screen.getByRole("button", { name: "Cerrar partido" })).toBeDisabled();
     expect(screen.getByText(/Espera a que se envíen las anotaciones/)).toBeInTheDocument();
   });
+
+  it("con menos jugadores disponibles que huecos deja empezar igualmente la 2ª parte", async () => {
+    lineup = lineupOf(
+      { type: "part_started", part: 1, starters: STARTERS },
+      { type: "part_ended", t: 1200 },
+    );
+    const injured = (p: Player): Player => ({ ...p, status: p.id > "p3" ? "injured" : "available" });
+    api({ "GET /players": { data: PLAYERS.map(injured) } });
+    renderWithAuth(<PartidoPage />);
+
+    expect(await screen.findByText("3 de 3 elegidos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Empezar 2ª parte" })).toBeEnabled();
+  });
+
+  it("propone para la 2ª parte a quien estaba en pista al terminar, aunque entrara justo al final", async () => {
+    lineup = lineupOf(
+      { type: "part_started", part: 1, starters: STARTERS },
+      { type: "substituted", t: 1200, player_out: "p1", player_in: "p7" },
+      { type: "part_ended", t: 1200 },
+    );
+    api();
+    renderWithAuth(<PartidoPage />);
+
+    expect(await screen.findByText("Parte 1 terminada")).toBeInTheDocument();
+
+    expect(screen.getByLabelText("Gema Ruiz")).toBeChecked();
+    expect(screen.getByLabelText("Ana Ruiz")).not.toBeChecked();
+  });
+
+  it("el resumen incluye los minutos de quien ya no está en la plantilla activa", async () => {
+    lineup = lineupOf(
+      { type: "part_started", part: 1, starters: ["p1", "p2", "p3", "p4", "p9"] },
+      { type: "part_ended", t: 1200 },
+      { type: "part_started", part: 2, starters: ["p1", "p2", "p3", "p4", "p9"] },
+      { type: "part_ended", t: 1200 },
+    );
+    api();
+    renderWithAuth(<PartidoPage />);
+
+    const minutes = await screen.findByRole("list", { name: "Minutos jugados" });
+
+    expect(within(minutes).getByText("Jugador desconocido")).toBeInTheDocument();
+    expect(within(minutes).getAllByRole("listitem")).toHaveLength(5);
+  });
+
+  it("rehacer el cierre también espera a que no haya anotaciones sin enviar", async () => {
+    lineup = lineupOf(
+      { type: "part_started", part: 1, starters: STARTERS },
+      { type: "part_ended", t: 1200 },
+      { type: "part_started", part: 2, starters: STARTERS },
+    );
+    stints = [{ id: "t1", match_id: "m1", player_id: "p1", part: 1, start_s: 0, end_s: 300 }];
+    api();
+    renderWithAuth(<PartidoPage />);
+    await screen.findByRole("button", { name: "Fin de la parte" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    await endPart();
+
+    expect(await screen.findByText("Partido cerrado")).toBeInTheDocument();
+    await screen.findByText(/Sin conexión · 1 sin enviar/);
+    expect(screen.getByRole("button", { name: "Rehacer cierre" })).toBeDisabled();
+    expect(screen.getByText(/Espera a que se envíen las anotaciones/)).toBeInTheDocument();
+  });
 });

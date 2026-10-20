@@ -3,12 +3,14 @@ import type {
   AttendanceRecord,
   AttendanceSaved,
   Callup,
+  Exclusion,
   Infraction,
   InfractionRegistered,
   Movement,
   MovementsCreated,
   NewInfraction,
   NewSession,
+  SanctionKind,
   TeamSession,
   WinKind,
 } from "./types";
@@ -69,4 +71,21 @@ export function deleteMovement(movementId: string): Promise<Movement> {
 
 export function listInfractions(): Promise<Infraction[]> {
   return apiData<Infraction[]>("/catalog/infractions");
+}
+
+/** Confirma una sanción propuesta: el jugador queda excluido de ese partido. */
+export function createExclusion(
+  playerId: string,
+  matchId: string,
+  kind: SanctionKind,
+): Promise<Exclusion> {
+  return apiData<Exclusion>("/exclusions", {
+    method: "POST",
+    body: { player_id: playerId, match_id: matchId, kind },
+  });
+}
+
+/** Exclusiones ya confirmadas para un partido. */
+export function listExclusions(matchId: string): Promise<Exclusion[]> {
+  return apiData<Exclusion[]>(`/exclusions?match_id=${encodeURIComponent(matchId)}`);
 }

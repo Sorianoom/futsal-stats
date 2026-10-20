@@ -161,3 +161,10 @@ export interface Callup {
   starters: Selection;
   breakdowns: Record<string, Breakdown>;
 }
+
+export interface Exclusion {
+  id: string;
+  player_id: string;
+  match_id: string;
+  kind: SanctionKind;
+}

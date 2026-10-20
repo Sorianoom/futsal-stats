@@ -301,8 +301,8 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
   if (inBreak || finished) {
     const blockedPlayers = new Set(state.sentOff);
     const lastPart = state.lastEndedPart;
-    const wasOnCourt = new Set(
-      state.closed.filter((stint) => stint.part === lastPart && stint.end === state.clock).map((s) => s.player_id),
+    const available = data.players.filter(
+      (p) => !blockedPlayers.has(p.id) && p.status === "available",
     );
     return (
       <div className="space-y-6">
@@ -318,9 +318,9 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
           <PartBreak
             part={lastPart + 1}
             score={safeSummary(log.events, null).score}
-            players={data.players.filter((p) => !blockedPlayers.has(p.id) && p.status === "available")}
-            capacity={5 - state.sentOff.length}
-            proposed={[...wasOnCourt]}
+            players={available}
+            capacity={Math.min(5 - state.sentOff.length, available.length)}
+            proposed={courtAtEndOfLastPart(log.lineup)}
             error={problem}
             onStart={(starters) =>
               void tryLineup({ type: "part_started", part: lastPart + 1, starters })
@@ -328,10 +328,11 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
           />
         ) : (
           <MatchSummary
-            matchId={matchId}
+            match={data.match}
             players={data.players}
             stints={state.closed}
             score={safeSummary(log.events, null).score}
+            reds={effectiveReds(log.events)}
             alreadyClosed={data.stints.length > 0}
             pending={log.pending}
             blocked={log.status === "conflict"}
@@ -431,6 +432,26 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
       />
     </>
   );
+}
+
+/** Quiénes estaban en pista justo antes del último fin de parte (también los que entraron al final). */
+function courtAtEndOfLastPart(lineup: readonly LineupEventRecord[]): string[] {
+  const payloads = lineup.map((event) => event.payload);
+  const lastEnd = payloads.map((payload) => payload.type).lastIndexOf("part_ended");
+  if (lastEnd < 0) return [];
+  try {
+    return [...onCourt(replay(payloads.slice(0, lastEnd)))];
+  } catch {
+    return [];
+  }
+}
+
+function effectiveReds(events: readonly LoggedEvent[]): LoggedEvent[] {
+  try {
+    return effectiveEvents(events).filter((event) => event.kind === "red") as LoggedEvent[];
+  } catch {
+    return [];
+  }
 }
 
 function safeSummary(

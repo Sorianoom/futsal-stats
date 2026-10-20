@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -149,6 +149,7 @@ describe("AuthProvider", () => {
       "GET /auth/me": { data: USER },
     });
 
+    await act(async () => {}); // vacía los efectos pendientes: el listener ya está puesto
     window.dispatchEvent(new Event("online"));
 
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
