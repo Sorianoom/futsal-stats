@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { RedCards } from "@/components/red-cards";
@@ -12,6 +13,7 @@ import { formatClock } from "@/lib/match/clock";
 import { secondsByPlayer, type Stint } from "@/lib/match/lineup";
 
 const CONFLICT = 409;
+const LINK = "inline-flex min-h-12 items-center px-3 underline";
 const CLOSE_ERROR = "No se pudo cerrar el partido. Inténtalo de nuevo.";
 
 interface MatchSummaryProps {
@@ -102,6 +104,16 @@ export function MatchSummary({
         </p>
       ) : null}
 
+      {closed ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/estadisticas?id=${match.id}`} className={LINK}>
+            Ver estadísticas
+          </Link>
+          <Link href={`/corregir?id=${match.id}`} className={LINK}>
+            Corregir tramos
+          </Link>
+        </div>
+      ) : null}
       {closed ? (
         <Button
           variant="outline"

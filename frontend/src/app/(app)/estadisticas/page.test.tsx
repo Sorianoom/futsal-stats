@@ -359,6 +359,21 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 
+  it("el entrenador ve el enlace para corregir el partido y el segundo entrenador no", async () => {
+    api();
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    expect(await screen.findByRole("link", { name: "Corregir partido" })).toHaveAttribute(
+      "href",
+      "/corregir?id=m1",
+    );
+    unmount();
+
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("assistant_coach") });
+    await screen.findByRole("table", { name: "Jugadores" });
+
+    expect(screen.queryByRole("link", { name: "Corregir partido" })).not.toBeInTheDocument();
+  });
+
   it("también las puede ver el segundo entrenador", async () => {
     api();
 

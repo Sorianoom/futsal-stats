@@ -216,6 +216,22 @@ describe("fin del partido", () => {
     expect(screen.queryByRole("button", { name: "Cerrar partido" })).not.toBeInTheDocument();
   });
 
+  it("una vez cerrado enlaza a las estadísticas y a la corrección de tramos", async () => {
+    lineup = FULL();
+    stints = [{ id: "t1", match_id: "m1", player_id: "p1", part: 1, start_s: 0, end_s: 300 }];
+    api();
+    renderWithAuth(<PartidoPage />);
+
+    expect(await screen.findByRole("link", { name: "Ver estadísticas" })).toHaveAttribute(
+      "href",
+      "/estadisticas?id=m1",
+    );
+    expect(screen.getByRole("link", { name: "Corregir tramos" })).toHaveAttribute(
+      "href",
+      "/corregir?id=m1",
+    );
+  });
+
   it("si el partido ya estaba cerrado al cargar lo indica y deja rehacer el cierre", async () => {
     lineup = FULL();
     stints = [{ id: "t1", match_id: "m1", player_id: "p1", part: 1, start_s: 0, end_s: 300 }];

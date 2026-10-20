@@ -38,7 +38,8 @@ interface BodyProps {
   onCancel: () => void;
 }
 
-function KeypadBody({ settings, initialElapsed, minElapsed, onConfirm, onCancel }: BodyProps) {
+/** Teclado sin diálogo, para usarlo dentro de otro (p. ej. el formulario de un tramo). */
+export function KeypadBody({ settings, initialElapsed, minElapsed, onConfirm, onCancel }: BodyProps) {
   const [digits, setDigits] = useState(() => secondsToDigits(elapsedToDisplay(initialElapsed, settings)));
   // Hasta la primera pulsación el tiempo mostrado es el anterior; la primera tecla lo sustituye.
   const [untouched, setUntouched] = useState(true);

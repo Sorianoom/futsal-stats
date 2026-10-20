@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useAuth } from "@/components/auth-provider";
 import { PlayerStatsTable, QuintetStatsTable } from "@/components/stats-tables";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -25,6 +26,7 @@ function foulsText(stats: MatchStats): string {
 }
 
 export function MatchStatsView({ matchId }: { matchId: string }) {
+  const { user } = useAuth();
   const [loaded, setLoaded] = useState<Loaded | "not_found" | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -89,9 +91,16 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
         <p aria-label="Marcador" className="text-5xl font-bold tabular-nums">
           {stats.score.goals_for} – {stats.score.goals_against}
         </p>
-        <Link href="/estadisticas" className={BACK_LINK}>
-          Todas las estadísticas
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {user?.role === "head_coach" && stats.closed ? (
+            <Link href={`/corregir?id=${matchId}`} className={BACK_LINK}>
+              Corregir partido
+            </Link>
+          ) : null}
+          <Link href="/estadisticas" className={BACK_LINK}>
+            Todas las estadísticas
+          </Link>
+        </div>
       </header>
 
       <p className="text-lg">{`Faltas de equipo: ${foulsText(stats)}`}</p>
