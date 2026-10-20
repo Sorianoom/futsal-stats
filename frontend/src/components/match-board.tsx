@@ -1,0 +1,385 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { LivePanel } from "@/components/live-panel";
+import { PlayerActionsDialog } from "@/components/player-actions-dialog";
+import { RatingDialog } from "@/components/rating-dialog";
+import { StartersPicker } from "@/components/starters-picker";
+import { SubstitutionDialog, type SubstitutionAnchor } from "@/components/substitution-dialog";
+import { TimeKeypad } from "@/components/time-keypad";
+import { Button } from "@/components/ui/button";
+import { UndoDialog } from "@/components/undo-dialog";
+import type { LineupEventRecord, LoggedEvent, Match } from "@/lib/api/match-types";
+import type { Player } from "@/lib/api/types";
+import { describeEvent } from "@/lib/labels";
+import {
+  elapsedToDisplay,
+  formatClock,
+  loadClockSettings,
+  saveClockSettings,
+  type ClockSettings,
+} from "@/lib/match/clock";
+import {
+  EventError,
+  effectiveEvents,
+  score,
+  teamFoulsByPart,
+  undoTarget,
+  type EventKind,
+} from "@/lib/match/events";
+import {
+  LineupError,
+  applyEvent,
+  onCourt,
+  replay,
+  type LineupEvent,
+  type LineupState,
+} from "@/lib/match/lineup";
+import { useMatchLog } from "@/lib/match/use-match-log";
+
+export interface BoardData {
+  match: Match;
+  lineup: LineupEventRecord[];
+  events: LoggedEvent[];
+  players: Player[];
+  proposed: string[];
+}
+
+type Replayed = { state: LineupState } | { error: string };
+
+function replayLineup(lineup: readonly LineupEventRecord[]): Replayed {
+  try {
+    return { state: replay(lineup.map((event) => event.payload)) };
+  } catch (failure) {
+    if (failure instanceof LineupError) return { error: "La alineación guardada no es válida" };
+    throw failure;
+  }
+}
+
+/** Lo que se espera del marcador antes de anotar, según la acción en curso. */
+type Pending =
+  | { type: "goal"; playerId: string }
+  | { type: "red"; playerId: string }
+  | { type: "rival_goal" }
+  | { type: "sub"; out: string; in: string }
+  | { type: "clock" };
+
+const TITLES: Record<Pending["type"], string> = {
+  goal: "Gol",
+  red: "Roja",
+  rival_goal: "Gol rival",
+  sub: "Cambio",
+  clock: "Tiempo del marcador",
+};
+
+export interface BoardActivity {
+  /** Sin nada a medias ni sin enviar: es seguro sustituir el tablero por datos del servidor. */
+  idle: boolean;
+  revision: number;
+  pending: number;
+}
+
+interface MatchBoardProps {
+  matchId: string;
+  data: BoardData;
+  /** Recarga pedida a propósito (descarta lo local). */
+  onReload: () => void;
+  /** Recarga al volver a la pestaña: solo se aplica si no cambió nada entretanto. */
+  onRefresh: () => void;
+  onActivity: (activity: BoardActivity) => void;
+}
+
+const BLOCKED = "Recarga el partido antes de seguir";
+
+export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: MatchBoardProps) {
+  const log = useMatchLog({
+    matchId,
+    initialLineup: data.lineup,
+    initialEvents: data.events,
+  });
+  const [settings, setSettings] = useState<ClockSettings>(() => loadClockSettings());
+  // Último tiempo anotado en la parte en juego: se reutiliza en lo que se anota con un toque.
+  const [memo, setMemo] = useState({ part: 0, t: 0 });
+  const [sheetPlayer, setSheetPlayer] = useState<Player | null>(null);
+  const [anchor, setAnchor] = useState<SubstitutionAnchor | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [rating, setRating] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const replayed = useMemo(() => replayLineup(log.lineup), [log.lineup]);
+  const state = "state" in replayed ? replayed.state : null;
+  const part = state?.currentPart ?? null;
+  const lastEventT = useMemo(
+    () =>
+      log.events
+        .filter((event) => event.part === part && event.kind !== "undo")
+        .reduce((latest, event) => Math.max(latest, event.t), 0),
+    [log.events, part],
+  );
+  const clock = state?.clock ?? 0;
+  // Tras recargar no hay "último tecleado": se parte del último evento o cambio guardado.
+  const now = memo.part === part ? Math.max(memo.t, clock) : Math.max(clock, lastEventT);
+
+  const names = new Map(data.players.map((player) => [player.id, player]));
+  const nameOf = (playerId: string) => names.get(playerId)?.name ?? "Jugador desconocido";
+  const eventsProblem = useMemo(() => {
+    try {
+      effectiveEvents(log.events);
+      return null;
+    } catch (failure) {
+      return failure instanceof EventError ? failure.message : "error";
+    }
+  }, [log.events]);
+  const target = useMemo(() => (eventsProblem ? null : undoTarget(log.events)), [log.events, eventsProblem]);
+
+  const idle =
+    log.pending === 0 &&
+    log.status !== "conflict" &&
+    pending === null &&
+    sheetPlayer === null &&
+    anchor === null &&
+    !rating &&
+    !undoing;
+
+  useEffect(() => {
+    onActivity({ idle, revision: log.revision, pending: log.pending });
+  }, [onActivity, idle, log.revision, log.pending]);
+
+  // Safari del iPad descarta y reactiva pestañas: al volver se pide de nuevo el estado real,
+  // pero nunca con algo a medias ni con cosas sin enviar.
+  useEffect(() => {
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible" && idle) onRefresh();
+    }
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, [idle, onRefresh]);
+
+  // El registro vive en memoria hasta la fase de modo sin red: cerrar con algo pendiente lo pierde.
+  useEffect(() => {
+    if (log.pending === 0) return;
+    function warn(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [log.pending]);
+
+  function blockedByConflict(): boolean {
+    if (log.status !== "conflict") return false;
+    setProblem(BLOCKED);
+    return true;
+  }
+
+  function tryLineup(event: LineupEvent): boolean {
+    if (!state || blockedByConflict()) return false;
+    try {
+      applyEvent(state, event);
+    } catch (failure) {
+      if (!(failure instanceof LineupError)) throw failure;
+      setProblem(failure.message);
+      return false;
+    }
+    setProblem(null);
+    log.recordLineup(event);
+    return true;
+  }
+
+  function confirmTime(elapsed: number) {
+    if (!pending || part === null) return;
+    if (blockedByConflict()) {
+      setPending(null);
+      return;
+    }
+    const accepted = commit(pending, part, elapsed);
+    if (accepted) setMemo({ part, t: elapsed });
+    setPending(null);
+  }
+
+  function commit(action: Pending, currentPart: number, t: number): boolean {
+    switch (action.type) {
+      case "goal":
+        log.recordEvent({ kind: "goal", part: currentPart, t, player_id: action.playerId });
+        return true;
+      case "rival_goal":
+        log.recordEvent({ kind: "rival_goal", part: currentPart, t });
+        return true;
+      case "red":
+        if (!tryLineup({ type: "sent_off", t, player_id: action.playerId })) return false;
+        log.recordEvent({ kind: "red", part: currentPart, t, player_id: action.playerId });
+        return true;
+      case "sub":
+        return tryLineup({ type: "substituted", t, player_out: action.out, player_in: action.in });
+      case "clock":
+        return true;
+    }
+  }
+
+  function quick(kind: EventKind) {
+    if (!sheetPlayer || part === null) return;
+    if (!blockedByConflict()) {
+      log.recordEvent({ kind, part, t: now, player_id: sheetPlayer.id });
+    }
+    setSheetPlayer(null);
+  }
+
+  function toggleDirection() {
+    const next: ClockSettings = {
+      ...settings,
+      direction: settings.direction === "down" ? "up" : "down",
+    };
+    setSettings(next);
+    saveClockSettings(next);
+  }
+
+  function pickCandidate(candidate: Player) {
+    if (!anchor) return;
+    const [out, entering] =
+      anchor.side === "court" ? [anchor.player, candidate] : [candidate, anchor.player];
+    setAnchor(null);
+    setPending({ type: "sub", out: out.id, in: entering.id });
+  }
+
+  if (!state) {
+    return (
+      <div role="alert" className="flex items-center justify-between rounded-lg border p-4">
+        <p className="text-destructive">{"error" in replayed ? replayed.error : ""}</p>
+        <Button variant="outline" onClick={onReload}>
+          Recargar
+        </Button>
+      </div>
+    );
+  }
+
+  const inSetup = state.currentPart === null && state.lastEndedPart === 0;
+  if (inSetup) {
+    return (
+      <StartersPicker
+        part={1}
+        players={data.players}
+        capacity={5}
+        proposed={data.proposed}
+        busy={false}
+        error={problem}
+        onStart={(starters) => void tryLineup({ type: "part_started", part: 1, starters })}
+      />
+    );
+  }
+
+  const onPitch = new Set(onCourt(state));
+  const blocked = new Set(state.sentOff);
+  const court = data.players.filter((p) => onPitch.has(p.id));
+  const bench = data.players.filter(
+    (p) => !onPitch.has(p.id) && !blocked.has(p.id) && p.status === "available",
+  );
+  const live = safeSummary(log.events, part);
+  const title = part !== null ? `Parte ${part} en juego` : `Parte ${state.lastEndedPart} terminada`;
+  // Anotar algo anterior al último cambio lo atribuiría al quinteto equivocado.
+  const minElapsed = pending !== null && pending.type !== "clock" ? state.clock : undefined;
+  const candidates = anchor?.side === "court" ? bench : court.filter((p) => p.id !== anchor?.player.id);
+
+  return (
+    <>
+      {problem ? (
+        <p role="alert" className="mb-4 rounded-lg border p-3 text-destructive">
+          {problem}
+        </p>
+      ) : null}
+      {eventsProblem ? (
+        <div role="alert" className="mb-4 flex items-center justify-between rounded-lg border p-3">
+          <p className="text-destructive">El registro de eventos no es coherente ({eventsProblem})</p>
+          <Button variant="outline" onClick={onReload}>
+            Recargar
+          </Button>
+        </div>
+      ) : null}
+      <LivePanel
+        title={title}
+        score={live.score}
+        teamFouls={live.fouls}
+        clockText={formatClock(elapsedToDisplay(now, settings))}
+        direction={settings.direction}
+        court={court}
+        bench={bench}
+        canUndo={target !== null && target.kind !== "red"}
+        undoNote={target?.kind === "red" ? "La roja no se puede deshacer desde aquí" : null}
+        status={log.status}
+        pending={log.pending}
+        syncProblem={log.problem}
+        onCourtPlayer={setSheetPlayer}
+        onBenchPlayer={(player) => setAnchor({ player, side: "bench" })}
+        onClock={() => setPending({ type: "clock" })}
+        onToggleDirection={toggleDirection}
+        onRivalGoal={() => setPending({ type: "rival_goal" })}
+        onUndo={() => setUndoing(true)}
+        onRate={() => setRating(true)}
+        onRetry={() => void log.flush()}
+        onReload={onReload}
+      />
+
+      <PlayerActionsDialog
+        player={sheetPlayer}
+        onClose={() => setSheetPlayer(null)}
+        onQuick={quick}
+        onGoal={() => {
+          if (sheetPlayer) setPending({ type: "goal", playerId: sheetPlayer.id });
+          setSheetPlayer(null);
+        }}
+        onRed={() => {
+          if (sheetPlayer) setPending({ type: "red", playerId: sheetPlayer.id });
+          setSheetPlayer(null);
+        }}
+        onSubstitute={() => {
+          if (sheetPlayer) setAnchor({ player: sheetPlayer, side: "court" });
+          setSheetPlayer(null);
+        }}
+      />
+      <SubstitutionDialog
+        anchor={anchor}
+        candidates={candidates}
+        onPick={pickCandidate}
+        onClose={() => setAnchor(null)}
+      />
+      <TimeKeypad
+        open={pending !== null}
+        title={pending ? TITLES[pending.type] : "Tiempo"}
+        settings={settings}
+        initialElapsed={now}
+        minElapsed={minElapsed}
+        onConfirm={confirmTime}
+        onCancel={() => setPending(null)}
+      />
+      <RatingDialog
+        open={rating}
+        onPick={(stars) => {
+          if (part !== null && !blockedByConflict()) log.recordRating(part, now, stars);
+          setRating(false);
+        }}
+        onClose={() => setRating(false)}
+      />
+      <UndoDialog
+        description={undoing && target ? describeEvent(target, nameOf) : null}
+        onConfirm={() => {
+          if (!blockedByConflict()) log.undoLast();
+          setUndoing(false);
+        }}
+        onClose={() => setUndoing(false)}
+      />
+    </>
+  );
+}
+
+function safeSummary(
+  events: readonly LoggedEvent[],
+  part: number | null,
+): { score: { for: number; against: number }; fouls: number } {
+  try {
+    const fouls = part === null ? 0 : (teamFoulsByPart(events)[part] ?? 0);
+    return { score: score(events), fouls };
+  } catch {
+    return { score: { for: 0, against: 0 }, fouls: 0 };
+  }
+}

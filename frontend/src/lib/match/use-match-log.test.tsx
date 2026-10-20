@@ -183,7 +183,34 @@ describe("useMatchLog", () => {
     expect(effectiveEvents(result.current.events)).toEqual([]);
   });
 
-  it("deshacer un evento que aún no se envió lo quita sin dejar rastro", async () => {
+  it("deshacer un evento que ni siquiera salió lo quita sin dejar rastro", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { result, server } = setup();
+    const original = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      gate.then(() => original(input, init)),
+    );
+    act(() => {
+      result.current.recordEvent({ kind: "goal", part: 1, t: 10, player_id: "p1" });
+    });
+    await act(async () => Promise.resolve());
+    act(() => {
+      result.current.recordEvent({ kind: "foul", part: 1, t: 20, player_id: "p2" });
+    });
+
+    act(() => {
+      result.current.undoLast();
+    });
+    release();
+    await waitFor(() => expect(result.current.pending).toBe(0));
+
+    const sent = posts(server).flatMap((call) => (call.body as SyncBody).events.map((e) => e.kind));
+    expect(sent).toEqual(["goal"]);
+    expect(result.current.events.map((e) => e.kind)).toEqual(["goal"]);
+  });
+
+  it("deshacer un evento cuyo envío falló lo compensa, porque pudo llegar al servidor", async () => {
     const { result, server } = setup();
     const original = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
@@ -191,18 +218,70 @@ describe("useMatchLog", () => {
       result.current.recordEvent({ kind: "goal", part: 1, t: 10, player_id: "p1" });
     });
     await waitFor(() => expect(result.current.status).toBe("offline"));
+    const goalId = result.current.events[0].id;
 
     act(() => {
       result.current.undoLast();
     });
-
-    expect(result.current.events).toEqual([]);
-    expect(result.current.pending).toBe(0);
+    expect(result.current.events.map((e) => e.kind)).toEqual(["goal", "undo"]);
     vi.stubGlobal("fetch", original);
     await act(async () => {
       await result.current.flush();
     });
-    expect(posts(server)).toHaveLength(0);
+
+    const sent = (posts(server)[0].body as SyncBody).events;
+    expect(sent.map((e) => [e.kind, e.seq])).toEqual([
+      ["goal", 1],
+      ["undo", 2],
+    ]);
+    expect(sent[1].voids_event_id).toBe(goalId);
+  });
+
+  it("un error del servidor que no es de red o 5xx marca conflicto y no se reintenta", async () => {
+    const { result, server } = setup({}, () => ({
+      status: 422,
+      error: { code: "validation_error", message: "Dato inválido" },
+    }));
+
+    act(() => {
+      result.current.recordEvent({ kind: "goal", part: 1, t: 10, player_id: "p1" });
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("conflict"));
+    expect(result.current.problem).toMatch(/Dato inválido/);
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(posts(server)).toHaveLength(1);
+  });
+
+  it("un 500 del servidor se reintenta como un corte de red", async () => {
+    let fail = true;
+    const { result } = setup({}, (request) =>
+      fail ? { status: 500, error: { code: "internal_error", message: "Fallo" } } : acceptAll(request),
+    );
+
+    act(() => {
+      result.current.recordEvent({ kind: "goal", part: 1, t: 10, player_id: "p1" });
+    });
+    await waitFor(() => expect(result.current.status).toBe("offline"));
+    fail = false;
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(result.current.status).toBe("synced");
+  });
+
+  it("la revisión sube con cada anotación", () => {
+    const { result } = setup();
+    const before = result.current.revision;
+
+    act(() => {
+      result.current.recordEvent({ kind: "goal", part: 1, t: 10, player_id: "p1" });
+    });
+
+    expect(result.current.revision).toBeGreaterThan(before);
   });
 
   it("deshacer sin nada que deshacer no hace nada", () => {

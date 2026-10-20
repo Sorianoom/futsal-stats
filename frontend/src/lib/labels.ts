@@ -9,6 +9,7 @@ import type {
   Severity,
   WinKind,
 } from "@/lib/api/types";
+import type { EventKind, MatchEvent } from "@/lib/match/events";
 
 export const ROLE_LABEL: Record<Role, string> = {
   head_coach: "Entrenador",
@@ -61,4 +62,23 @@ export function sanctionText(sanction: Sanction): string {
   const { min_matches: min, max_matches: max } = sanction;
   const matches = min === max ? `${min} ${min === 1 ? "partido" : "partidos"}` : `${min}–${max} partidos`;
   return `${SANCTION_LABEL[sanction.kind]} (${matches})`;
+}
+
+export const EVENT_LABEL: Record<EventKind, string> = {
+  goal: "Gol",
+  assist: "Asistencia",
+  shot: "Tiro",
+  turnover: "Pérdida",
+  steal: "Robo",
+  foul: "Falta",
+  yellow: "Amarilla",
+  red: "Roja",
+  rival_goal: "Gol rival",
+  undo: "Deshacer",
+};
+
+/** "Gol de Ana Ruiz", "Gol rival" */
+export function describeEvent(event: MatchEvent, nameOf: (playerId: string) => string): string {
+  const label = EVENT_LABEL[event.kind];
+  return event.player_id ? `${label} de ${nameOf(event.player_id)}` : label;
 }

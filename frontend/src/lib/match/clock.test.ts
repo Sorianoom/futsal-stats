@@ -71,6 +71,14 @@ describe("conversión entre marcador y tiempo jugado", () => {
     });
   });
 
+  it("el borde de la parte: 20:00 es el inicio y 20:01 no existe", () => {
+    expect(parseScoreboard("2000", DOWN)).toEqual({ ok: true, elapsed: 0 });
+    expect(parseScoreboard("2001", DOWN)).toEqual({
+      ok: false,
+      error: "Ese tiempo no cabe en una parte de 20:00",
+    });
+  });
+
   it("rechaza un tiempo que no cabe en la parte", () => {
     expect(parseScoreboard("2100", DOWN)).toEqual({
       ok: false,

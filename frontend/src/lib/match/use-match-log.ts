@@ -6,13 +6,17 @@ import type {
   LoggedEvent,
   RatingIn,
 } from "@/lib/api/match-types";
+import { ApiError } from "@/lib/api/client";
 import { syncMatch } from "@/lib/api/matches";
 
 import { undoTarget, type EventKind } from "./events";
+import { newId } from "./ids";
 import type { LineupEvent } from "./lineup";
 import { nextSeq } from "./sequence";
 
 const RETRY_EVERY_MS = 5000;
+const SERVER_ERROR_FROM = 500;
+const CONFLICT_REASONS = ["seq_conflict", "id_conflict"];
 
 interface Outbox {
   lineup: readonly LineupEventRecord[];
@@ -45,6 +49,10 @@ export interface MatchLog {
   /** Cuántos elementos esperan a llegar al servidor. */
   pending: number;
   status: LogStatus;
+  /** Qué falló cuando el estado es "conflict". */
+  problem: string | null;
+  /** Sube con cada anotación: permite saber si algo cambió mientras se recargaba. */
+  revision: number;
   recordLineup: (payload: LineupEvent) => LineupEventRecord;
   recordEvent: (event: NewEvent) => LoggedEvent;
   recordRating: (part: number, t: number, stars: number) => void;
@@ -66,6 +74,19 @@ function without(outbox: Outbox, ids: ReadonlySet<string>): Outbox {
     events: outbox.events.filter((item) => !ids.has(item.id)),
     ratings: outbox.ratings.filter((item) => !ids.has(item.id)),
   };
+}
+
+/** Un corte de red o un 5xx se reintentan; el resto de errores del servidor no mejoran solos. */
+function isRetryable(failure: unknown): boolean {
+  if (!(failure instanceof ApiError)) return true;
+  return failure.code === "network" || failure.status >= SERVER_ERROR_FROM;
+}
+
+function conflictMessage(reasons: readonly string[]): string {
+  if (reasons.some((reason) => CONFLICT_REASONS.includes(reason))) {
+    return "Conflicto con otro dispositivo";
+  }
+  return `El servidor rechazó lo anotado (${reasons.join(", ")})`;
 }
 
 function toEventIn(event: LoggedEvent): EventIn {
@@ -90,13 +111,18 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
   const [events, setEvents] = useState(initialEvents);
   const [pending, setPending] = useState(0);
   const [failed, setFailed] = useState(false);
-  const [conflict, setConflict] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
 
   const lineupRef = useRef(initialLineup);
   const eventsRef = useRef(initialEvents);
   const outbox = useRef<Outbox>(EMPTY_OUTBOX);
-  const inFlight = useRef<ReadonlySet<string>>(new Set());
+  // Ids que han salido en alguna petición sin respuesta: pudieron llegar al servidor aunque
+  // la respuesta se perdiera, así que ya no se pueden dar por "no enviados".
+  const maybeSent = useRef<Set<string>>(new Set());
   const flushing = useRef(false);
+  // Tras un conflicto no se sigue enviando sobre una base inconsistente: hay que recargar.
+  const blocked = useRef(false);
 
   const commit = useCallback((next: Outbox) => {
     outbox.current = next;
@@ -104,28 +130,35 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
   }, []);
 
   const flush = useCallback(async () => {
-    if (flushing.current || size(outbox.current) === 0) return;
+    if (flushing.current || blocked.current || size(outbox.current) === 0) return;
     flushing.current = true;
     try {
       while (size(outbox.current) > 0) {
         const batch = outbox.current;
-        inFlight.current = idsOf(batch);
+        const ids = idsOf(batch);
+        ids.forEach((id) => maybeSent.current.add(id));
         const result = await syncMatch(matchId, {
           events: [...batch.events],
           lineup_events: [...batch.lineup],
           ratings: [...batch.ratings],
         });
-        commit(without(outbox.current, inFlight.current));
-        inFlight.current = new Set();
+        ids.forEach((id) => maybeSent.current.delete(id));
+        commit(without(outbox.current, ids));
         if (result.rejected.length > 0) {
-          setConflict(true);
+          blocked.current = true;
+          setProblem(conflictMessage(result.rejected.map((item) => item.reason)));
           return;
         }
       }
       setFailed(false);
-    } catch {
-      inFlight.current = new Set();
-      setFailed(true);
+    } catch (failure) {
+      if (isRetryable(failure)) {
+        setFailed(true);
+      } else {
+        const message = failure instanceof ApiError ? failure.message : "error";
+        blocked.current = true;
+        setProblem(`El servidor rechazó lo anotado (${message})`);
+      }
     } finally {
       flushing.current = false;
     }
@@ -139,12 +172,13 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
   const recordLineup = useCallback(
     (payload: LineupEvent): LineupEventRecord => {
       const record: LineupEventRecord = {
-        id: crypto.randomUUID(),
+        id: newId(),
         seq: nextSeq(lineupRef.current),
         payload,
       };
       lineupRef.current = [...lineupRef.current, record];
       setLineup(lineupRef.current);
+      setRevision((value) => value + 1);
       commit({ ...outbox.current, lineup: [...outbox.current.lineup, record] });
       scheduleFlush();
       return record;
@@ -155,7 +189,7 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
   const recordEvent = useCallback(
     (input: NewEvent): LoggedEvent => {
       const event: LoggedEvent = {
-        id: crypto.randomUUID(),
+        id: newId(),
         seq: nextSeq(eventsRef.current),
         kind: input.kind,
         part: input.part,
@@ -165,6 +199,7 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
       };
       eventsRef.current = [...eventsRef.current, event];
       setEvents(eventsRef.current);
+      setRevision((value) => value + 1);
       commit({ ...outbox.current, events: [...outbox.current.events, toEventIn(event)] });
       scheduleFlush();
       return event;
@@ -174,7 +209,8 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
 
   const recordRating = useCallback(
     (part: number, t: number, stars: number) => {
-      const rating: RatingIn = { id: crypto.randomUUID(), part, t, stars };
+      const rating: RatingIn = { id: newId(), part, t, stars };
+      setRevision((value) => value + 1);
       commit({ ...outbox.current, ratings: [...outbox.current.ratings, rating] });
       scheduleFlush();
     },
@@ -185,11 +221,12 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
     const target = undoTarget(eventsRef.current);
     if (!target) return;
     const unsent =
-      outbox.current.events.some((e) => e.id === target.id) && !inFlight.current.has(target.id);
+      outbox.current.events.some((e) => e.id === target.id) && !maybeSent.current.has(target.id);
     if (unsent) {
       // Nunca llegó al servidor: basta con quitarlo, sin dejar un evento compensatorio.
       eventsRef.current = eventsRef.current.filter((e) => e.id !== target.id);
       setEvents(eventsRef.current);
+      setRevision((value) => value + 1);
       commit(without(outbox.current, new Set([target.id])));
       return;
     }
@@ -209,8 +246,18 @@ export function useMatchLog({ matchId, initialLineup, initialEvents }: Options):
   }, [failed, pending, flush]);
 
   let status: LogStatus = "synced";
-  if (conflict) status = "conflict";
+  if (problem !== null) status = "conflict";
   else if (pending > 0) status = failed ? "offline" : "pending";
 
-  return { lineup, events, pending, status, recordLineup, recordEvent, recordRating, undoLast, flush };
+  return {
+    lineup,
+    events,
+    pending,
+    status,
+    problem,
+    revision,
+    recordLineup, recordEvent, recordRating,
+    undoLast,
+    flush,
+  };
 }

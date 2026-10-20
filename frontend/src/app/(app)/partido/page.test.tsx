@@ -240,8 +240,8 @@ describe("PartidoPage: pantalla de un partido", () => {
     expect(screen.queryByRole("button", { name: "Empezar 1ª parte" })).not.toBeInTheDocument();
   });
 
-  it("muestra el motivo si el servidor rechaza empezar la parte", async () => {
-    api({
+  it("si el servidor rechaza empezar la parte avisa del conflicto y deja recargar", async () => {
+    const server = api({
       "POST /matches/m1/sync": (request) => ({
         data: {
           accepted: [],
@@ -249,7 +249,7 @@ describe("PartidoPage: pantalla de un partido", () => {
           rejected: [
             {
               id: (request.body as { lineup_events: { id: string }[] }).lineup_events[0].id,
-              reason: "unknown_player",
+              reason: "seq_conflict",
             },
           ],
         },
@@ -261,30 +261,22 @@ describe("PartidoPage: pantalla de un partido", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo empezar la parte");
-    expect(screen.queryByText("Parte 1 en juego")).not.toBeInTheDocument();
+    expect(await screen.findByText(/Conflicto con otro dispositivo/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Recargar partido" }));
+    await waitFor(() => expect(server.count("GET", "/matches/m1/lineup-events")).toBe(2));
   });
-
-  it("si se corta la red al empezar avisa y deja volver a intentarlo", async () => {
+  it("si se corta la red al empezar la parte sigue adelante y avisa de lo pendiente", async () => {
     api();
     renderWithAuth(<PartidoPage />);
     await screen.findByLabelText("Ana Ruiz");
     await pick(["Ana", "Bea", "Carla", "Dani", "Elena"]);
-    const original = globalThis.fetch;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.method === "POST") throw new TypeError("Failed to fetch");
-        return original(input, init);
-      }),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
     await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Sin conexión");
-    expect(screen.getByRole("button", { name: "Empezar 1ª parte" })).toBeEnabled();
+    expect(await screen.findByText("Parte 1 en juego")).toBeInTheDocument();
+    expect(await screen.findByText(/Sin conexión · 1 sin enviar/)).toBeInTheDocument();
   });
-
   it("avisa si el partido no existe", async () => {
     navigation.search = "id=desconocido";
     api({ "GET /matches/desconocido/lineup-events": { data: [] } });
@@ -312,8 +304,8 @@ describe("PartidoPage: pantalla de un partido", () => {
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 
-  it("tras un corte de red reintenta con el mismo id y seq para no duplicar el evento", async () => {
-    const attempts: unknown[] = [];
+  it("tras un corte de red reenvía la parte con el mismo id y seq para no duplicarla", async () => {
+    const attempts: { id: string; seq: number }[] = [];
     api();
     renderWithAuth(<PartidoPage />);
     await screen.findByLabelText("Ana Ruiz");
@@ -324,7 +316,7 @@ describe("PartidoPage: pantalla de un partido", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.method === "POST") {
-          const body = JSON.parse(String(init.body)) as { lineup_events: { id: string }[] };
+          const body = JSON.parse(String(init.body)) as { lineup_events: { id: string; seq: number }[] };
           attempts.push(body.lineup_events[0]);
           if (!online) throw new TypeError("Failed to fetch");
           return new Response(
@@ -340,56 +332,16 @@ describe("PartidoPage: pantalla de un partido", () => {
       }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
-    await screen.findByRole("alert");
+    await screen.findByText(/Sin conexión/);
     online = true;
 
-    await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar envío" }));
 
-    expect(await screen.findByText("Parte 1 en juego")).toBeInTheDocument();
+    expect(await screen.findByText("Sincronizado")).toBeInTheDocument();
     expect(attempts).toHaveLength(2);
     expect(attempts[1]).toEqual(attempts[0]);
   });
-
-  it("si cambia los titulares tras un corte de red comprueba antes si el primer intento se guardó", async () => {
-    api();
-    renderWithAuth(<PartidoPage />);
-    await screen.findByLabelText("Ana Ruiz");
-    await pick(["Ana", "Bea", "Carla", "Dani", "Elena"]);
-    let firstId = "";
-    const original = globalThis.fetch;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.method === "POST") {
-          firstId = (JSON.parse(String(init.body)) as { lineup_events: { id: string }[] }).lineup_events[0].id;
-          throw new TypeError("Failed to fetch");
-        }
-        return original(input, init);
-      }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
-    await screen.findByRole("alert");
-    // El servidor sí guardó el primer intento aunque la respuesta se perdió.
-    lineup = [
-      {
-        id: firstId,
-        seq: 1,
-        payload: { type: "part_started", part: 1, starters: ["p1", "p2", "p3", "p4", "p5"] },
-      },
-    ];
-    vi.stubGlobal("fetch", original);
-    await userEvent.click(screen.getByLabelText("Elena Ruiz"));
-    await userEvent.click(screen.getByLabelText("Fran Ruiz"));
-
-    await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
-
-    expect(await screen.findByText("Parte 1 en juego")).toBeInTheDocument();
-    const court = screen.getByRole("list", { name: "En pista" });
-    expect(within(court).getByText("Elena Ruiz")).toBeInTheDocument();
-    expect(within(court).queryByText("Fran Ruiz")).not.toBeInTheDocument();
-  });
-
-  it("si otro dispositivo ya cambió el partido recarga y lo explica", async () => {
+  it("si otro dispositivo ya cambió el partido, tras empezar se ofrece recargar", async () => {
     const server = api({
       "POST /matches/m1/sync": (request) => ({
         data: {
@@ -398,7 +350,7 @@ describe("PartidoPage: pantalla de un partido", () => {
           rejected: [
             {
               id: (request.body as { lineup_events: { id: string }[] }).lineup_events[0].id,
-              reason: "seq_conflict",
+              reason: "id_conflict",
             },
           ],
         },
@@ -409,11 +361,10 @@ describe("PartidoPage: pantalla de un partido", () => {
     await pick(["Ana", "Bea", "Carla", "Dani", "Elena"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Recargar partido" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("El partido cambió en otro dispositivo");
-    await waitFor(() => expect(server.count("GET", "/matches/m1/lineup-events")).toBe(2));
+    await waitFor(() => expect(server.count("GET", "/matches/m1/events")).toBe(2));
   });
-
   it("recarga el partido al volver a la pestaña", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
