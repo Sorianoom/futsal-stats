@@ -181,7 +181,6 @@ describe("EstadisticasPage: temporada", () => {
     const ana = within(table).getByText("9 · Ana Ruiz").closest("tr") as HTMLElement;
 
     expect(within(ana).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
-      "9 · Ana Ruiz",
       "2",
       "80:00",
       "40:00",
@@ -195,7 +194,7 @@ describe("EstadisticasPage: temporada", () => {
       "0",
     ]);
     const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
-    expect(within(bea).getAllByRole("cell")[3]).toHaveTextContent("05:05");
+    expect(within(bea).getAllByRole("cell")[2]).toHaveTextContent("05:05");
   });
 
   it("dice de cuántos partidos cerrados sale el acumulado", async () => {
@@ -273,10 +272,30 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     const ana = within(table).getByText("9 · Ana Ruiz").closest("tr") as HTMLElement;
     const cells = within(ana).getAllByRole("cell").map((cell) => cell.textContent);
 
-    expect(cells).toEqual(["9 · Ana Ruiz", "40:00", "2", "1", "6", "3", "4", "2", "1", "0"]);
+    expect(cells).toEqual(["40:00", "2", "1", "6", "3", "4", "2", "1", "0"]);
     const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
-    expect(within(bea).getAllByRole("cell")[1]).toHaveTextContent("05:05");
-    expect(within(bea).getAllByRole("cell")[9]).toHaveTextContent("1");
+    expect(within(bea).getAllByRole("cell")[0]).toHaveTextContent("05:05");
+    expect(within(bea).getAllByRole("cell")[8]).toHaveTextContent("1");
+  });
+
+  it("el nombre del jugador es la cabecera de su fila y las columnas se leen con su nombre completo", async () => {
+    api();
+    renderWithAuth(<EstadisticasPage />);
+
+    const table = await screen.findByRole("table", { name: "Jugadores" });
+
+    expect(within(table).getByRole("rowheader", { name: "9 · Ana Ruiz" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Goles" })).toHaveAttribute("scope", "col");
+    expect(within(table).getByRole("columnheader", { name: "Rojas" })).toBeInTheDocument();
+  });
+
+  it("la tabla se puede desplazar con teclado en pantallas estrechas", async () => {
+    api();
+    renderWithAuth(<EstadisticasPage />);
+
+    const region = await screen.findByRole("region", { name: "Tabla de jugadores" });
+
+    expect(region).toHaveAttribute("tabindex", "0");
   });
 
   it("las columnas tienen cabeceras comprensibles", async () => {
@@ -335,6 +354,24 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     renderWithAuth(<EstadisticasPage />);
 
     expect(await screen.findByText(/fuera de los tramos/)).toBeInTheDocument();
+  });
+
+  it("un partido con eventos incoherentes se explica y ofrece corregirlo en vez de reintentar sin fin", async () => {
+    api({
+      "GET /matches/m1/stats": {
+        status: 409,
+        error: { code: "conflict", message: "El registro de eventos no es coherente" },
+      },
+    });
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByText("Los eventos de este partido no son coherentes")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Corregir partido" })).toHaveAttribute(
+      "href",
+      "/corregir?id=m1",
+    );
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
   });
 
   it("avisa si el partido no existe", async () => {

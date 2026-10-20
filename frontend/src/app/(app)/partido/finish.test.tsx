@@ -243,10 +243,41 @@ describe("fin del partido", () => {
     expect(await screen.findByText("Partido cerrado")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cerrar partido" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Rehacer cierre" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar rehacer cierre" }));
 
     await waitFor(() =>
       expect(server.calls.some((c) => c.path === "/matches/m1/finalize?force=true")).toBe(true),
     );
+  });
+
+  it("rehacer el cierre avisa de que borra las correcciones y se puede cancelar", async () => {
+    lineup = FULL();
+    stints = [{ id: "t1", match_id: "m1", player_id: "p1", part: 1, start_s: 0, end_s: 300 }];
+    const server = api({
+      "POST /matches/m1/finalize": { data: { stints: [], seconds_by_player: {} } },
+    });
+    renderWithAuth(<PartidoPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Rehacer cierre" }));
+
+    expect(screen.getByText(/borra las correcciones de tramos hechas a mano/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.getByRole("button", { name: "Rehacer cierre" })).toBeInTheDocument();
+    expect(server.calls.some((c) => c.path.startsWith("/matches/m1/finalize"))).toBe(false);
+  });
+
+  it("un doble toque en Rehacer cierre no confirma", async () => {
+    lineup = FULL();
+    stints = [{ id: "t1", match_id: "m1", player_id: "p1", part: 1, start_s: 0, end_s: 300 }];
+    const server = api({
+      "POST /matches/m1/finalize": { data: { stints: [], seconds_by_player: {} } },
+    });
+    renderWithAuth(<PartidoPage />);
+
+    await userEvent.dblClick(await screen.findByRole("button", { name: "Rehacer cierre" }));
+
+    expect(server.calls.some((c) => c.path.startsWith("/matches/m1/finalize"))).toBe(false);
+    expect(screen.getByRole("button", { name: "Confirmar rehacer cierre" })).toBeInTheDocument();
   });
 
   it("si el servidor dice que ya está cerrado ofrece rehacer el cierre", async () => {

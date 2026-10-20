@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Match, StintRecord } from "@/lib/api/match-types";
+import type { LoggedEvent, Match, StintRecord } from "@/lib/api/match-types";
 import type { Player } from "@/lib/api/types";
 import { mockApi, type MockHandler } from "@/test/mock-api";
 import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
@@ -34,8 +34,25 @@ const stint = (id: string, player: string, part: number, start: number, end: num
 });
 
 let stints: StintRecord[];
+let events: LoggedEvent[];
+
+const ev = (
+  id: string,
+  seq: number,
+  kind: LoggedEvent["kind"],
+  part: number,
+  t: number,
+  player: string | null = null,
+  voids: string | null = null,
+): LoggedEvent => ({ id, seq, kind, part, t, player_id: player, voids_event_id: voids });
 
 beforeEach(() => {
+  events = [
+    ev("e1", 1, "goal", 1, 300, "p1"),
+    ev("e2", 2, "foul", 1, 400, "p2"),
+    ev("e3", 3, "undo", 1, 400, null, "e2"),
+    ev("e4", 4, "red", 2, 700, "p3"),
+  ];
   navigation.search = "id=m1";
   window.localStorage.clear();
   stints = [
@@ -50,6 +67,7 @@ function api(extra: Record<string, MockHandler> = {}) {
     "GET /matches": { data: [MATCH] },
     "GET /players": { data: PLAYERS },
     "GET /matches/m1/stints": () => ({ data: stints }),
+    "GET /matches/m1/events": () => ({ data: events }),
     ...extra,
   });
 }
@@ -296,5 +314,235 @@ describe("CorregirPage", () => {
       "href",
       "/estadisticas",
     );
+  });
+});
+
+describe("CorregirPage: eventos", () => {
+  it("lista los eventos vigentes con su hora y quién los hizo, sin los deshechos", async () => {
+    api();
+
+    renderWithAuth(<CorregirPage />);
+
+    const list = await screen.findByRole("list", { name: "Eventos" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(list).getByText("1ª parte · 15:00 · Gol de Ana Ruiz")).toBeInTheDocument();
+    expect(within(list).getByText("2ª parte · 08:20 · Roja de Carla Ruiz")).toBeInTheDocument();
+    expect(within(list).queryByText(/Falta/)).not.toBeInTheDocument();
+  });
+
+  it("deshace un evento tras confirmar enviando un deshacer con el siguiente seq", async () => {
+    const server = api({
+      "POST /matches/m1/sync": (request) => {
+        const sent = (request.body as { events: LoggedEvent[] }).events[0];
+        events = [...events, { ...sent, player_id: null }];
+        return { data: { accepted: [sent.id], duplicates: [], rejected: [] } };
+      },
+    });
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+    expect(server.calls.some((c) => c.method === "POST")).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    await waitFor(() => expect(screen.queryByText(/Gol de Ana Ruiz/)).not.toBeInTheDocument());
+    const body = server.calls.find((c) => c.method === "POST")?.body as { events: LoggedEvent[] };
+    expect(body.events[0]).toMatchObject({ kind: "undo", voids_event_id: "e1", seq: 5, part: 1, t: 300 });
+  });
+
+  it("un doble toque en Deshacer no confirma", async () => {
+    const server = api();
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+
+    await userEvent.dblClick(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+
+    expect(server.calls.some((c) => c.method === "POST")).toBe(false);
+    expect(screen.getByRole("button", { name: "Confirmar deshacer" })).toBeInTheDocument();
+  });
+
+  it("deshacer una roja avisa de que no devuelve al jugador a la pista", async () => {
+    api();
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Roja de Carla Ruiz" }));
+
+    expect(screen.getByText(/no devuelve al jugador a la pista/)).toBeInTheDocument();
+  });
+
+  it("un motivo del servidor se explica en español y la lista se refresca", async () => {
+    const server = api({
+      "POST /matches/m1/sync": (request) => ({
+        data: {
+          accepted: [],
+          duplicates: [],
+          rejected: [
+            {
+              id: (request.body as { events: { id: string }[] }).events[0].id,
+              reason: "void_target_missing",
+            },
+          ],
+        },
+      }),
+    });
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudo deshacer: ese evento ya no existe",
+    );
+    await waitFor(() => expect(server.count("GET", "/matches/m1/events")).toBe(2));
+  });
+
+  it("si ya estaba deshecho lo da por hecho, sin avisos, y refresca la lista", async () => {
+    const server = api({
+      "POST /matches/m1/sync": (request) => ({
+        data: {
+          accepted: [],
+          duplicates: [],
+          rejected: [
+            {
+              id: (request.body as { events: { id: string }[] }).events[0].id,
+              reason: "already_voided",
+            },
+          ],
+        },
+      }),
+    });
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    await waitFor(() => expect(server.count("GET", "/matches/m1/events")).toBe(2));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("si otro dispositivo anotó eventos mientras tanto lo explica y recarga", async () => {
+    const server = api({
+      "POST /matches/m1/sync": (request) => ({
+        data: {
+          accepted: [],
+          duplicates: [],
+          rejected: [
+            {
+              id: (request.body as { events: { id: string }[] }).events[0].id,
+              reason: "seq_conflict",
+            },
+          ],
+        },
+      }),
+    });
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("desde otro dispositivo");
+    await waitFor(() => expect(server.count("GET", "/matches/m1/events")).toBe(2));
+  });
+
+  it("tras un corte de red reintenta con el mismo id y seq y recarga la lista", async () => {
+    const attempts: { id: string; seq: number }[] = [];
+    const server = api({
+      "POST /matches/m1/sync": (request) => {
+        const sent = (request.body as { events: LoggedEvent[] }).events[0];
+        events = [...events, { ...sent, player_id: null }];
+        return { data: { accepted: [sent.id], duplicates: [], rejected: [] } };
+      },
+    });
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+    const original = globalThis.fetch;
+    let online = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as { events: { id: string; seq: number }[] };
+          attempts.push(body.events[0]);
+          if (!online) throw new TypeError("Failed to fetch");
+        }
+        return original(input, init);
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+    await screen.findByRole("alert");
+    await waitFor(() => expect(server.count("GET", "/matches/m1/events")).toBe(2));
+    online = true;
+
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    await waitFor(() => expect(screen.queryByText(/Gol de Ana Ruiz/)).not.toBeInTheDocument());
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toEqual(attempts[0]);
+  });
+
+  it("dos deshacer seguidos usan secuencias distintas", async () => {
+    const seqs: number[] = [];
+    api({
+      "POST /matches/m1/sync": (request) => {
+        const sent = (request.body as { events: LoggedEvent[] }).events[0];
+        seqs.push(sent.seq);
+        events = [...events, { ...sent, player_id: null }];
+        return { data: { accepted: [sent.id], duplicates: [], rejected: [] } };
+      },
+    });
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Deshacer Roja de Carla Ruiz" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    await waitFor(() => expect(seqs).toHaveLength(2));
+    expect(seqs[1]).toBe(seqs[0] + 1);
+  });
+
+  it("si se corta la red al deshacer avisa y deja volver a intentarlo", async () => {
+    api();
+    renderWithAuth(<CorregirPage />);
+    await screen.findByRole("list", { name: "Eventos" });
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" }));
+    const original = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") throw new TypeError("Failed to fetch");
+        return original(input, init);
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar deshacer" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sin conexión");
+    expect(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" })).toBeInTheDocument();
+  });
+
+  it("sin eventos lo indica", async () => {
+    events = [];
+    api();
+
+    renderWithAuth(<CorregirPage />);
+
+    expect(await screen.findByText("No hay eventos anotados")).toBeInTheDocument();
+  });
+
+  it("si no se pueden cargar los eventos avisa y deja reintentar sin esconder los tramos", async () => {
+    api({ "GET /matches/m1/events": { status: 500, error: { code: "internal_error", message: "Fallo" } } });
+
+    renderWithAuth(<CorregirPage />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar los eventos");
+    expect(await screen.findByRole("list", { name: "Tramos de la parte 1" })).toBeInTheDocument();
   });
 });

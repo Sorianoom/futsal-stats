@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { CorrectEvents } from "@/components/correct-events";
 import { StintDialog, type StintTarget } from "@/components/stint-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -238,6 +239,8 @@ export function CorrectMatch({ matchId }: { matchId: string }) {
       <Button size="lg" onClick={() => setTarget({ kind: "add" })}>
         Añadir tramo
       </Button>
+
+      <CorrectEvents matchId={matchId} nameOf={nameOf} settings={settings} />
 
       <StintDialog
         matchId={matchId}

@@ -14,6 +14,18 @@ const PLAYER_COLUMNS = [
 ] as const;
 
 const HEADER_CELL = "px-3 py-2 text-left text-sm font-semibold text-muted-foreground";
+const ROW_HEADER = "px-3 py-3 text-left text-lg font-medium";
+const SCROLLER = "overflow-x-auto rounded-xl border bg-card";
+
+/** Cabecera de columna: abreviada a la vista pero con el nombre completo para lectores. */
+function ColumnHeader({ short, title }: { short: string; title: string }) {
+  return (
+    <th scope="col" title={title} className={HEADER_CELL}>
+      <span aria-hidden="true">{short}</span>
+      <span className="sr-only">{title}</span>
+    </th>
+  );
+}
 const CELL = "px-3 py-3 text-lg tabular-nums";
 
 function actionsOf(player: PlayerStats): number[] {
@@ -31,22 +43,22 @@ function actionsOf(player: PlayerStats): number[] {
 
 export function PlayerStatsTable({ players }: { players: readonly PlayerStats[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div role="region" aria-label="Tabla de jugadores" tabIndex={0} className={SCROLLER}>
       <table aria-label="Jugadores" className="w-full">
         <thead>
           <tr className="border-b">
-            <th className={HEADER_CELL}>Jugador</th>
+            <th scope="col" className={HEADER_CELL}>
+              Jugador
+            </th>
             {PLAYER_COLUMNS.map((column) => (
-              <th key={column.title} title={column.title} className={HEADER_CELL}>
-                {column.short}
-              </th>
+              <ColumnHeader key={column.title} short={column.short} title={column.title} />
             ))}
           </tr>
         </thead>
         <tbody>
           {players.map((player) => (
             <tr key={player.player_id} className="border-b last:border-0">
-              <td className="px-3 py-3 text-lg font-medium">{`${player.dorsal} · ${player.name}`}</td>
+              <th scope="row" className={ROW_HEADER}>{`${player.dorsal} · ${player.name}`}</th>
               <td className={CELL}>{formatClock(player.seconds)}</td>
               {actionsOf(player).map((value, index) => (
                 <td key={PLAYER_COLUMNS[index + 1].title} className={CELL}>
@@ -75,18 +87,20 @@ interface QuintetStatsTableProps {
 
 export function QuintetStatsTable({ quintets, nameOf }: QuintetStatsTableProps) {
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div role="region" aria-label="Tabla de quintetos" tabIndex={0} className={SCROLLER}>
       <table aria-label="Quintetos" className="w-full">
         <thead>
           <tr className="border-b">
-            <th className={HEADER_CELL}>Quinteto</th>
-            <th className={HEADER_CELL} title="Tiempo juntos en pista">
+            <th scope="col" className={HEADER_CELL}>
+              Quinteto
+            </th>
+            <th scope="col" className={HEADER_CELL} title="Tiempo juntos en pista">
               Tiempo
             </th>
-            <th className={HEADER_CELL} title="Goles a favor y en contra con ese quinteto">
+            <th scope="col" className={HEADER_CELL} title="Goles a favor y en contra con ese quinteto">
               Goles
             </th>
-            <th className={HEADER_CELL} title="Valoración media con estrellas">
+            <th scope="col" className={HEADER_CELL} title="Valoración media con estrellas">
               Valoración
             </th>
           </tr>
@@ -125,22 +139,22 @@ function perMatch(player: SeasonPlayerStats): string {
 
 export function SeasonStatsTable({ players }: { players: readonly SeasonPlayerStats[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div role="region" aria-label="Tabla de la temporada" tabIndex={0} className={SCROLLER}>
       <table aria-label="Temporada" className="w-full">
         <thead>
           <tr className="border-b">
-            <th className={HEADER_CELL}>Jugador</th>
+            <th scope="col" className={HEADER_CELL}>
+              Jugador
+            </th>
             {SEASON_COLUMNS.map((column) => (
-              <th key={column.title} title={column.title} className={HEADER_CELL}>
-                {column.short}
-              </th>
+              <ColumnHeader key={column.title} short={column.short} title={column.title} />
             ))}
           </tr>
         </thead>
         <tbody>
           {players.map((player) => (
             <tr key={player.player_id} className="border-b last:border-0">
-              <td className="px-3 py-3 text-lg font-medium">{`${player.dorsal} · ${player.name}`}</td>
+              <th scope="row" className={ROW_HEADER}>{`${player.dorsal} · ${player.name}`}</th>
               <td className={CELL}>{player.matches_played}</td>
               <td className={CELL}>{formatClock(player.seconds)}</td>
               <td className={CELL}>{perMatch(player)}</td>

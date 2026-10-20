@@ -14,6 +14,7 @@ import type { MatchStats } from "@/lib/api/stats-types";
 import { formatShortDay } from "@/lib/weeks";
 
 const NOT_FOUND = 404;
+const CONFLICT = 409;
 const BACK_LINK = "inline-flex min-h-12 items-center px-3 underline";
 
 interface Loaded {
@@ -27,7 +28,7 @@ function foulsText(stats: MatchStats): string {
 
 export function MatchStatsView({ matchId }: { matchId: string }) {
   const { user } = useAuth();
-  const [loaded, setLoaded] = useState<Loaded | "not_found" | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | "not_found" | "incoherent" | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -42,6 +43,7 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
       .catch((failure: unknown) => {
         if (!active) return;
         if (failure instanceof ApiError && failure.status === NOT_FOUND) setLoaded("not_found");
+        else if (failure instanceof ApiError && failure.status === CONFLICT) setLoaded("incoherent");
         else setFailed(true);
       });
     return () => {
@@ -73,6 +75,28 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
         <Link href="/estadisticas" className={BACK_LINK}>
           Volver a las estadísticas
         </Link>
+      </div>
+    );
+  }
+
+  if (loaded === "incoherent") {
+    return (
+      <div className="space-y-4">
+        <p className="text-lg">Los eventos de este partido no son coherentes</p>
+        <p className="text-muted-foreground">
+          No se pueden calcular sus estadísticas hasta corregirlos, y mientras tanto no cuenta en el
+          acumulado.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {user?.role === "head_coach" ? (
+            <Link href={`/corregir?id=${matchId}`} className={BACK_LINK}>
+              Corregir partido
+            </Link>
+          ) : null}
+          <Link href="/estadisticas" className={BACK_LINK}>
+            Todas las estadísticas
+          </Link>
+        </div>
       </div>
     );
   }

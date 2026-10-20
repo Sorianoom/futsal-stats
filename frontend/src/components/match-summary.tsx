@@ -43,6 +43,7 @@ export function MatchSummary({
 }: MatchSummaryProps) {
   const [closed, setClosed] = useState(alreadyClosed);
   const [busy, setBusy] = useState(false);
+  const [confirmingRedo, setConfirmingRedo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const names = new Map(players.map((player) => [player.id, player.name]));
@@ -60,6 +61,7 @@ export function MatchSummary({
     try {
       await finalizeMatch(match.id, force);
       setClosed(true);
+      setConfirmingRedo(false);
     } catch (failure) {
       // Que ya estuviera cerrado es el resultado buscado: se pasa a ofrecer rehacer el cierre.
       if (failure instanceof ApiError && failure.status === CONFLICT && !force) setClosed(true);
@@ -114,20 +116,46 @@ export function MatchSummary({
           </Link>
         </div>
       ) : null}
-      {closed ? (
+      {closed && !confirmingRedo ? (
         <Button
           variant="outline"
           size="lg"
           disabled={busy || pending > 0 || blocked}
-          onClick={() => void close(true)}
+          onClick={() => setConfirmingRedo(true)}
         >
           Rehacer cierre
         </Button>
-      ) : (
+      ) : null}
+      {closed && confirmingRedo ? (
+        <div className="space-y-3 rounded-xl border border-destructive p-4">
+          <p>
+            Rehacer el cierre borra las correcciones de tramos hechas a mano y los vuelve a calcular
+            desde la alineación original.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="lg" onClick={() => setConfirmingRedo(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="lg"
+              disabled={busy || pending > 0 || blocked}
+              onClick={(event) => {
+                // Un doble toque accidental no debe confirmar.
+                if (event.detail > 1) return;
+                void close(true);
+              }}
+            >
+              Confirmar rehacer cierre
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {!closed ? (
         <Button size="lg" disabled={busy || pending > 0 || blocked} onClick={() => void close(false)}>
           Cerrar partido
         </Button>
-      )}
+      ) : null}
       {pending > 0 ? (
         <p className="text-base text-muted-foreground">
           {`Espera a que se envíen las anotaciones (${pending}) para cerrar el partido`}
