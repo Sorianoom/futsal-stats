@@ -43,6 +43,7 @@ describe("AppShell", () => {
 
     renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("assistant_coach") });
 
+    expect(screen.getByRole("link", { name: "Estadísticas" })).toHaveAttribute("href", "/estadisticas");
     expect(screen.queryByRole("link", { name: "Convocatoria" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Puntos" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Plantilla" })).toBeInTheDocument();
