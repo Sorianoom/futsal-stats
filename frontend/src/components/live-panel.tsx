@@ -54,6 +54,7 @@ interface LivePanelProps {
   onClock: () => void;
   onToggleDirection: () => void;
   onRivalGoal: () => void;
+  onEndPart: () => void;
   onUndo: () => void;
   onRate: () => void;
   onRetry: () => void;
@@ -119,6 +120,9 @@ export function LivePanel(props: LivePanelProps) {
         </Button>
         <Button size="lg" variant="outline" onClick={props.onRate}>
           Valorar quinteto
+        </Button>
+        <Button size="lg" variant="destructive" className="ml-auto" onClick={props.onEndPart}>
+          Fin de la parte
         </Button>
       </div>
       {props.undoNote ? <p className="text-sm text-muted-foreground">{props.undoNote}</p> : null}

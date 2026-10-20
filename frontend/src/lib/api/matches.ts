@@ -5,6 +5,7 @@ import type {
   LoggedEvent,
   Match,
   NewMatch,
+  StintRecord,
   SyncBatch,
   SyncResult,
 } from "./match-types";
@@ -23,6 +24,10 @@ export function listMatchEvents(matchId: string): Promise<LoggedEvent[]> {
 
 export function listLineupEvents(matchId: string): Promise<LineupEventRecord[]> {
   return apiData<LineupEventRecord[]>(`/matches/${encodeURIComponent(matchId)}/lineup-events`);
+}
+
+export function listStints(matchId: string): Promise<StintRecord[]> {
+  return apiData<StintRecord[]>(`/matches/${encodeURIComponent(matchId)}/stints`);
 }
 
 /** Envío idempotente: reenviar el mismo lote no duplica nada (los repetidos vuelven en `duplicates`). */

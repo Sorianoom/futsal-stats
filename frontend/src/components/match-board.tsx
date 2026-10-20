@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { LivePanel } from "@/components/live-panel";
+import { MatchSummary } from "@/components/match-summary";
+import { PartBreak } from "@/components/part-break";
 import { PlayerActionsDialog } from "@/components/player-actions-dialog";
 import { RatingDialog } from "@/components/rating-dialog";
 import { StartersPicker } from "@/components/starters-picker";
+import { SyncStatus } from "@/components/sync-status";
 import { SubstitutionDialog, type SubstitutionAnchor } from "@/components/substitution-dialog";
 import { TimeKeypad } from "@/components/time-keypad";
 import { Button } from "@/components/ui/button";
 import { UndoDialog } from "@/components/undo-dialog";
-import type { LineupEventRecord, LoggedEvent, Match } from "@/lib/api/match-types";
+import type { LineupEventRecord, LoggedEvent, Match, StintRecord } from "@/lib/api/match-types";
 import type { Player } from "@/lib/api/types";
 import { describeEvent } from "@/lib/labels";
 import {
@@ -42,6 +45,8 @@ export interface BoardData {
   match: Match;
   lineup: LineupEventRecord[];
   events: LoggedEvent[];
+  /** Tramos ya guardados: si hay, el partido está cerrado. */
+  stints: StintRecord[];
   players: Player[];
   proposed: string[];
 }
@@ -63,6 +68,7 @@ type Pending =
   | { type: "red"; playerId: string }
   | { type: "rival_goal" }
   | { type: "sub"; out: string; in: string }
+  | { type: "end" }
   | { type: "clock" };
 
 const TITLES: Record<Pending["type"], string> = {
@@ -70,6 +76,7 @@ const TITLES: Record<Pending["type"], string> = {
   red: "Roja",
   rival_goal: "Gol rival",
   sub: "Cambio",
+  end: "Fin de la parte",
   clock: "Tiempo del marcador",
 };
 
@@ -213,6 +220,8 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
         return true;
       case "sub":
         return tryLineup({ type: "substituted", t, player_out: action.out, player_in: action.in });
+      case "end":
+        return tryLineup({ type: "part_ended", t });
       case "clock":
         return true;
     }
@@ -254,6 +263,24 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
     );
   }
 
+  const alerts = (
+    <>
+      {problem ? (
+        <p role="alert" className="mb-4 rounded-lg border p-3 text-destructive">
+          {problem}
+        </p>
+      ) : null}
+      {eventsProblem ? (
+        <div role="alert" className="mb-4 flex items-center justify-between rounded-lg border p-3">
+          <p className="text-destructive">El registro de eventos no es coherente ({eventsProblem})</p>
+          <Button variant="outline" onClick={onReload}>
+            Recargar
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+
   const inSetup = state.currentPart === null && state.lastEndedPart === 0;
   if (inSetup) {
     return (
@@ -266,6 +293,51 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
         error={problem}
         onStart={(starters) => void tryLineup({ type: "part_started", part: 1, starters })}
       />
+    );
+  }
+
+  const finished = state.currentPart === null && state.lastEndedPart >= 2;
+  const inBreak = state.currentPart === null && state.lastEndedPart === 1;
+  if (inBreak || finished) {
+    const blockedPlayers = new Set(state.sentOff);
+    const lastPart = state.lastEndedPart;
+    const wasOnCourt = new Set(
+      state.closed.filter((stint) => stint.part === lastPart && stint.end === state.clock).map((s) => s.player_id),
+    );
+    return (
+      <div className="space-y-6">
+        {alerts}
+        <SyncStatus
+          status={log.status}
+          pending={log.pending}
+          detail={log.problem}
+          onRetry={() => void log.flush()}
+          onReload={onReload}
+        />
+        {inBreak ? (
+          <PartBreak
+            part={lastPart + 1}
+            score={safeSummary(log.events, null).score}
+            players={data.players.filter((p) => !blockedPlayers.has(p.id) && p.status === "available")}
+            capacity={5 - state.sentOff.length}
+            proposed={[...wasOnCourt]}
+            error={problem}
+            onStart={(starters) =>
+              void tryLineup({ type: "part_started", part: lastPart + 1, starters })
+            }
+          />
+        ) : (
+          <MatchSummary
+            matchId={matchId}
+            players={data.players}
+            stints={state.closed}
+            score={safeSummary(log.events, null).score}
+            alreadyClosed={data.stints.length > 0}
+            pending={log.pending}
+            blocked={log.status === "conflict"}
+          />
+        )}
+      </div>
     );
   }
 
@@ -283,19 +355,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
 
   return (
     <>
-      {problem ? (
-        <p role="alert" className="mb-4 rounded-lg border p-3 text-destructive">
-          {problem}
-        </p>
-      ) : null}
-      {eventsProblem ? (
-        <div role="alert" className="mb-4 flex items-center justify-between rounded-lg border p-3">
-          <p className="text-destructive">El registro de eventos no es coherente ({eventsProblem})</p>
-          <Button variant="outline" onClick={onReload}>
-            Recargar
-          </Button>
-        </div>
-      ) : null}
+      {alerts}
       <LivePanel
         title={title}
         score={live.score}
@@ -314,6 +374,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
         onClock={() => setPending({ type: "clock" })}
         onToggleDirection={toggleDirection}
         onRivalGoal={() => setPending({ type: "rival_goal" })}
+        onEndPart={() => setPending({ type: "end" })}
         onUndo={() => setUndoing(true)}
         onRate={() => setRating(true)}
         onRetry={() => void log.flush()}
@@ -347,7 +408,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
         open={pending !== null}
         title={pending ? TITLES[pending.type] : "Tiempo"}
         settings={settings}
-        initialElapsed={now}
+        initialElapsed={pending?.type === "end" ? settings.partSeconds : now}
         minElapsed={minElapsed}
         onConfirm={confirmTime}
         onCancel={() => setPending(null)}
