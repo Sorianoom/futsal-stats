@@ -277,3 +277,62 @@ async def test_unknown_match_and_missing_credentials(client: AsyncClient, login:
     assert unknown.status_code == 404
     assert anonymous.status_code == 401
     assert events.status_code == 404
+
+
+async def test_lineup_events_come_back_in_order_so_the_client_can_rebuild_the_court(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login(Role.ASSISTANT_COACH)
+    match_id = await new_match(client, headers)
+    players = [await make_player(n) for n in range(1, 7)]
+    starters = [str(p.id) for p in players[:5]]
+    started = {
+        "id": str(uuid.uuid4()),
+        "seq": 1,
+        "payload": {"type": "part_started", "part": 1, "starters": starters},
+    }
+    substitution = {
+        "id": str(uuid.uuid4()),
+        "seq": 2,
+        "payload": {
+            "type": "substituted",
+            "t": 300,
+            "player_out": starters[0],
+            "player_in": str(players[5].id),
+        },
+    }
+    await sync(client, headers, match_id, lineup_events=[substitution, started])
+
+    response = await client.get(f"/matches/{match_id}/lineup-events", headers=headers)
+
+    data = response.json()["data"]
+    assert response.status_code == 200
+    assert [e["id"] for e in data] == [started["id"], substitution["id"]]
+    assert [e["seq"] for e in data] == [1, 2]
+    assert data[0]["payload"] == {"type": "part_started", "part": 1, "starters": starters}
+    assert data[1]["payload"]["player_in"] == str(players[5].id)
+    assert response.json()["meta"]["total"] == 2
+
+
+async def test_lineup_events_of_a_match_without_them_are_an_empty_list(
+    client: AsyncClient, login: Login
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+
+    response = await client.get(f"/matches/{match_id}/lineup-events", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+async def test_lineup_events_need_credentials_and_an_existing_match(
+    client: AsyncClient, login: Login
+) -> None:
+    headers = await login()
+
+    unknown = await client.get(f"/matches/{uuid.uuid4()}/lineup-events", headers=headers)
+    anonymous = await client.get(f"/matches/{uuid.uuid4()}/lineup-events")
+
+    assert unknown.status_code == 404
+    assert anonymous.status_code == 401

@@ -17,6 +17,7 @@ from app.schemas.match_sync import (
     EventIn,
     EventOut,
     LineupEventIn,
+    LineupEventOut,
     LineupPayload,
     PartStartedPayload,
     RatingIn,
@@ -191,6 +192,19 @@ async def list_events(
     await _existing_match(db, match_id)
     rows = await match_repo.list_events(db, match_id)
     return ok([EventOut.model_validate(r) for r in rows], Meta(total=len(rows)))
+
+
+@router.get("/{match_id}/lineup-events", response_model=Envelope[list[LineupEventOut]])
+async def list_lineup_events(
+    match_id: uuid.UUID, db: SessionDep, _: CurrentUser
+) -> Envelope[list[LineupEventOut]]:
+    """Alineación en orden de `seq`, para reconstruir la pista tras recargar la pestaña."""
+    await _existing_match(db, match_id)
+    rows = await match_repo.list_lineup_events(db, match_id)
+    return ok(
+        [LineupEventOut(id=r.id, seq=r.seq, payload=r.payload) for r in rows],
+        Meta(total=len(rows)),
+    )
 
 
 @router.get("/{match_id}/sync-status", response_model=Envelope[SyncStatus])

@@ -1,7 +1,7 @@
 """Esquemas del partido en vivo: lote de sincronización, eventos, alineación y tramos."""
 
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -108,6 +108,12 @@ class EventOut(BaseModel):
     t: int
     player_id: uuid.UUID | None
     voids_event_id: uuid.UUID | None
+
+
+class LineupEventOut(BaseModel):
+    id: uuid.UUID
+    seq: int
+    payload: dict[str, Any]
 
 
 class StreamStatus(BaseModel):
