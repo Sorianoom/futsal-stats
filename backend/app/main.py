@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
         movements.router,
         matches.router,
         stats.router,
+        stats.season_router,
         callup.router,
         sync.router,
         stints.router,

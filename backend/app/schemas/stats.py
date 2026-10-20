@@ -48,3 +48,15 @@ class MatchStatsOut(BaseModel):
     players: list[PlayerStatsOut]
     quintets: list[QuintetStatsOut]
     warnings: list[str]
+
+
+class SeasonPlayerStatsOut(PlayerStatsOut):
+    matches_played: int
+
+
+class SeasonStatsOut(BaseModel):
+    """Acumulado de todos los partidos cerrados (los que tienen tramos guardados)."""
+
+    matches: int
+    players: list[SeasonPlayerStatsOut]
+    warnings: list[str]

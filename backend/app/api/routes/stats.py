@@ -11,7 +11,7 @@ from app.api.envelope import Envelope, ok
 from app.api.errors import ApiError
 from app.db import match_repo, points_repo
 from app.db.models import MatchEvent as MatchEventRow
-from app.db.models import Player
+from app.db.models import Player, StintRow
 from app.domain.stints.events import (
     EventError,
     EventKind,
@@ -34,10 +34,13 @@ from app.schemas.stats import (
     PlayerStatsOut,
     QuintetStatsOut,
     ScoreOut,
+    SeasonPlayerStatsOut,
+    SeasonStatsOut,
     TeamFoulsOut,
 )
 
 router = APIRouter(prefix="/matches", tags=["stats"])
+season_router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 def _domain_event(row: MatchEventRow) -> MatchEvent:
@@ -146,4 +149,60 @@ def _player_stats(player: Player, seconds: int, counts: dict[EventKind, int]) ->
         fouls=counts.get(EventKind.FOUL, 0),
         yellows=counts.get(EventKind.YELLOW, 0),
         reds=counts.get(EventKind.RED, 0),
+    )
+
+
+def _kind_totals(
+    counts: dict[str, dict[EventKind, int]], player_id: str, into: dict[EventKind, int]
+) -> dict[EventKind, int]:
+    return {
+        kind: into.get(kind, 0) + counts.get(player_id, {}).get(kind, 0)
+        for kind in set(into) | set(counts.get(player_id, {}))
+    }
+
+
+@season_router.get("/players", response_model=Envelope[SeasonStatsOut])
+async def season_players(db: SessionDep, _: CurrentUser) -> Envelope[SeasonStatsOut]:
+    stints_by_match: dict[uuid.UUID, list[Stint]] = {}
+    for row in (await db.execute(select(StintRow))).scalars().all():
+        stints_by_match.setdefault(row.match_id, []).append(match_repo.stint_to_domain(row))
+
+    events_by_match: dict[uuid.UUID, list[MatchEvent]] = {}
+    if stints_by_match:
+        query = select(MatchEventRow).where(MatchEventRow.match_id.in_(list(stints_by_match)))
+        for event_row in (await db.execute(query)).scalars().all():
+            events_by_match.setdefault(event_row.match_id, []).append(_domain_event(event_row))
+
+    seconds: dict[str, int] = {}
+    played: dict[str, int] = {}
+    totals: dict[str, dict[EventKind, int]] = {}
+    skipped = 0
+    for match_id, stints in stints_by_match.items():
+        try:
+            counts = counts_by_player(events_by_match.get(match_id, []))
+        except EventError:
+            skipped += 1
+            continue
+        for player_id, total in seconds_by_player(stints).items():
+            seconds[player_id] = seconds.get(player_id, 0) + total
+            played[player_id] = played.get(player_id, 0) + (1 if total > 0 else 0)
+        for player_id in counts:
+            totals[player_id] = _kind_totals(counts, player_id, totals.get(player_id, {}))
+
+    rows = await _player_rows(db, set(seconds) | set(totals)) if (seconds or totals) else {}
+    players = [
+        SeasonPlayerStatsOut(
+            **_player_stats(rows[pid], seconds.get(pid, 0), totals.get(pid, {})).model_dump(),
+            matches_played=played.get(pid, 0),
+        )
+        for pid in rows
+    ]
+    players.sort(key=lambda p: (-p.seconds, p.dorsal))
+    warnings = (
+        [f"{skipped} partido(s) con eventos incoherentes no cuentan en el acumulado"]
+        if skipped
+        else []
+    )
+    return ok(
+        SeasonStatsOut(matches=len(stints_by_match) - skipped, players=players, warnings=warnings)
     )

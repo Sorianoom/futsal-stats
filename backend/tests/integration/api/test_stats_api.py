@@ -38,10 +38,10 @@ async def sync(client, headers, match_id, **streams):  # type: ignore[no-untyped
     return response
 
 
-async def played_match(client, headers, make_player, extra_events=()):  # type: ignore[no-untyped-def]
+async def played_match(client, headers, make_player, extra_events=(), players=None, finalize=True):  # type: ignore[no-untyped-def]
     """p1 juega 0-300 de la parte 1 y p6 lo releva; p2..p6 juegan la parte 2 entera."""
     match_id = await new_match(client, headers)
-    p = [await make_player(n) for n in range(1, 7)]
+    p = players or [await make_player(n) for n in range(1, 7)]
     lineup = [
         {"id": str(uuid.uuid4()), "seq": seq, "payload": payload}
         for seq, payload in enumerate(full_match(p), start=1)
@@ -67,7 +67,8 @@ async def played_match(client, headers, make_player, extra_events=()):  # type: 
         {"id": str(uuid.uuid4()), "part": 2, "t": 100, "stars": 3},
     ]
     await sync(client, headers, match_id, lineup_events=lineup, events=events, ratings=ratings)
-    await client.post(f"/matches/{match_id}/finalize", headers=headers)
+    if finalize:
+        await client.post(f"/matches/{match_id}/finalize", headers=headers)
     return match_id, p
 
 
