@@ -4,7 +4,7 @@
 - Frontend (`frontend/`): Next.js 16 con `output: 'export'` (estático), React 19, TypeScript, Tailwind v4, shadcn/ui.
 - Paquetes: Yarn 4 con Corepack. NUNCA npm ni npx; usar `yarn` y `yarn dlx`.
 - Backend (`backend/`): FastAPI, Python 3.13, SQLAlchemy async, Alembic, Pydantic.
-- BD: PostgreSQL (Supabase como Postgres gestionado; sin Supabase Auth ni SDK de Supabase).
+- BD: PostgreSQL (Neon como Postgres gestionado; sin SDK propietario del proveedor).
 - PWA: service worker y manifiesto propios, solo en producción.
 
 ## Dominio

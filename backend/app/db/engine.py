@@ -1,4 +1,4 @@
-"""Motor async compatible con el pooler de transacción de Supabase (sin prepared statements)."""
+"""Motor async compatible con el pooler de transacción de Neon (sin prepared statements)."""
 
 from typing import Any
 from uuid import uuid4
@@ -16,7 +16,7 @@ def _unique_statement_name() -> str:
 
 
 def engine_options(url: str) -> tuple[URL, dict[str, Any]]:
-    """URL y kwargs sin caché de statements, aptos para PgBouncer/Supavisor en modo transacción."""
+    """URL y kwargs sin caché de statements, aptos para PgBouncer en modo transacción."""
     parsed = make_url(url).update_query_dict({"prepared_statement_cache_size": "0"})
     connect_args = {
         "statement_cache_size": 0,

@@ -47,7 +47,8 @@ Cada fase: TDD, cobertura ≥ 80 %, revisión con `code-reviewer`, commit conven
 8. **Partido en vivo** (con red): cronómetro, tramos, eventos, deshacer, quinteto, roja → falta (o).
 9. **Offline-first**: IndexedDB, cola de sync, service worker, Wake Lock.
 10. **Estadísticas y edición post-partido**.
-11. **Despliegue y endurecimiento** (Vercel + Railway/Render; prueba en iPad real).
+11. **Despliegue y endurecimiento** (Vercel para frontend y backend + Neon; prueba en iPad real).
+12. **Fantasy del equipo**: puntuación por jugador y partido a partir de las estadísticas, plantillas de los participantes, jornadas y clasificación. Requiere cuentas para jugadores, limitador de login en BD y separar los datos internos (puntos disciplinarios, sanciones, lesiones) de los públicos.
 
 ## Riesgos
 
@@ -55,7 +56,9 @@ Cada fase: TDD, cobertura ≥ 80 %, revisión con `code-reviewer`, commit conven
 - Reloj en segundo plano: calcular por diferencia de marcas de tiempo.
 - Divergencia TS/Python: fixtures compartidos.
 - Entorno local (Python 3.12, sin uv/pip/yarn en PATH).
+- Limitador de login en memoria por instancia: en Vercel Functions no bloquea de forma fiable. Aceptado hasta la fase 12; entonces pasa a la BD.
+- Arranque en frío de FastAPI en Vercel sin cifras para Python: medir en el despliegue de prueba.
 
-## Alojamiento de FastAPI
+## Alojamiento
 
-Recomendado: Railway o Render con instancia siempre activa (sin arranques en frío el día del partido). Vercel Functions: más simple pero con arranque en frío y límites. Verificar precios vigentes.
+Decisión cerrada: Vercel para frontend y backend (Vercel Functions, plan gratuito, uso no comercial) y Neon como Postgres (no se pausa por inactividad como Supabase; ramas para probar migraciones). Pooler de Neon (host `-pooler`) para la app; host directo para Alembic. Verificar precios y límites vigentes al crear las cuentas.

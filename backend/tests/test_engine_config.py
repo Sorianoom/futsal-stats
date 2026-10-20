@@ -1,7 +1,7 @@
 from app.config import LOCAL_DEV_DATABASE_URL, Settings
 from app.db.engine import engine_options
 
-POOLER_URL = "postgresql+asyncpg://u:p@aws-0-eu.pooler.supabase.com:6543/postgres"
+POOLER_URL = "postgresql+asyncpg://u:p@ep-demo-pooler.eu-central-1.aws.neon.tech/neondb?ssl=require"
 
 
 def test_engine_disables_every_prepared_statement_cache() -> None:
