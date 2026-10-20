@@ -34,10 +34,14 @@ export function weekStartOf(iso: string): string {
   return addDays(iso, -daysSinceMonday);
 }
 
-/** Lunes de la semana actual según el día en Madrid (no en UTC). */
+/** Día de hoy (`YYYY-MM-DD`) en Madrid, no en UTC. */
+export function todayInMadrid(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: CLUB_TIME_ZONE }).format(now);
+}
+
+/** Lunes de la semana actual según el día en Madrid. */
 export function currentWeekStart(now: Date = new Date()): string {
-  const madridDay = new Intl.DateTimeFormat("en-CA", { timeZone: CLUB_TIME_ZONE }).format(now);
-  return weekStartOf(madridDay);
+  return weekStartOf(todayInMadrid(now));
 }
 
 export function shiftWeek(weekStart: string, weeks: number): string {

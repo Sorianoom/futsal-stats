@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { currentWeekStart, formatWeekRange, shiftWeek, weekStartOf } from "./weeks";
+import { currentWeekStart, formatWeekRange, shiftWeek, todayInMadrid, weekStartOf } from "./weeks";
+
+describe("todayInMadrid", () => {
+  it("devuelve el día de Madrid, no el de UTC", () => {
+    expect(todayInMadrid(new Date("2026-10-25T23:30:00Z"))).toBe("2026-10-26");
+    expect(todayInMadrid(new Date("2026-10-25T22:30:00Z"))).toBe("2026-10-25");
+  });
+});
 
 describe("weekStartOf", () => {
   it.each([

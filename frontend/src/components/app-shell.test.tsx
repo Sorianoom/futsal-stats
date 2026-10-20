@@ -38,11 +38,13 @@ describe("AppShell", () => {
       "href",
       "/convocatoria",
     );
+    expect(screen.getByRole("link", { name: "Puntos" })).toHaveAttribute("href", "/puntos");
     unmount();
 
     renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("assistant_coach") });
 
     expect(screen.queryByRole("link", { name: "Convocatoria" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Puntos" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Plantilla" })).toBeInTheDocument();
   });
 
