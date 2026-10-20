@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { currentWeekStart, formatWeekRange, shiftWeek, todayInMadrid, weekStartOf } from "./weeks";
+import {
+  currentWeekStart,
+  formatShortDay,
+  formatWeekRange,
+  shiftWeek,
+  todayInMadrid,
+  weekStartOf,
+} from "./weeks";
+
+describe("formatShortDay", () => {
+  it("muestra día y mes abreviado en español", () => {
+    expect(formatShortDay("2026-10-20")).toBe("20 oct");
+    expect(formatShortDay("2026-01-05")).toBe("5 ene");
+  });
+});
 
 describe("todayInMadrid", () => {
   it("devuelve el día de Madrid, no el de UTC", () => {

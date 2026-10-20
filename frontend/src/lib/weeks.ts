@@ -48,9 +48,14 @@ export function shiftWeek(weekStart: string, weeks: number): string {
   return addDays(weekStart, weeks * DAYS_PER_WEEK);
 }
 
+/** "20 oct" */
+export function formatShortDay(iso: string): string {
+  return SHORT_DAY.format(parseDay(iso));
+}
+
 /** "19 oct – 25 oct 2026" */
 export function formatWeekRange(weekStart: string): string {
   const sunday = addDays(weekStart, DAYS_PER_WEEK - 1);
   const year = parseDay(sunday).getUTCFullYear();
-  return `${SHORT_DAY.format(parseDay(weekStart))} – ${SHORT_DAY.format(parseDay(sunday))} ${year}`;
+  return `${formatShortDay(weekStart)} – ${formatShortDay(sunday)} ${year}`;
 }

@@ -3,6 +3,7 @@ import type {
   PlayerStatus,
   Position,
   Role,
+  Sanction,
   SanctionKind,
   SessionKind,
   Severity,
@@ -54,3 +55,10 @@ export const SANCTION_LABEL: Record<SanctionKind, string> = {
   no_play: "No juega",
   no_callup: "Sin convocatoria",
 };
+
+/** "No juega (1–2 partidos)" */
+export function sanctionText(sanction: Sanction): string {
+  const { min_matches: min, max_matches: max } = sanction;
+  const matches = min === max ? `${min} ${min === 1 ? "partido" : "partidos"}` : `${min}–${max} partidos`;
+  return `${SANCTION_LABEL[sanction.kind]} (${matches})`;
+}

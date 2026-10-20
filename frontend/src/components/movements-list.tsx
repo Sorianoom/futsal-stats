@@ -4,14 +4,9 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { Movement } from "@/lib/api/types";
+import { formatShortDay } from "@/lib/weeks";
 
 const UNDO_ERROR = "No se pudo deshacer el movimiento. Inténtalo de nuevo.";
-
-const SHORT_DAY = new Intl.DateTimeFormat("es-ES", {
-  day: "numeric",
-  month: "short",
-  timeZone: "UTC",
-});
 
 function signed(points: number): string {
   return points > 0 ? `+${points}` : String(points);
@@ -62,7 +57,7 @@ export function MovementsList({ movements, nameOf, onUndo }: MovementsListProps)
             className="flex items-center gap-4 rounded-xl border bg-card p-4"
           >
             <span className="w-16 shrink-0 text-muted-foreground">
-              {SHORT_DAY.format(new Date(`${movement.occurred_on}T00:00:00Z`))}
+              {formatShortDay(movement.occurred_on)}
             </span>
             <span className="flex-1">
               <span className="block text-lg font-medium">{nameOf(movement.player_id)}</span>

@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/plantilla", label: "Plantilla" },
   { href: "/convocatoria", label: "Convocatoria", headCoachOnly: true },
   { href: "/puntos", label: "Puntos", headCoachOnly: true },
+  { href: "/entrenos", label: "Entrenos", headCoachOnly: true },
 ];
 
 const LOGOUT_ERROR = "No se pudo cerrar la sesión. Comprueba la conexión e inténtalo de nuevo.";

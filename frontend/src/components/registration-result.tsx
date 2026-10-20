@@ -1,13 +1,7 @@
 import { Button } from "@/components/ui/button";
-import type { Infraction, InfractionRegistered, Sanction } from "@/lib/api/types";
-import { SANCTION_LABEL } from "@/lib/labels";
+import type { Infraction, InfractionRegistered } from "@/lib/api/types";
+import { sanctionText } from "@/lib/labels";
 import { formatWeekRange } from "@/lib/weeks";
-
-function matchesText(sanction: Sanction): string {
-  const { min_matches: min, max_matches: max } = sanction;
-  if (min === max) return `${min} ${min === 1 ? "partido" : "partidos"}`;
-  return `${min}–${max} partidos`;
-}
 
 interface RegistrationResultProps {
   result: InfractionRegistered;
@@ -39,8 +33,7 @@ export function RegistrationResult({
       ) : null}
       {result.sanction ? (
         <p>
-          Sanción propuesta: {SANCTION_LABEL[result.sanction.kind]} ({matchesText(result.sanction)}).
-          El entrenador la confirma más adelante.
+          Sanción propuesta: {sanctionText(result.sanction)}. El entrenador la confirma más adelante.
         </p>
       ) : null}
       {result.escalations.map((escalation) => (

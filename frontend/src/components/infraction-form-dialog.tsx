@@ -2,20 +2,20 @@
 
 import { useState, type FormEvent } from "react";
 
+import { BusyDialog } from "@/components/busy-dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import { registerInfraction } from "@/lib/api/points";
 import type { Infraction, InfractionRegistered, NewInfraction, Player } from "@/lib/api/types";
+import { SELECT_CLASS } from "@/lib/form-styles";
 import { todayInMadrid } from "@/lib/weeks";
 
 const SAVE_ERROR = "No se pudo registrar la falta. Inténtalo de nuevo.";
 const UNCERTAIN_ERROR =
   "Sin conexión. Puede que la falta se haya registrado. Revisa la lista antes de volver a intentarlo.";
-const SELECT_CLASS =
-  "h-12 w-full rounded-lg border border-input bg-transparent px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive";
 
 interface FormErrors {
   player?: string;
@@ -203,26 +203,11 @@ interface InfractionFormDialogProps extends FormProps {
 }
 
 export function InfractionFormDialog({ open, onClose, ...form }: InfractionFormDialogProps) {
-  const [submitting, setSubmitting] = useState(false);
-
-  // Con la petición en vuelo no se puede cerrar: el usuario no sabría si se registró.
-  const handleOpenChange = (next: boolean) => {
-    if (!next && !submitting) onClose();
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Registrar falta</DialogTitle>
-        </DialogHeader>
-        <InfractionForm
-          {...form}
-          submitting={submitting}
-          onSubmittingChange={setSubmitting}
-          onClose={onClose}
-        />
-      </DialogContent>
-    </Dialog>
+    <BusyDialog open={open} title="Registrar falta" onClose={onClose}>
+      {({ busy, setBusy }) => (
+        <InfractionForm {...form} submitting={busy} onSubmittingChange={setBusy} onClose={onClose} />
+      )}
+    </BusyDialog>
   );
 }
