@@ -12,6 +12,7 @@ import { ROLE_LABEL } from "@/lib/labels";
 const NAV_ITEMS = [
   { href: "/", label: "Inicio" },
   { href: "/plantilla", label: "Plantilla" },
+  { href: "/partido", label: "Partido" },
   { href: "/convocatoria", label: "Convocatoria", headCoachOnly: true },
   { href: "/puntos", label: "Puntos", headCoachOnly: true },
   { href: "/entrenos", label: "Entrenos", headCoachOnly: true },

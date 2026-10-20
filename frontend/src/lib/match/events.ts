@@ -38,7 +38,7 @@ function voidTarget(
   voided: ReadonlySet<string>,
 ): string {
   const targetId = event.voids_event_id;
-  if (targetId === null) {
+  if (targetId == null) {
     throw new EventError(`El evento ${event.id} deshace algo pero no indica qué`);
   }
   const target = seen.get(targetId);
