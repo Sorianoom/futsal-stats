@@ -39,6 +39,7 @@ import {
   type LineupEvent,
   type LineupState,
 } from "@/lib/match/lineup";
+import type { Outbox } from "@/lib/match/outbox";
 import { useMatchLog } from "@/lib/match/use-match-log";
 
 export interface BoardData {
@@ -49,6 +50,10 @@ export interface BoardData {
   stints: StintRecord[];
   players: Player[];
   proposed: string[];
+  /** Lo anotado y sin confirmar que quedó guardado en este dispositivo. */
+  savedOutbox: Outbox;
+  /** No se pudo leer lo guardado en el dispositivo. */
+  storageFailed: boolean;
 }
 
 type Replayed = { state: LineupState } | { error: string };
@@ -104,6 +109,8 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: M
     matchId,
     initialLineup: data.lineup,
     initialEvents: data.events,
+    savedOutbox: data.savedOutbox,
+    storageFailed: data.storageFailed,
   });
   const [settings, setSettings] = useState<ClockSettings>(() => loadClockSettings());
   // Último tiempo anotado en la parte en juego: se reutiliza en lo que se anota con un toque.

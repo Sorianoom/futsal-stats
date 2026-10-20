@@ -9,6 +9,8 @@ import { ApiError } from "@/lib/api/client";
 import { listLineupEvents, listMatchEvents, listMatches, listStints } from "@/lib/api/matches";
 import { getCallup } from "@/lib/api/points";
 import { listPlayers } from "@/lib/api/players";
+import { EMPTY_OUTBOX } from "@/lib/match/outbox";
+import { loadOutbox } from "@/lib/match/outbox-store";
 import { weekStartOf } from "@/lib/weeks";
 
 const LEAVE_WARNING =
@@ -16,21 +18,39 @@ const LEAVE_WARNING =
 const NOT_FOUND = 404;
 const UNPROCESSABLE = 422;
 
+/** Lo anotado y sin confirmar en este dispositivo. Si no se puede leer, el partido abre igualmente. */
+async function loadSaved(matchId: string): Promise<Pick<BoardData, "savedOutbox" | "storageFailed">> {
+  try {
+    return { savedOutbox: await loadOutbox(matchId), storageFailed: false };
+  } catch {
+    return { savedOutbox: EMPTY_OUTBOX, storageFailed: true };
+  }
+}
+
 async function loadMatch(matchId: string): Promise<BoardData | "not_found"> {
   try {
-    const [matches, lineup, events, stints, players] = await Promise.all([
+    const [matches, lineup, events, stints, players, saved] = await Promise.all([
       listMatches(),
       listLineupEvents(matchId),
       listMatchEvents(matchId),
       // Solo sirve para saber si ya estaba cerrado: si falla, el servidor lo dirá al cerrar (409).
       listStints(matchId).catch(() => []),
       listPlayers(),
+      loadSaved(matchId),
     ]);
     const match = matches.find((m) => m.id === matchId);
     if (!match) return "not_found";
     // La propuesta de titulares es opcional: sin convocatoria se elige a mano.
     const callup = await getCallup(weekStartOf(match.held_on), matchId).catch(() => null);
-    return { match, lineup, events, stints, players, proposed: callup?.starters.guaranteed ?? [] };
+    return {
+      match,
+      lineup,
+      events,
+      stints,
+      players,
+      proposed: callup?.starters.guaranteed ?? [],
+      ...saved,
+    };
   } catch (failure) {
     const unknownMatch =
       failure instanceof ApiError && (failure.status === NOT_FOUND || failure.status === UNPROCESSABLE);
