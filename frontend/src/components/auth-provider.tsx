@@ -11,7 +11,7 @@ import {
 } from "react";
 
 import { login as loginRequest, logout as logoutRequest, restoreSession } from "@/lib/api/auth";
-import { ApiError, setUnauthorizedHandler } from "@/lib/api/client";
+import { isUnreachable, setUnauthorizedHandler } from "@/lib/api/client";
 import type { User } from "@/lib/api/types";
 
 /** `offline`: no se pudo verificar la sesión (sin red o servidor caído); no equivale a anónimo. */
@@ -33,13 +33,6 @@ export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (context === null) throw new Error("useAuth debe usarse dentro de AuthProvider");
   return context;
-}
-
-const SERVER_ERROR_FROM = 500;
-
-function isUnreachable(failure: unknown): boolean {
-  if (!(failure instanceof ApiError)) return false;
-  return failure.code === "network" || failure.code === "bad_response" || failure.status >= SERVER_ERROR_FROM;
 }
 
 interface SessionState {

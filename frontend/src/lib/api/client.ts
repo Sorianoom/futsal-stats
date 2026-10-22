@@ -32,6 +32,14 @@ export class ApiError extends Error {
   }
 }
 
+const SERVER_ERROR_FROM = 500;
+
+/** El servidor no se pudo alcanzar o falló por su lado: reintentar o usar lo local tiene sentido. */
+export function isUnreachable(failure: unknown): boolean {
+  if (!(failure instanceof ApiError)) return false;
+  return failure.code === "network" || failure.code === "bad_response" || failure.status >= SERVER_ERROR_FROM;
+}
+
 interface Envelope<T> {
   success: boolean;
   data: T | null;

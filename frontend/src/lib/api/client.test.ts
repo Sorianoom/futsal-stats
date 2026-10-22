@@ -7,6 +7,7 @@ import {
   ApiError,
   apiData,
   getAccessToken,
+  isUnreachable,
   refreshAccessToken,
   setAccessToken,
   setUnauthorizedHandler,
@@ -81,6 +82,26 @@ describe("apiData", () => {
     const failure = await apiData("/x").catch((e) => e);
 
     expect(failure).toMatchObject({ status: 502, code: "bad_response" });
+  });
+});
+
+describe("isUnreachable", () => {
+  it.each([
+    ["un corte de red", new ApiError(0, "network", "sin red")],
+    ["una respuesta que no es del servidor", new ApiError(200, "bad_response", "html")],
+    ["un 500", new ApiError(500, "server_error", "caído")],
+    ["un 503", new ApiError(503, "unavailable", "mantenimiento")],
+  ])("considera inalcanzable %s", (_label, failure) => {
+    expect(isUnreachable(failure)).toBe(true);
+  });
+
+  it.each([
+    ["un 404", new ApiError(404, "not_found", "no existe")],
+    ["un 422", new ApiError(422, "validation", "inválido")],
+    ["un 401", new ApiError(401, "unauthorized", "sin sesión")],
+    ["un error cualquiera", new Error("boom")],
+  ])("no considera inalcanzable %s", (_label, failure) => {
+    expect(isUnreachable(failure)).toBe(false);
   });
 });
 
