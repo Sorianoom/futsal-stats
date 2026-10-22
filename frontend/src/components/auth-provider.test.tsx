@@ -4,11 +4,16 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiData, getAccessToken, setAccessToken, setUnauthorizedHandler } from "@/lib/api/client";
+import type { User } from "@/lib/api/types";
+import { loadSnapshot, saveSnapshot } from "@/lib/match/match-cache";
+import { EMPTY_OUTBOX } from "@/lib/match/outbox";
+import { loadOutbox, saveOutbox } from "@/lib/match/outbox-store";
+import { loadSavedUser, saveUser } from "@/lib/saved-user";
 import { mockApi } from "@/test/mock-api";
 
 import { AuthProvider, useAuth } from "./auth-provider";
 
-const USER = { id: "u1", email: "coach@club.es", role: "head_coach" };
+const USER: User = { id: "u1", email: "coach@club.es", role: "head_coach" };
 
 function Probe() {
   const { user, status, login, logout, retry } = useAuth();
@@ -35,9 +40,24 @@ function renderProbe() {
   );
 }
 
+const COPY = {
+  match: { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" },
+  lineup: [],
+  events: [],
+  stints: [],
+  players: [],
+  proposed: [],
+};
+const PENDING = { ...EMPTY_OUTBOX, ratings: [{ id: "r1", part: 1, t: 10, stars: 4 }] };
+
+function cutNetwork() {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+}
+
 beforeEach(() => {
   setAccessToken(null);
   setUnauthorizedHandler(null);
+  window.localStorage.clear();
 });
 
 describe("AuthProvider", () => {
@@ -183,6 +203,133 @@ describe("AuthProvider", () => {
     await apiData("/players").catch(() => undefined);
 
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+  });
+
+  it("guarda el usuario al restaurar la sesión, sin ningún token", async () => {
+    mockApi({
+      "POST /auth/refresh": { data: { access_token: "tok-secreto" } },
+      "GET /auth/me": { data: USER },
+    });
+
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+
+    expect(loadSavedUser()).toEqual(USER);
+    expect(JSON.stringify({ ...window.localStorage })).not.toContain("tok-secreto");
+  });
+
+  it("guarda el usuario al iniciar sesión", async () => {
+    mockApi({
+      "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } },
+      "POST /auth/login": {
+        data: { access_token: "nuevo", token_type: "bearer", expires_in: 900, user: USER },
+      },
+    });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+
+    await userEvent.click(screen.getByRole("button", { name: "entrar" }));
+
+    await waitFor(() => expect(loadSavedUser()).toEqual(USER));
+  });
+
+  it("sin red y con un usuario guardado entra como autenticado, sin token", async () => {
+    saveUser(USER);
+    cutNetwork();
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    expect(screen.getByTestId("email")).toHaveTextContent("coach@club.es");
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("al volver la red sustituye la sesión sin conexión por la real", async () => {
+    saveUser(USER);
+    cutNetwork();
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    mockApi({
+      "POST /auth/refresh": { data: { access_token: "tok" } },
+      "GET /auth/me": { data: USER },
+    });
+
+    await act(async () => {});
+    window.dispatchEvent(new Event("online"));
+
+    await waitFor(() => expect(getAccessToken()).toBe("tok"));
+  });
+
+  it("si al volver la red el servidor rechaza la sesión, se cierra y se borra lo local", async () => {
+    saveUser(USER);
+    await saveSnapshot("m1", COPY);
+    cutNetwork();
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    mockApi({ "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } } });
+
+    await act(async () => {});
+    window.dispatchEvent(new Event("online"));
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+    expect(loadSavedUser()).toBeNull();
+    expect(await loadSnapshot("m1")).toBeNull();
+  });
+
+  it("si el servidor rechaza la sesión al arrancar, olvida el usuario y las copias", async () => {
+    saveUser(USER);
+    await saveSnapshot("m1", COPY);
+    mockApi({ "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } } });
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+    expect(loadSavedUser()).toBeNull();
+    expect(await loadSnapshot("m1")).toBeNull();
+  });
+
+  it("al cerrar sesión borra el usuario y las copias, pero nunca lo anotado sin enviar", async () => {
+    await saveSnapshot("m1", COPY);
+    await saveOutbox("m1", PENDING);
+    mockApi({
+      "POST /auth/refresh": { data: { access_token: "tok" } },
+      "GET /auth/me": { data: USER },
+      "POST /auth/logout": { data: null },
+    });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+
+    await userEvent.click(screen.getByRole("button", { name: "salir" }));
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+    expect(loadSavedUser()).toBeNull();
+    expect(await loadSnapshot("m1")).toBeNull();
+    expect(await loadOutbox("m1")).toEqual(PENDING);
+  });
+
+  it("si no se confirma el cierre, conserva el usuario y las copias", async () => {
+    await saveSnapshot("m1", COPY);
+    mockApi({
+      "POST /auth/refresh": { data: { access_token: "tok" } },
+      "GET /auth/me": { data: USER },
+      "POST /auth/logout": { status: 500, error: { code: "internal_error", message: "Error" } },
+    });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+
+    await userEvent.click(screen.getByRole("button", { name: "salir" }));
+
+    await screen.findByRole("alert");
+    expect(loadSavedUser()).toEqual(USER);
+    expect(await loadSnapshot("m1")).not.toBeNull();
+  });
+
+  it("sin red y sin usuario guardado sigue sin conexión, como antes", async () => {
+    cutNetwork();
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("offline"));
   });
 
   it("useAuth fuera del proveedor es un error de programación", () => {
