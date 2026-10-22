@@ -50,9 +50,9 @@ def create_app() -> FastAPI:
     )
     app.state.login_guard = LoginGuard()
     register_error_handlers(app)
-    app.include_router(auth.router)
-    app.include_router(players.router)
     for router in (
+        auth.router,
+        players.router,
         sessions.router,
         movements.router,
         matches.router,
@@ -62,9 +62,9 @@ def create_app() -> FastAPI:
         sync.router,
         stints.router,
     ):
-        app.include_router(router)
+        app.include_router(router, prefix=settings.api_prefix)
 
-    @app.get("/health")
+    @app.get(f"{settings.api_prefix}/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 

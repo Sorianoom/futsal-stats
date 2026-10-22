@@ -27,7 +27,6 @@ from app.db.users_repo import get_user, get_user_by_email
 from app.schemas.auth import LoginData, LoginRequest, TokenData, UserOut
 
 REFRESH_COOKIE = "refresh_token"
-REFRESH_COOKIE_PATH = "/auth"
 SECONDS_PER_DAY = 86400
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -51,7 +50,7 @@ def _set_refresh_cookie(response: Response, user: User, settings: Settings) -> N
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
-        path=REFRESH_COOKIE_PATH,
+        path=settings.refresh_cookie_path,
     )
 
 
@@ -132,7 +131,7 @@ async def refresh(
 async def logout(response: Response, settings: SettingsDep) -> Envelope[None]:
     response.delete_cookie(
         REFRESH_COOKIE,
-        path=REFRESH_COOKIE_PATH,
+        path=settings.refresh_cookie_path,
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",

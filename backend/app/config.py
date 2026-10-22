@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
     cookie_secure: bool = True
+    # Vercel entrega al backend la ruta original (/api/...): vacío en local, "/api" en producción.
+    api_prefix: str = ""
 
     # Separados por comas en el entorno: CORS_ORIGINS=https://app.club.es,http://localhost:3000
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
@@ -43,6 +45,17 @@ class Settings(BaseSettings):
         if "*" in origins:
             raise ValueError("CORS con credenciales no admite el comodín '*'")
         return origins
+
+    @field_validator("api_prefix")
+    @classmethod
+    def _check_api_prefix(cls, prefix: str) -> str:
+        if prefix and (not prefix.startswith("/") or prefix.endswith("/")):
+            raise ValueError("API_PREFIX debe estar vacío o empezar por '/' y no terminar en '/'")
+        return prefix
+
+    @property
+    def refresh_cookie_path(self) -> str:
+        return f"{self.api_prefix}/auth"
 
     @property
     def is_production(self) -> bool:
