@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.envelope import failure
+from app.api.security_headers import SECURITY_HEADERS
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,11 @@ def _json(
     status_code: int, code: str, message: str, headers: Mapping[str, str] | None = None
 ) -> JSONResponse:
     body = failure(code, message).model_dump()
-    return JSONResponse(body, status_code=status_code, headers=dict(headers or {}))
+    # Las cabeceras de seguridad van aquí también: Starlette sirve el 500 no controlado desde su
+    # capa más externa, que no pasa por SecurityHeadersMiddleware.
+    return JSONResponse(
+        body, status_code=status_code, headers={**(headers or {}), **SECURITY_HEADERS}
+    )
 
 
 async def _handle_api_error(_: Request, error: Exception) -> JSONResponse:

@@ -16,6 +16,7 @@ from app.api.routes import (
     stints,
     sync,
 )
+from app.api.security_headers import SecurityHeadersMiddleware
 from app.auth.passwords import warm_up
 from app.auth.rate_limit import LoginGuard
 from app.config import get_settings
@@ -41,6 +42,8 @@ def create_app() -> FastAPI:
         {"docs_url": None, "redoc_url": None, "openapi_url": None} if settings.is_production else {}
     )
     app = FastAPI(title="Futsal Stats", lifespan=lifespan, **docs)  # type: ignore[arg-type]
+    # Se añade antes que CORS: el último añadido es el más externo, y CORS debe envolver al resto.
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
