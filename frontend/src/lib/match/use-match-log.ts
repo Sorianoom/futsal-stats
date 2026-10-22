@@ -7,7 +7,17 @@ import { syncMatch } from "@/lib/api/matches";
 import { undoTarget, type EventKind } from "./events";
 import { newId } from "@/lib/ids";
 import type { LineupEvent } from "./lineup";
-import { EMPTY_OUTBOX, idsOf, restoreOutbox, size, toEventIn, without, type Outbox } from "./outbox";
+import {
+  confirmedOf,
+  EMPTY_OUTBOX,
+  idsOf,
+  restoreOutbox,
+  size,
+  toEventIn,
+  without,
+  type ConfirmedLog,
+  type Outbox,
+} from "./outbox";
 import { saveOutbox } from "./outbox-store";
 import { nextSeq } from "./sequence";
 
@@ -34,6 +44,11 @@ interface Options {
   savedOutbox?: Outbox;
   /** La lectura de lo guardado ya falló al cargar: se avisa de que no hay copia local. */
   storageFailed?: boolean;
+  /**
+   * Se llama tras cada envío aceptado con lo que el servidor ya tiene (sin lo pendiente). Los
+   * avisos se atienden de uno en uno y en orden; si falla, el registro sigue como si nada.
+   */
+  onConfirmed?: (log: ConfirmedLog) => Promise<void> | void;
 }
 
 export interface MatchLog {
@@ -79,6 +94,7 @@ export function useMatchLog({
   initialEvents,
   savedOutbox = EMPTY_OUTBOX,
   storageFailed: storageFailedOnLoad = false,
+  onConfirmed,
 }: Options): MatchLog {
   const [restored] = useState(() => restoreOutbox(savedOutbox, initialLineup, initialEvents));
   const [lineup, setLineup] = useState(restored.lineup);
@@ -111,6 +127,21 @@ export function useMatchLog({
     [matchId],
   );
 
+  // La copia local de lo confirmado también va en cola, aparte de la de la bandeja.
+  const confirmedWrites = useRef<Promise<void>>(Promise.resolve());
+  const onConfirmedRef = useRef(onConfirmed);
+  useEffect(() => {
+    onConfirmedRef.current = onConfirmed;
+  }, [onConfirmed]);
+
+  const notifyConfirmed = useCallback(() => {
+    const log = confirmedOf(lineupRef.current, eventsRef.current, outbox.current);
+    confirmedWrites.current = confirmedWrites.current
+      .then(() => onConfirmedRef.current?.(log))
+      // La copia es un respaldo para abrir sin red: si no se guarda, anotar y enviar siguen igual.
+      .catch(() => undefined);
+  }, []);
+
   const commit = useCallback(
     (next: Outbox) => {
       outbox.current = next;
@@ -140,6 +171,7 @@ export function useMatchLog({
           setProblem(conflictMessage(result.rejected.map((item) => item.reason)));
           return;
         }
+        notifyConfirmed();
       }
       setFailed(false);
     } catch (failure) {
@@ -153,7 +185,7 @@ export function useMatchLog({
     } finally {
       flushing.current = false;
     }
-  }, [matchId, commit]);
+  }, [matchId, commit, notifyConfirmed]);
 
   // Se espera un instante para que lo anotado a la vez viaje en un solo envío.
   const scheduleFlush = useCallback(() => {
