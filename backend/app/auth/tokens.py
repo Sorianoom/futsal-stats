@@ -12,6 +12,9 @@ from app.domain.roles import Role
 
 ALGORITHM = "HS256"
 REQUIRED_CLAIMS = ["sub", "role", "type", "iss", "aud", "iat", "exp"]
+# Los relojes de dos instancias (o un salto del reloj) pueden diferir unos segundos: sin tolerancia,
+# un token recién emitido se rechazaba como "emitido en el futuro".
+CLOCK_SKEW_SECONDS = 10
 
 
 class TokenError(Exception):
@@ -64,6 +67,7 @@ def decode_token(token: str, expected_type: TokenType, settings: Settings) -> To
             algorithms=[ALGORITHM],
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
+            leeway=CLOCK_SKEW_SECONDS,
             options={"require": REQUIRED_CLAIMS},
         )
         claims = TokenClaims(

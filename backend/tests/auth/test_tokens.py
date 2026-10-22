@@ -63,6 +63,33 @@ def test_expired_token_is_rejected() -> None:
         decode_token(token, TokenType.ACCESS, settings())
 
 
+def test_token_issued_a_few_seconds_ahead_is_accepted_to_tolerate_clock_skew() -> None:
+    # Otra instancia, o un salto del reloj, puede ir unos segundos por delante.
+    ahead = datetime.now(UTC) + timedelta(seconds=5)
+    token = create_token(USER_ID, Role.HEAD_COACH, TokenType.ACCESS, settings(), now=ahead)
+
+    claims = decode_token(token, TokenType.ACCESS, settings())
+
+    assert claims.user_id == USER_ID
+
+
+def test_token_issued_far_in_the_future_is_rejected() -> None:
+    far_ahead = datetime.now(UTC) + timedelta(minutes=5)
+    token = create_token(USER_ID, Role.HEAD_COACH, TokenType.ACCESS, settings(), now=far_ahead)
+
+    with pytest.raises(TokenError):
+        decode_token(token, TokenType.ACCESS, settings())
+
+
+def test_token_expired_beyond_the_tolerance_is_rejected() -> None:
+    config = settings(access_token_ttl_minutes=1)
+    issued = datetime.now(UTC) - timedelta(minutes=1, seconds=60)
+    token = create_token(USER_ID, Role.HEAD_COACH, TokenType.ACCESS, config, now=issued)
+
+    with pytest.raises(TokenError):
+        decode_token(token, TokenType.ACCESS, config)
+
+
 def test_access_token_lives_for_the_configured_minutes() -> None:
     config = settings(access_token_ttl_minutes=7)
     token = create_token(USER_ID, Role.HEAD_COACH, TokenType.ACCESS, config)
