@@ -39,7 +39,7 @@ import {
   type LineupEvent,
   type LineupState,
 } from "@/lib/match/lineup";
-import type { Outbox } from "@/lib/match/outbox";
+import type { ConfirmedLog, Outbox } from "@/lib/match/outbox";
 import { useMatchLog } from "@/lib/match/use-match-log";
 
 export interface BoardData {
@@ -54,6 +54,8 @@ export interface BoardData {
   savedOutbox: Outbox;
   /** No se pudo leer lo guardado en el dispositivo. */
   storageFailed: boolean;
+  /** Si viene de la copia local (sin red): cuándo se guardó, en ms desde 1970. */
+  staleSince?: number;
 }
 
 type Replayed = { state: LineupState } | { error: string };
@@ -100,17 +102,20 @@ interface MatchBoardProps {
   /** Recarga al volver a la pestaña: solo se aplica si no cambió nada entretanto. */
   onRefresh: () => void;
   onActivity: (activity: BoardActivity) => void;
+  /** Lo que el servidor tiene tras cada envío aceptado: base de la copia local. */
+  onConfirmed?: (log: ConfirmedLog) => Promise<void> | void;
 }
 
 const BLOCKED = "Recarga el partido antes de seguir";
 
-export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity }: MatchBoardProps) {
+export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onConfirmed }: MatchBoardProps) {
   const log = useMatchLog({
     matchId,
     initialLineup: data.lineup,
     initialEvents: data.events,
     savedOutbox: data.savedOutbox,
     storageFailed: data.storageFailed,
+    onConfirmed,
   });
   const [settings, setSettings] = useState<ClockSettings>(() => loadClockSettings());
   // Último tiempo anotado en la parte en juego: se reutiliza en lo que se anota con un toque.

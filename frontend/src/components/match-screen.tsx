@@ -5,11 +5,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MatchBoard, type BoardActivity, type BoardData } from "@/components/match-board";
 import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, isUnreachable } from "@/lib/api/client";
 import { listLineupEvents, listMatchEvents, listMatches, listStints } from "@/lib/api/matches";
 import { getCallup } from "@/lib/api/points";
 import { listPlayers } from "@/lib/api/players";
-import { EMPTY_OUTBOX } from "@/lib/match/outbox";
+import { describeAge, loadSnapshot, saveSnapshot, type MatchSnapshot } from "@/lib/match/match-cache";
+import { EMPTY_OUTBOX, type ConfirmedLog } from "@/lib/match/outbox";
 import { loadOutbox } from "@/lib/match/outbox-store";
 import { weekStartOf } from "@/lib/weeks";
 
@@ -55,8 +56,42 @@ async function loadMatch(matchId: string): Promise<BoardData | "not_found"> {
     const unknownMatch =
       failure instanceof ApiError && (failure.status === NOT_FOUND || failure.status === UNPROCESSABLE);
     if (unknownMatch) return "not_found";
+    if (isUnreachable(failure)) return fromSnapshot(matchId, failure);
     throw failure;
   }
+}
+
+/** Sin red: abre con la última copia del servidor. Sin copia, falla como siempre. */
+async function fromSnapshot(matchId: string, failure: unknown): Promise<BoardData> {
+  const copy = await loadSnapshot(matchId).catch(() => null);
+  if (copy === null) throw failure;
+  const { savedAt, ...data } = copy;
+  return { ...data, ...(await loadSaved(matchId)), staleSince: savedAt };
+}
+
+/** Lo que se guarda de un tablero: sus datos fijos y la vista que el servidor ya confirmó. */
+function snapshotOf(data: BoardData, confirmed: ConfirmedLog): Omit<MatchSnapshot, "savedAt"> {
+  return {
+    match: data.match,
+    lineup: [...confirmed.lineup],
+    events: [...confirmed.events],
+    stints: data.stints,
+    players: data.players,
+    proposed: data.proposed,
+  };
+}
+
+function StaleNotice({ savedAt, onRefresh }: { savedAt: number; onRefresh: () => void }) {
+  // Se fija al abrir: el texto no cambia solo mientras se mira.
+  const [openedAt] = useState(() => Date.now());
+  return (
+    <div role="status" className="flex items-center justify-between rounded-lg border p-4">
+      <p>Sin conexión: datos de hace {describeAge(openedAt - savedAt)}</p>
+      <Button variant="outline" onClick={onRefresh}>
+        Actualizar
+      </Button>
+    </div>
+  );
 }
 
 interface Loaded {
@@ -74,12 +109,39 @@ export function MatchScreen({ matchId }: { matchId: string }) {
   // Desde qué estado del tablero se pidió la carga, y si hay que aplicarla pase lo que pase.
   const requested = useRef({ revision: 0, force: false });
   const hasLoaded = useRef(false);
+  // Datos fijos del tablero en pantalla y cola de guardados de la copia local (gana el último).
+  const base = useRef<BoardData | null>(null);
+  const snapshotWrites = useRef<Promise<void>>(Promise.resolve());
+
+  const storeSnapshot = useCallback(
+    (data: BoardData, confirmed: ConfirmedLog) => {
+      // Una copia que ya era vieja conserva su fecha: no se hace pasar por reciente.
+      const savedAt = data.staleSince;
+      snapshotWrites.current = snapshotWrites.current
+        .then(() => saveSnapshot(matchId, snapshotOf(data, confirmed), savedAt))
+        // Es un respaldo para abrir sin red: si no se guarda, el partido sigue igual.
+        .catch(() => undefined);
+    },
+    [matchId],
+  );
+
+  const onConfirmed = useCallback(
+    (confirmed: ConfirmedLog) => {
+      if (base.current !== null) storeSnapshot(base.current, confirmed);
+    },
+    [storeSnapshot],
+  );
 
   useEffect(() => {
     let active = true;
     loadMatch(matchId)
       .then((data) => {
         if (!active) return;
+        // Sin red no se sustituye un tablero ya abierto por la copia: se avisa y se deja como está.
+        if (data !== "not_found" && data.staleSince !== undefined && hasLoaded.current) {
+          setLoadFailed(true);
+          return;
+        }
         const { revision, force } = requested.current;
         const changedMeanwhile =
           hasLoaded.current &&
@@ -89,6 +151,13 @@ export function MatchScreen({ matchId }: { matchId: string }) {
         // Datos que llegan tarde no pueden pisar lo que se anotó mientras tanto.
         if (changedMeanwhile) return;
         hasLoaded.current = true;
+        if (data === "not_found") {
+          base.current = null;
+        } else {
+          base.current = data;
+          // Lo cargado es lo que el servidor tiene: es la copia desde la que abrir sin red.
+          if (data.staleSince === undefined) storeSnapshot(data, data);
+        }
         requested.current = { revision: activity.current.revision, force: false };
         setLoaded((previous) => ({ data, version: (previous?.version ?? 0) + 1 }));
       })
@@ -98,7 +167,7 @@ export function MatchScreen({ matchId }: { matchId: string }) {
     return () => {
       active = false;
     };
-  }, [matchId, reloadKey]);
+  }, [matchId, reloadKey, storeSnapshot]);
 
   const request = useCallback((force: boolean) => {
     requested.current = { revision: activity.current.revision, force };
@@ -155,6 +224,9 @@ export function MatchScreen({ matchId }: { matchId: string }) {
           </Button>
         </div>
       ) : null}
+      {loaded.data.staleSince !== undefined ? (
+        <StaleNotice key={`stale-${loaded.version}`} savedAt={loaded.data.staleSince} onRefresh={refresh} />
+      ) : null}
       <MatchBoard
         key={loaded.version}
         matchId={matchId}
@@ -162,6 +234,7 @@ export function MatchScreen({ matchId }: { matchId: string }) {
         onReload={reload}
         onRefresh={refresh}
         onActivity={trackActivity}
+        onConfirmed={onConfirmed}
       />
     </div>
   );

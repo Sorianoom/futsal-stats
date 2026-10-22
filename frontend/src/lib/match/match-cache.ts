@@ -15,6 +15,19 @@ export interface MatchSnapshot {
   savedAt: number;
 }
 
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/** Cuánto hace de la copia, para el aviso de "datos de hace…". */
+export function describeAge(elapsedMs: number): string {
+  if (elapsedMs < MINUTE_MS) return "menos de 1 min";
+  if (elapsedMs < HOUR_MS) return `${Math.floor(elapsedMs / MINUTE_MS)} min`;
+  if (elapsedMs < DAY_MS) return `${Math.floor(elapsedMs / HOUR_MS)} h`;
+  const days = Math.floor(elapsedMs / DAY_MS);
+  return days === 1 ? "1 día" : `${days} días`;
+}
+
 export async function loadSnapshot(matchId: string): Promise<MatchSnapshot | null> {
   const stored = await withDb((db) => db.get(STORE, matchId));
   return stored ?? null;

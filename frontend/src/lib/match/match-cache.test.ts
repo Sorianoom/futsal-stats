@@ -5,7 +5,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { EventIn, LineupEventRecord, LoggedEvent, Match, StintRecord } from "@/lib/api/match-types";
 import type { Player } from "@/lib/api/types";
 
-import { clearSnapshots, loadSnapshot, saveSnapshot, type MatchSnapshot } from "./match-cache";
+import {
+  clearSnapshots,
+  describeAge,
+  loadSnapshot,
+  saveSnapshot,
+  type MatchSnapshot,
+} from "./match-cache";
 import { EMPTY_OUTBOX, type Outbox } from "./outbox";
 import { loadOutbox, saveOutbox } from "./outbox-store";
 
@@ -47,6 +53,26 @@ const PENDING: Outbox = { ...EMPTY_OUTBOX, events: [UNSENT_GOAL] };
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
+});
+
+describe("describeAge", () => {
+  const MINUTE = 60_000;
+  const HOUR = 60 * MINUTE;
+
+  it.each([
+    [0, "menos de 1 min"],
+    [59_000, "menos de 1 min"],
+    [-5 * MINUTE, "menos de 1 min"],
+    [MINUTE, "1 min"],
+    [5 * MINUTE + 30_000, "5 min"],
+    [59 * MINUTE, "59 min"],
+    [HOUR, "1 h"],
+    [23 * HOUR + 59 * MINUTE, "23 h"],
+    [24 * HOUR, "1 día"],
+    [3 * 24 * HOUR, "3 días"],
+  ])("%i ms se dice «%s»", (elapsed, expected) => {
+    expect(describeAge(elapsed)).toBe(expected);
+  });
 });
 
 describe("match-cache", () => {
