@@ -159,6 +159,44 @@ describe("useWakeLock", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it("si la pestaña se oculta y vuelve con la petición en vuelo y esta falla, la reintenta", async () => {
+    let fail!: (reason: unknown) => void;
+    request.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    renderHook(() => useWakeLock(true));
+    await flush();
+
+    setVisibility("hidden");
+    setVisibility("visible");
+    await act(async () => fail(new DOMException("pestaña oculta", "NotAllowedError")));
+    await flush();
+
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("si la petición en vuelo acaba bien, el aviso de visibilidad que llegó no pide otro bloqueo", async () => {
+    let deliver!: (sentinel: FakeSentinel) => void;
+    request.mockImplementationOnce(
+      () =>
+        new Promise<FakeSentinel>((resolve) => {
+          deliver = resolve;
+        }),
+    );
+    renderHook(() => useWakeLock(true));
+    await flush();
+
+    setVisibility("hidden");
+    setVisibility("visible");
+    await act(async () => deliver(new FakeSentinel()));
+    await flush();
+
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it("no hace nada, y no falla, si el navegador no soporta wakeLock", async () => {
     Reflect.deleteProperty(navigator, "wakeLock");
 

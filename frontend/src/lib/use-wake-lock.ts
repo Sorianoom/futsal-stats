@@ -11,10 +11,17 @@ export function useWakeLock(active: boolean): void {
 
     let sentinel: WakeLockSentinel | null = null;
     let requesting = false;
+    // Se pidió volver a intentarlo mientras otra petición seguía en vuelo: esa puede fallar por haberse
+    // hecho con la pestaña oculta, y entonces nadie más lo reintentaría.
+    let retryWanted = false;
     let cancelled = false;
 
     async function acquire() {
-      if (cancelled || requesting || sentinel !== null || document.visibilityState !== "visible") return;
+      if (cancelled || sentinel !== null || document.visibilityState !== "visible") return;
+      if (requesting) {
+        retryWanted = true;
+        return;
+      }
       requesting = true;
       try {
         const lock = await navigator.wakeLock.request("screen");
@@ -30,6 +37,10 @@ export function useWakeLock(active: boolean): void {
         // Denegado: se reintenta la próxima vez que se vea la pestaña.
       } finally {
         requesting = false;
+        if (retryWanted) {
+          retryWanted = false;
+          void acquire();
+        }
       }
     }
 

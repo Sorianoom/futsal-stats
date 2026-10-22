@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildServiceWorker } from "./precache";
 
 const ORIGIN = "https://app.test";
-const PRECACHE = ["/", "/partido/", "/_next/static/chunks/app.js"];
+const PRECACHE = ["/", "/partido/", "/_next/static/chunks/app.js", "/manifest.webmanifest"];
+/** Un servidor que no responde nunca: para probar el tiempo límite. */
+const HANG = Symbol("hang");
 
 type Listener = (event: unknown) => void;
 
@@ -77,13 +79,16 @@ function request(path: string, init: Partial<FakeRequest> = {}): FakeRequest {
 
 const page = (path: string) => request(path, { mode: "navigate" });
 
-function setup(online: Record<string, Response | number> = {}) {
+type Route = Response | number | typeof HANG;
+
+function setup(online: Record<string, Route> = {}) {
   let isOnline = true;
-  const routes = new Map(Object.entries(online));
+  const routes = new Map<string, Route>(Object.entries(online));
   const fetchFn = vi.fn(async (input: string | { url: string }) => {
     const { pathname } = new URL(hrefOf(input));
     const route = routes.get(pathname);
     if (!isOnline || route === undefined) throw new TypeError("Failed to fetch");
+    if (route === HANG) return new Promise<Response>(() => undefined);
     return typeof route === "number" ? new Response("x", { status: route }) : route.clone();
   });
   const caches = new FakeCaches(fetchFn);
@@ -125,19 +130,29 @@ function setup(online: Record<string, Response | number> = {}) {
     goOffline: () => {
       isOnline = false;
     },
+    /** Cambia lo que contesta el servidor a partir de ahora (p. ej. tras instalar). */
+    setRoute: (path: string, route: Route) => {
+      routes.set(path, route);
+    },
   };
 }
 
 const html = (body: string) => new Response(body, { status: 200 });
 const textOf = async (response: Promise<Response> | null) => (await response)?.text();
+const storedPaths = (caches: FakeCaches) =>
+  [...(caches.all.get("futsal-stats-v1")?.store.keys() ?? [])].map((href) => href.replace(ORIGIN, "")).sort();
+
+/** Todo lo que el worker precarga al instalarse. */
+const SITE = {
+  "/": html("home"),
+  "/partido/": html("partido"),
+  "/_next/static/chunks/app.js": html("js"),
+  "/manifest.webmanifest": html("m"),
+};
 
 describe("service worker: instalación y activación", () => {
   it("al instalarse precarga todas las URLs en una caché con la versión", async () => {
-    const { caches, run } = setup({
-      "/": html("home"),
-      "/partido/": html("partido"),
-      "/_next/static/chunks/app.js": html("js"),
-    });
+    const { caches, run } = setup(SITE);
 
     await run("install");
 
@@ -183,11 +198,7 @@ describe("service worker: ficheros con hash (_next/static)", () => {
   const ASSET = "/_next/static/chunks/app.js";
 
   it("sirve de la caché sin pedirlo a la red", async () => {
-    const { run, fetchEvent, fetchFn } = setup({
-      "/": html("home"),
-      "/partido/": html("partido"),
-      [ASSET]: html("js"),
-    });
+    const { run, fetchEvent, fetchFn } = setup(SITE);
     await run("install");
     fetchFn.mockClear();
 
@@ -197,36 +208,46 @@ describe("service worker: ficheros con hash (_next/static)", () => {
 
   it("si no está, lo pide a la red y lo guarda para la próxima", async () => {
     const other = "/_next/static/chunks/lazy.js";
-    const { caches, run, fetchEvent, goOffline } = setup({ [other]: html("lazy") });
-    await run("install").catch(() => undefined);
-    await caches.open("futsal-stats-v1");
+    const { run, fetchEvent, goOffline } = setup({ ...SITE, [other]: html("lazy") });
+    await run("install");
 
     expect(await textOf(fetchEvent(request(other)))).toBe("lazy");
     goOffline();
     expect(await textOf(fetchEvent(request(other)))).toBe("lazy");
   });
+
+  it("lo guarda sin la consulta, para que cada valor distinto no cree una entrada nueva", async () => {
+    const other = "/_next/static/chunks/lazy.js";
+    const { caches, run, fetchEvent } = setup({ ...SITE, [other]: html("lazy") });
+    await run("install");
+
+    await fetchEvent(request(`${other}?_rsc=abc`));
+
+    expect(storedPaths(caches)).toContain(other);
+    expect(storedPaths(caches)).not.toContain(`${other}?_rsc=abc`);
+  });
 });
 
 describe("service worker: páginas y demás ficheros", () => {
-  const ROUTES = {
-    "/": html("home"),
-    "/partido/": html("partido"),
-    "/_next/static/chunks/app.js": html("js"),
-  };
+  const TIMEOUT_MS = 3500;
 
-  it("con red devuelve la página nueva y la guarda sin la consulta", async () => {
-    const { caches, run, fetchEvent } = setup({ ...ROUTES, "/plantilla/": html("plantilla") });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("con red devuelve la página del servidor y no guarda nada nuevo: sirve de respaldo lo precargado", async () => {
+    const { caches, run, fetchEvent } = setup({ ...SITE, "/plantilla/": html("plantilla") });
     await run("install");
+    const before = storedPaths(caches);
 
     expect(await textOf(fetchEvent(page("/plantilla/?x=1")))).toBe("plantilla");
+    expect(await textOf(fetchEvent(request("/manifest.webmanifest?v=1")))).toBe("m");
 
-    const stored = [...(caches.all.get("futsal-stats-v1")?.store.keys() ?? [])];
-    expect(stored).toContain(`${ORIGIN}/plantilla/`);
-    expect(stored).not.toContain(`${ORIGIN}/plantilla/?x=1`);
+    expect(storedPaths(caches)).toEqual(before);
   });
 
   it("sin red sirve la página precargada aunque la dirección lleve consulta", async () => {
-    const { run, fetchEvent, goOffline } = setup(ROUTES);
+    const { run, fetchEvent, goOffline } = setup(SITE);
     await run("install");
     goOffline();
 
@@ -234,7 +255,7 @@ describe("service worker: páginas y demás ficheros", () => {
   });
 
   it("sin red y sin la barra final encuentra igualmente la página", async () => {
-    const { run, fetchEvent, goOffline } = setup(ROUTES);
+    const { run, fetchEvent, goOffline } = setup(SITE);
     await run("install");
     goOffline();
 
@@ -242,37 +263,90 @@ describe("service worker: páginas y demás ficheros", () => {
   });
 
   it("sin red y con una ruta desconocida cae en la portada", async () => {
-    const { run, fetchEvent, goOffline } = setup(ROUTES);
+    const { run, fetchEvent, goOffline } = setup(SITE);
     await run("install");
     goOffline();
 
     expect(await textOf(fetchEvent(page("/no-existe/")))).toBe("home");
   });
 
-  it("una respuesta de error del servidor se devuelve tal cual y no se guarda", async () => {
-    const { caches, run, fetchEvent } = setup({ ...ROUTES, "/roto/": 500 });
+  it("un error 4xx del servidor se devuelve tal cual", async () => {
+    const { run, fetchEvent } = setup({ ...SITE, "/roto/": 404 });
     await run("install");
 
-    const response = await fetchEvent(page("/roto/"));
-
-    expect(response?.status).toBe(500);
-    expect([...(caches.all.get("futsal-stats-v1")?.store.keys() ?? [])]).not.toContain(`${ORIGIN}/roto/`);
+    expect((await fetchEvent(page("/roto/")))?.status).toBe(404);
   });
 
-  it("otros ficheros del mismo origen usan la red y, sin ella, la caché ignorando la consulta", async () => {
-    const { run, fetchEvent, goOffline } = setup({ ...ROUTES, "/manifest.webmanifest": html("m") });
+  it.each([500, 502, 503, 504])("con un %i del servidor sirve la copia precargada en vez del error", async (status) => {
+    const { run, fetchEvent, setRoute } = setup(SITE);
     await run("install");
-    await fetchEvent(request("/manifest.webmanifest?v=1"));
+    setRoute("/partido/", status);
+
+    expect(await textOf(fetchEvent(page("/partido/?id=m1")))).toBe("partido");
+  });
+
+  it("un 5xx de algo que no se tiene precargado se devuelve tal cual si tampoco hay portada", async () => {
+    const { run, fetchEvent, setRoute } = setup({ ...SITE });
+    await run("install");
+    setRoute("/desconocido.json", 503);
+
+    expect((await fetchEvent(request("/desconocido.json")))?.status).toBe(503);
+  });
+
+  it("otros ficheros del mismo origen: sin red usa la copia precargada ignorando la consulta", async () => {
+    const { run, fetchEvent, goOffline } = setup(SITE);
+    await run("install");
     goOffline();
 
     expect(await textOf(fetchEvent(request("/manifest.webmanifest?v=2")))).toBe("m");
   });
 
   it("sin red y sin nada guardado, un fichero que no es página falla como falla la red", async () => {
-    const { run, fetchEvent, goOffline } = setup(ROUTES);
+    const { run, fetchEvent, goOffline } = setup(SITE);
     await run("install");
     goOffline();
 
     await expect(fetchEvent(request("/desconocido.json"))).rejects.toThrow();
+  });
+
+  it("si la red no contesta a tiempo (wifi sin internet), sirve la copia sin esperar", async () => {
+    const { run, fetchEvent, setRoute } = setup(SITE);
+    await run("install");
+    setRoute("/partido/", HANG);
+    vi.useFakeTimers();
+
+    const response = fetchEvent(page("/partido/?id=m1"));
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS + 100);
+
+    expect(await textOf(response)).toBe("partido");
+  });
+
+  it("no corta antes de tiempo: una red lenta pero que contesta gana a la copia", async () => {
+    const { run, fetchEvent, setRoute } = setup(SITE);
+    await run("install");
+    setRoute("/partido/", html("partido nuevo"));
+    vi.useFakeTimers();
+
+    const response = fetchEvent(page("/partido/"));
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(await textOf(response)).toBe("partido nuevo");
+  });
+
+  it("si la red no contesta y tampoco hay copia, sigue esperando a la red", async () => {
+    const { run, fetchEvent, setRoute } = setup(SITE);
+    await run("install");
+    setRoute("/desconocido.json", HANG);
+    vi.useFakeTimers();
+
+    let settled = false;
+    const response = fetchEvent(request("/desconocido.json"));
+    response?.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS * 3);
+
+    expect(settled).toBe(false);
   });
 });
