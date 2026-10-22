@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EventIn, LineupEventRecord, LoggedEvent, RatingIn } from "@/lib/api/match-types";
 
-import { EMPTY_OUTBOX, restoreOutbox, size, without, type Outbox } from "./outbox";
+import { confirmedOf, EMPTY_OUTBOX, restoreOutbox, size, without, type Outbox } from "./outbox";
 
 const STARTED: LineupEventRecord = {
   id: "l1",
@@ -44,6 +44,43 @@ describe("size y without", () => {
 
     expect(result).toEqual(outbox({ lineup: [STARTED] }));
     expect(original.events).toHaveLength(1);
+  });
+});
+
+describe("confirmedOf", () => {
+  const FOUL_LOGGED: LoggedEvent = { ...GOAL_LOGGED, id: "e2", seq: 2, kind: "foul", t: 130 };
+
+  it("con la bandeja vacía devuelve todo tal cual", () => {
+    const confirmed = confirmedOf([STARTED, SUBSTITUTION], [GOAL_LOGGED], EMPTY_OUTBOX);
+
+    expect(confirmed.lineup).toEqual([STARTED, SUBSTITUTION]);
+    expect(confirmed.events).toEqual([GOAL_LOGGED]);
+  });
+
+  it("quita lo que sigue pendiente de enviar", () => {
+    const pending = outbox({ lineup: [SUBSTITUTION], events: [FOUL_IN] });
+
+    const confirmed = confirmedOf([STARTED, SUBSTITUTION], [GOAL_LOGGED, FOUL_LOGGED], pending);
+
+    expect(confirmed.lineup.map((item) => item.id)).toEqual(["l1"]);
+    expect(confirmed.events.map((item) => item.id)).toEqual(["e1"]);
+  });
+
+  it("las valoraciones pendientes no afectan a la vista confirmada", () => {
+    const confirmed = confirmedOf([STARTED], [GOAL_LOGGED], outbox({ ratings: [RATING] }));
+
+    expect(confirmed.lineup).toEqual([STARTED]);
+    expect(confirmed.events).toEqual([GOAL_LOGGED]);
+  });
+
+  it("no modifica las entradas", () => {
+    const lineup = [STARTED, SUBSTITUTION];
+    const events = [GOAL_LOGGED, FOUL_LOGGED];
+
+    confirmedOf(lineup, events, outbox({ lineup: [SUBSTITUTION], events: [FOUL_IN] }));
+
+    expect(lineup).toHaveLength(2);
+    expect(events).toHaveLength(2);
   });
 });
 

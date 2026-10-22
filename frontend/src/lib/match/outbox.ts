@@ -25,6 +25,24 @@ export function without(outbox: Outbox, ids: ReadonlySet<string>): Outbox {
   };
 }
 
+export interface ConfirmedLog {
+  lineup: readonly LineupEventRecord[];
+  events: readonly LoggedEvent[];
+}
+
+/** Lo que el servidor ya tiene: la vista completa menos lo que sigue pendiente en la bandeja. */
+export function confirmedOf(
+  lineup: readonly LineupEventRecord[],
+  events: readonly LoggedEvent[],
+  pending: Outbox,
+): ConfirmedLog {
+  const pendingIds = idsOf(pending);
+  return {
+    lineup: lineup.filter((item) => !pendingIds.has(item.id)),
+    events: events.filter((item) => !pendingIds.has(item.id)),
+  };
+}
+
 export function toEventIn(event: LoggedEvent): EventIn {
   return {
     id: event.id,
