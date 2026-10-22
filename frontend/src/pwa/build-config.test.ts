@@ -17,6 +17,20 @@ function minimumOf(range: string): number[] | null {
   return match ? [Number(match[1]), Number(match[2] ?? 0)] : null;
 }
 
+interface VercelJson {
+  services: Record<string, { root: string; buildCommand?: string }>;
+}
+
+const vercel: VercelJson = JSON.parse(readFileSync(join(__dirname, "..", "..", "..", "vercel.json"), "utf8"));
+
+describe("despliegue en Vercel", () => {
+  it("el servicio del frontend construye con `yarn build`: así se ejecuta el script que genera sw.js", () => {
+    const frontend = Object.values(vercel.services).find((service) => service.root.startsWith("frontend"));
+
+    expect(frontend?.buildCommand).toBe("yarn build");
+  });
+});
+
 describe("build del service worker", () => {
   it("genera sw.js justo después de next build", () => {
     expect(pkg.scripts.build).toMatch(/^next build && node .*scripts\/generate-sw\.mts$/);

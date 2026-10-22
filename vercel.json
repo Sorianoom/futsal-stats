@@ -2,7 +2,8 @@
   "services": {
     "frontend": {
       "root": "frontend/",
-      "framework": "nextjs"
+      "framework": "nextjs",
+      "buildCommand": "yarn build"
     },
     "backend": {
       "root": "backend/",
