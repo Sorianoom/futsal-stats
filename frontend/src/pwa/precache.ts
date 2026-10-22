@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 
-/** Ficheros de `out/` que no sirven de nada en la caché del navegador. */
-const EXCLUDED = [/^sw\.js$/, /\.map$/, /(^|\/)\.DS_Store$/];
+/**
+ * Ficheros de `out/` que no sirven de nada en la caché del navegador. Las páginas 404 se excluyen
+ * porque Vercel las sirve con status 404 y `cache.addAll` rechaza el lote entero si una respuesta
+ * no es 2xx: el worker no llegaba a instalarse.
+ */
+const EXCLUDED = [/^sw\.js$/, /\.map$/, /(^|\/)\.DS_Store$/, /^404\.html$/, /^404\/index\.html$/];
 
 const VERSION_LENGTH = 12;
 const VERSION_PLACEHOLDER = "__VERSION__";

@@ -33,6 +33,14 @@ describe("precacheUrlsFor", () => {
     expect(urls).toEqual(["/"]);
   });
 
+  it("no precarga las páginas 404: Vercel las sirve con status 404 y addAll rechaza todo el lote si una falla", () => {
+    const urls = precacheUrlsFor(["404.html", "404/index.html", "_not-found/index.html", "index.html"]);
+
+    expect(urls).not.toContain("/404.html");
+    expect(urls).not.toContain("/404/");
+    expect(urls).toEqual(expect.arrayContaining(["/", "/_not-found/"]));
+  });
+
   it("usa separadores de ruta normales aunque vengan de Windows", () => {
     expect(precacheUrlsFor(["partido\\index.html", "_next\\static\\a.js"])).toEqual([
       "/_next/static/a.js",
