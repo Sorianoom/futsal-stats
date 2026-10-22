@@ -41,6 +41,7 @@ import {
 } from "@/lib/match/lineup";
 import type { ConfirmedLog, Outbox } from "@/lib/match/outbox";
 import { useMatchLog } from "@/lib/match/use-match-log";
+import { useWakeLock } from "@/lib/use-wake-lock";
 
 export interface BoardData {
   match: Match;
@@ -165,6 +166,9 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   useEffect(() => {
     onActivity({ idle, revision: log.revision, pending: log.pending });
   }, [onActivity, idle, log.revision, log.pending]);
+
+  // En el iPad la pantalla se apagaría en plena jugada: se mantiene encendida mientras el partido siga abierto.
+  useWakeLock(data.stints.length === 0);
 
   // Safari del iPad descarta y reactiva pestañas: al volver se pide de nuevo el estado real,
   // pero nunca con algo a medias ni con cosas sin enviar.
