@@ -33,16 +33,32 @@ export async function loadSnapshot(matchId: string): Promise<MatchSnapshot | nul
   return stored ?? null;
 }
 
-/** Sustituye la copia anterior de ese partido. */
+// Sube con cada borrado: una escritura pedida antes de borrar no debe resucitar la copia después.
+let generation = 0;
+
+/** Se anota al pedir una escritura y se pasa a `saveSnapshot` para que sepa si quedó obsoleta. */
+export function snapshotGeneration(): number {
+  return generation;
+}
+
+/**
+ * Sustituye la copia anterior de ese partido. Con `requestedAt` (ver `snapshotGeneration`), si
+ * entretanto se borraron las copias, la escritura se descarta.
+ */
 export async function saveSnapshot(
   matchId: string,
   data: Omit<MatchSnapshot, "savedAt">,
   savedAt: number = Date.now(),
+  requestedAt?: number,
 ): Promise<void> {
-  await withDb((db) => db.put(STORE, { ...data, savedAt }, matchId));
+  await withDb(async (db) => {
+    if (requestedAt !== undefined && requestedAt !== generation) return;
+    await db.put(STORE, { ...data, savedAt }, matchId);
+  });
 }
 
 /** Borra las copias de todos los partidos; no toca lo anotado y sin enviar. */
 export async function clearSnapshots(): Promise<void> {
+  generation += 1;
   await withDb((db) => db.clear(STORE));
 }

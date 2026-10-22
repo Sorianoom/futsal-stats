@@ -53,20 +53,28 @@ async function forgetLocalSession(): Promise<void> {
   await clearSnapshots().catch(() => undefined);
 }
 
+/**
+ * Recuerda al usuario con sesión verificada. Si es otro distinto del guardado, se borran antes las
+ * copias del anterior: así no quedan a su alcance aunque aquel cierre de sesión no pudiera borrarlas.
+ */
+async function adoptUser(user: User): Promise<void> {
+  if (loadSavedUser()?.id !== user.id) await clearSnapshots().catch(() => undefined);
+  saveUser(user);
+}
+
 async function resolveSession(): Promise<SessionState> {
   try {
+    // null: el servidor rechazó la sesión (401).
     const restored = await restoreSession();
     if (restored === null) {
       void forgetLocalSession();
       return ANONYMOUS;
     }
-    saveUser(restored);
+    await adoptUser(restored);
     return { user: restored, status: "authenticated", degraded: false };
   } catch (failure) {
-    if (!isUnreachable(failure)) {
-      void forgetLocalSession();
-      return ANONYMOUS;
-    }
+    // Otros fallos del servidor (429, 403…) no prueban que la sesión haya caducado: no se borra nada.
+    if (!isUnreachable(failure)) return ANONYMOUS;
     // Solo un rechazo explícito del servidor cierra la sesión: sin red se conserva la cookie, y
     // con un usuario guardado se sigue trabajando sin conexión hasta poder verificarla.
     const saved = loadSavedUser();
@@ -110,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const loggedIn = await loginRequest(email, password);
-    saveUser(loggedIn);
+    await adoptUser(loggedIn);
     setUser(loggedIn);
     setStatus("authenticated");
     setDegraded(false);

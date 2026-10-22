@@ -9,7 +9,13 @@ import { ApiError, isUnreachable } from "@/lib/api/client";
 import { listLineupEvents, listMatchEvents, listMatches, listStints } from "@/lib/api/matches";
 import { getCallup } from "@/lib/api/points";
 import { listPlayers } from "@/lib/api/players";
-import { describeAge, loadSnapshot, saveSnapshot, type MatchSnapshot } from "@/lib/match/match-cache";
+import {
+  describeAge,
+  loadSnapshot,
+  saveSnapshot,
+  snapshotGeneration,
+  type MatchSnapshot,
+} from "@/lib/match/match-cache";
 import { EMPTY_OUTBOX, type ConfirmedLog } from "@/lib/match/outbox";
 import { loadOutbox } from "@/lib/match/outbox-store";
 import { weekStartOf } from "@/lib/weeks";
@@ -114,20 +120,25 @@ export function MatchScreen({ matchId }: { matchId: string }) {
   const snapshotWrites = useRef<Promise<void>>(Promise.resolve());
 
   const storeSnapshot = useCallback(
-    (data: BoardData, confirmed: ConfirmedLog) => {
+    (data: BoardData, confirmed: ConfirmedLog): Promise<void> => {
       // Una copia que ya era vieja conserva su fecha: no se hace pasar por reciente.
       const savedAt = data.staleSince;
-      snapshotWrites.current = snapshotWrites.current
-        .then(() => saveSnapshot(matchId, snapshotOf(data, confirmed), savedAt))
-        // Es un respaldo para abrir sin red: si no se guarda, el partido sigue igual.
-        .catch(() => undefined);
+      // Si se cierra la sesión antes de que le toque a esta escritura, se descarta.
+      const requestedAt = snapshotGeneration();
+      const write = snapshotWrites.current.then(() =>
+        saveSnapshot(matchId, snapshotOf(data, confirmed), savedAt, requestedAt),
+      );
+      // La cola sigue aunque una escritura falle; quien llama decide qué hacer con el fallo.
+      snapshotWrites.current = write.catch(() => undefined);
+      return write;
     },
     [matchId],
   );
 
+  // Rechaza si la copia no se guardó: así el registro no da por cubierto lo que aún no lo está.
   const onConfirmed = useCallback(
-    (confirmed: ConfirmedLog) => {
-      if (base.current !== null) storeSnapshot(base.current, confirmed);
+    async (confirmed: ConfirmedLog) => {
+      if (base.current !== null) await storeSnapshot(base.current, confirmed);
     },
     [storeSnapshot],
   );
@@ -156,7 +167,8 @@ export function MatchScreen({ matchId }: { matchId: string }) {
         } else {
           base.current = data;
           // Lo cargado es lo que el servidor tiene: es la copia desde la que abrir sin red.
-          if (data.staleSince === undefined) storeSnapshot(data, data);
+          // Es un respaldo para abrir sin red: si no se guarda, el partido sigue igual.
+          if (data.staleSince === undefined) storeSnapshot(data, data).catch(() => undefined);
         }
         requested.current = { revision: activity.current.revision, force: false };
         setLoaded((previous) => ({ data, version: (previous?.version ?? 0) + 1 }));

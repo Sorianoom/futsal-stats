@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EventIn, LineupEventRecord, LoggedEvent, RatingIn } from "@/lib/api/match-types";
 
-import { confirmedOf, EMPTY_OUTBOX, restoreOutbox, size, without, type Outbox } from "./outbox";
+import { confirmedOf, EMPTY_OUTBOX, plus, restoreOutbox, size, without, type Outbox } from "./outbox";
 
 const STARTED: LineupEventRecord = {
   id: "l1",
@@ -44,6 +44,27 @@ describe("size y without", () => {
 
     expect(result).toEqual(outbox({ lineup: [STARTED] }));
     expect(original.events).toHaveLength(1);
+  });
+});
+
+describe("plus", () => {
+  it("junta dos bandejas sin tocar ninguna de las dos", () => {
+    const a = outbox({ lineup: [STARTED], events: [GOAL_IN] });
+    const b = outbox({ lineup: [SUBSTITUTION], events: [FOUL_IN], ratings: [RATING] });
+
+    const joined = plus(a, b);
+
+    expect(joined.lineup.map((item) => item.id)).toEqual(["l1", "l2"]);
+    expect(joined.events.map((item) => item.id)).toEqual(["e1", "e2"]);
+    expect(joined.ratings).toEqual([RATING]);
+    expect(a.lineup).toHaveLength(1);
+    expect(b.lineup).toHaveLength(1);
+  });
+
+  it("no repite lo que ya está en las dos", () => {
+    const a = outbox({ events: [GOAL_IN] });
+
+    expect(plus(a, a).events).toHaveLength(1);
   });
 });
 

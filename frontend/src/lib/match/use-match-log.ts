@@ -11,6 +11,7 @@ import {
   confirmedOf,
   EMPTY_OUTBOX,
   idsOf,
+  plus,
   restoreOutbox,
   size,
   toEventIn,
@@ -117,11 +118,15 @@ export function useMatchLog({
   const blocked = useRef(false);
   // Los guardados van en cola para que, aunque terminen en otro orden, gane siempre el último.
   const writes = useRef<Promise<void>>(Promise.resolve());
+  // Lo que el servidor ya confirmó pero aún no está en la copia local. Se sigue guardando en la
+  // bandeja del disco hasta que la copia lo recoja: si la pestaña muriera entre medias, al reabrir
+  // sin red faltaría en las dos partes y se repetirían números de secuencia (seq_conflict).
+  const retained = useRef<Outbox>(EMPTY_OUTBOX);
 
   const persist = useCallback(
     (next: Outbox) => {
       writes.current = writes.current
-        .then(() => saveOutbox(matchId, next))
+        .then(() => saveOutbox(matchId, plus(next, retained.current)))
         .catch(() => setStorageFailed(true));
     },
     [matchId],
@@ -134,13 +139,25 @@ export function useMatchLog({
     onConfirmedRef.current = onConfirmed;
   }, [onConfirmed]);
 
+  const releaseRetained = useCallback(
+    (covered: ReadonlySet<string>) => {
+      if (covered.size === 0) return;
+      retained.current = without(retained.current, covered);
+      persist(outbox.current);
+    },
+    [persist],
+  );
+
   const notifyConfirmed = useCallback(() => {
     const log = confirmedOf(lineupRef.current, eventsRef.current, outbox.current);
+    const covered = idsOf(retained.current);
     confirmedWrites.current = confirmedWrites.current
       .then(() => onConfirmedRef.current?.(log))
-      // La copia es un respaldo para abrir sin red: si no se guarda, anotar y enviar siguen igual.
+      .then(() => releaseRetained(covered))
+      // La copia es un respaldo para abrir sin red: si no se guarda, anotar y enviar siguen igual,
+      // y lo retenido se libera con la próxima copia que sí se guarde.
       .catch(() => undefined);
-  }, []);
+  }, [releaseRetained]);
 
   const commit = useCallback(
     (next: Outbox) => {
@@ -165,8 +182,12 @@ export function useMatchLog({
           ratings: [...batch.ratings],
         });
         ids.forEach((id) => maybeSent.current.delete(id));
+        const accepted = result.rejected.length === 0;
+        if (accepted && onConfirmedRef.current) {
+          retained.current = plus(retained.current, { ...batch, ratings: [] });
+        }
         commit(without(outbox.current, ids));
-        if (result.rejected.length > 0) {
+        if (!accepted) {
           blocked.current = true;
           setProblem(conflictMessage(result.rejected.map((item) => item.reason)));
           return;

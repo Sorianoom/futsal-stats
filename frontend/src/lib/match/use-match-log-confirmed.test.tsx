@@ -5,6 +5,7 @@ import type { LineupEventRecord, LoggedEvent } from "@/lib/api/match-types";
 import { mockApi, type MockHandler } from "@/test/mock-api";
 
 import type { ConfirmedLog } from "./outbox";
+import { loadOutbox } from "./outbox-store";
 import { useMatchLog } from "./use-match-log";
 
 interface SyncBody {
@@ -99,6 +100,56 @@ describe("useMatchLog: onConfirmed", () => {
     await waitFor(() => expect(onConfirmed).toHaveBeenCalled());
     await waitFor(() => expect(result.current.pending).toBe(0));
     expect(result.current.status).toBe("synced");
+  });
+
+  it("mientras la copia no se guarda, lo enviado sigue en la bandeja del disco", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onConfirmed = vi.fn(() => gate);
+    const { result } = setup(onConfirmed);
+
+    act(() => {
+      result.current.recordEvent({ kind: "foul", part: 1, t: 130, player_id: "p2" });
+    });
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pending).toBe(0));
+
+    expect((await loadOutbox("m1")).events).toHaveLength(1);
+
+    release();
+    await waitFor(async () => expect((await loadOutbox("m1")).events).toHaveLength(0));
+  });
+
+  it("si la copia no se puede guardar, lo enviado se conserva en el disco", async () => {
+    const onConfirmed = vi.fn().mockRejectedValue(new Error("quota"));
+    const { result } = setup(onConfirmed);
+
+    act(() => {
+      result.current.recordEvent({ kind: "foul", part: 1, t: 130, player_id: "p2" });
+    });
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pending).toBe(0));
+    await act(async () => {});
+
+    expect((await loadOutbox("m1")).events).toHaveLength(1);
+  });
+
+  it("una copia posterior que sí se guarda libera lo que se había retenido", async () => {
+    const onConfirmed = vi.fn().mockRejectedValueOnce(new Error("quota")).mockResolvedValue(undefined);
+    const { result } = setup(onConfirmed);
+
+    act(() => {
+      result.current.recordEvent({ kind: "foul", part: 1, t: 130, player_id: "p2" });
+    });
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.pending).toBe(0));
+    act(() => {
+      result.current.recordEvent({ kind: "foul", part: 1, t: 140, player_id: "p3" });
+    });
+
+    await waitFor(async () => expect((await loadOutbox("m1")).events).toHaveLength(0));
   });
 
   it("guarda las copias en orden aunque la anterior tarde más", async () => {

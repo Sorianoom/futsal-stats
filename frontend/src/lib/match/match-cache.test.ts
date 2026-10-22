@@ -10,6 +10,7 @@ import {
   describeAge,
   loadSnapshot,
   saveSnapshot,
+  snapshotGeneration,
   type MatchSnapshot,
 } from "./match-cache";
 import { EMPTY_OUTBOX, type Outbox } from "./outbox";
@@ -118,6 +119,23 @@ describe("match-cache", () => {
 
     expect(await loadSnapshot("m1")).toBeNull();
     expect(await loadSnapshot("m2")).toBeNull();
+  });
+
+  it("una escritura pedida antes de clearSnapshots no resucita la copia", async () => {
+    const requestedAt = snapshotGeneration();
+
+    await clearSnapshots();
+    await saveSnapshot("m1", DATA, SAVED_AT, requestedAt);
+
+    expect(await loadSnapshot("m1")).toBeNull();
+  });
+
+  it("una escritura de la generación vigente se guarda con normalidad", async () => {
+    await clearSnapshots();
+
+    await saveSnapshot("m1", DATA, SAVED_AT, snapshotGeneration());
+
+    expect(await loadSnapshot("m1")).toEqual({ ...DATA, savedAt: SAVED_AT });
   });
 
   it("clearSnapshots no toca la bandeja de lo anotado sin enviar", async () => {

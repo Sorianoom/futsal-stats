@@ -308,6 +308,7 @@ describe("AuthProvider", () => {
   });
 
   it("si no se confirma el cierre, conserva el usuario y las copias", async () => {
+    saveUser(USER);
     await saveSnapshot("m1", COPY);
     mockApi({
       "POST /auth/refresh": { data: { access_token: "tok" } },
@@ -322,6 +323,85 @@ describe("AuthProvider", () => {
     await screen.findByRole("alert");
     expect(loadSavedUser()).toEqual(USER);
     expect(await loadSnapshot("m1")).not.toBeNull();
+  });
+
+  it("un fallo del servidor que no es un 401 no borra el usuario ni las copias", async () => {
+    saveUser(USER);
+    await saveSnapshot("m1", COPY);
+    mockApi({ "POST /auth/refresh": { status: 429, error: { code: "rate_limited", message: "Calma" } } });
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+    expect(loadSavedUser()).toEqual(USER);
+    expect(await loadSnapshot("m1")).not.toBeNull();
+  });
+
+  it("un 500 del servidor al restaurar se trata como falta de conexión", async () => {
+    saveUser(USER);
+    mockApi({ "POST /auth/refresh": { status: 500, error: { code: "internal_error", message: "Error" } } });
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("al iniciar sesión otro usuario se borran las copias del anterior", async () => {
+    mockApi({
+      "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } },
+      "POST /auth/login": {
+        data: {
+          access_token: "nuevo",
+          token_type: "bearer",
+          expires_in: 900,
+          user: { id: "u2", email: "otra@club.es", role: "assistant_coach" },
+        },
+      },
+    });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+    // Un cierre de sesión anterior que no pudo borrar las copias.
+    saveUser(USER);
+    await saveSnapshot("m1", COPY);
+
+    await userEvent.click(screen.getByRole("button", { name: "entrar" }));
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    expect(await loadSnapshot("m1")).toBeNull();
+    expect(loadSavedUser()?.id).toBe("u2");
+  });
+
+  it("al iniciar sesión el mismo usuario conserva sus copias", async () => {
+    mockApi({
+      "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } },
+      "POST /auth/login": {
+        data: { access_token: "nuevo", token_type: "bearer", expires_in: 900, user: USER },
+      },
+    });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("anonymous"));
+    saveUser(USER);
+    await saveSnapshot("m1", COPY);
+
+    await userEvent.click(screen.getByRole("button", { name: "entrar" }));
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    expect(await loadSnapshot("m1")).not.toBeNull();
+  });
+
+  it("al restaurar la sesión de otro usuario se borran las copias del anterior", async () => {
+    saveUser(USER);
+    await saveSnapshot("m1", COPY);
+    mockApi({
+      "POST /auth/refresh": { data: { access_token: "tok" } },
+      "GET /auth/me": { data: { id: "u2", email: "otra@club.es", role: "assistant_coach" } },
+    });
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId("email")).toHaveTextContent("otra@club.es"));
+    expect(await loadSnapshot("m1")).toBeNull();
   });
 
   it("sin red y sin usuario guardado sigue sin conexión, como antes", async () => {

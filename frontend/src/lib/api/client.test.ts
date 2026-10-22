@@ -105,6 +105,24 @@ describe("isUnreachable", () => {
   });
 });
 
+describe("refreshAccessToken: qué cuenta como sesión rechazada", () => {
+  it("un 401 es un rechazo: devuelve false", async () => {
+    mockApi({ "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } } });
+
+    await expect(refreshAccessToken()).resolves.toBe(false);
+  });
+
+  it.each([
+    [429, "rate_limited"],
+    [403, "forbidden"],
+    [500, "internal_error"],
+  ])("un %i no es un rechazo de la sesión: lanza para que no se dé por cerrada", async (status, code) => {
+    mockApi({ "POST /auth/refresh": { status, error: { code, message: "Fallo" } } });
+
+    await expect(refreshAccessToken()).rejects.toMatchObject({ status, code });
+  });
+});
+
 describe("API_URL", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

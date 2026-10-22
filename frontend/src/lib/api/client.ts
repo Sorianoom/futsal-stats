@@ -130,8 +130,10 @@ async function requestRefresh(): Promise<boolean> {
     method: "POST",
     auth: false,
   });
+  // Solo un 401 es un rechazo de la sesión; un 429 o un 500 no significan que haya caducado.
+  if (result.status === 401) return false;
   const data = result.envelope.data;
-  if (!result.envelope.success || !data) return false;
+  if (!result.envelope.success || !data) throw toApiError(result);
   if (epochAtStart !== sessionEpoch) return false;
   accessToken = data.access_token;
   return true;
@@ -139,7 +141,8 @@ async function requestRefresh(): Promise<boolean> {
 
 /**
  * Renueva el token de acceso con la cookie de refresco. Las llamadas simultáneas comparten una
- * sola petición. Devuelve false si el servidor rechaza la sesión; si no hay red, lanza ApiError.
+ * sola petición. Devuelve false si el servidor rechaza la sesión (401); con cualquier otro fallo,
+ * sin red incluido, lanza ApiError.
  */
 export function refreshAccessToken(): Promise<boolean> {
   pendingRefresh ??= requestRefresh().finally(() => {

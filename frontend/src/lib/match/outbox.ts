@@ -43,6 +43,19 @@ export function confirmedOf(
   };
 }
 
+/** Une dos bandejas; lo que está en las dos cuenta una sola vez. */
+export function plus(outbox: Outbox, extra: Outbox): Outbox {
+  const merge = <T extends { id: string }>(base: readonly T[], added: readonly T[]): T[] => {
+    const known = new Set(base.map((item) => item.id));
+    return [...base, ...added.filter((item) => !known.has(item.id))];
+  };
+  return {
+    lineup: merge(outbox.lineup, extra.lineup),
+    events: merge(outbox.events, extra.events),
+    ratings: merge(outbox.ratings, extra.ratings),
+  };
+}
+
 export function toEventIn(event: LoggedEvent): EventIn {
   return {
     id: event.id,
