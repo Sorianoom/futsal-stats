@@ -31,6 +31,20 @@ describe("despliegue en Vercel", () => {
   });
 });
 
+describe("copia de sw.js en public/", () => {
+  it("public/sw.js es un fichero generado: no se versiona", () => {
+    const ignored = readFileSync(join(__dirname, "..", "..", ".gitignore"), "utf8").split("\n");
+
+    expect(ignored).toContain("/public/sw.js");
+  });
+
+  it("el script de build pide la copia en public/", () => {
+    const script = readFileSync(join(__dirname, "..", "..", "scripts", "generate-sw.mts"), "utf8");
+
+    expect(script).toMatch(/generateServiceWorker\([^)]*"public"/);
+  });
+});
+
 describe("build del service worker", () => {
   it("genera sw.js justo después de next build", () => {
     expect(pkg.scripts.build).toMatch(/^next build && node .*scripts\/generate-sw\.mts$/);

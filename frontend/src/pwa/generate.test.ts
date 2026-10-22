@@ -41,6 +41,32 @@ describe("generateServiceWorker", () => {
     expect(code).toContain('["/","/_next/static/chunks/app.js","/partido/"]');
   });
 
+  it("escribe también una copia idéntica en la carpeta indicada (public/), que Vercel sí publica", async () => {
+    const mirror = join(dir, "public");
+
+    await generateServiceWorker(outDir, templatePath, mirror);
+
+    const original = await readFile(join(outDir, "sw.js"), "utf8");
+    expect(await readFile(join(mirror, "sw.js"), "utf8")).toBe(original);
+  });
+
+  it("sin carpeta de copia no escribe nada más fuera de out/", async () => {
+    await generateServiceWorker(outDir, templatePath);
+
+    await expect(readFile(join(dir, "public", "sw.js"), "utf8")).rejects.toThrow();
+  });
+
+  it("la copia anterior en la carpeta de copia no cambia la versión al regenerar", async () => {
+    const mirror = join(dir, "public");
+    const first = await generateServiceWorker(outDir, templatePath, mirror);
+    // next build copia public/ dentro de out/: el sw.js viejo reaparece ahí antes de regenerar.
+    await put("sw.js", "viejo");
+
+    const second = await generateServiceWorker(outDir, templatePath, mirror);
+
+    expect(second.version).toBe(first.version);
+  });
+
   it("la versión es la misma al regenerar: el sw.js anterior no cuenta", async () => {
     const first = await generateServiceWorker(outDir, templatePath);
     const second = await generateServiceWorker(outDir, templatePath);

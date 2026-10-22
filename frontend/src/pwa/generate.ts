@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 // Con extensión: este módulo lo ejecuta Node directamente desde scripts/generate-sw.ts.
@@ -26,8 +26,16 @@ export interface GeneratedWorker {
   urls: string[];
 }
 
-/** Lee el sitio exportado en `outDir` y escribe `sw.js` a partir de la plantilla. */
-export async function generateServiceWorker(outDir: string, templatePath: string): Promise<GeneratedWorker> {
+/**
+ * Lee el sitio exportado en `outDir` y escribe `sw.js` a partir de la plantilla. Con `mirrorDir`
+ * escribe además una copia ahí: Vercel publica `public/` pero no lo que se añade a `out/` después
+ * de `next build`, así que sin la copia `/sw.js` daba 404 en producción.
+ */
+export async function generateServiceWorker(
+  outDir: string,
+  templatePath: string,
+  mirrorDir?: string,
+): Promise<GeneratedWorker> {
   const found = await stat(outDir).catch(() => null);
   if (found === null || !found.isDirectory()) {
     throw new Error(`No existe la carpeta exportada ${outDir}: ejecuta antes "next build"`);
@@ -42,6 +50,11 @@ export async function generateServiceWorker(outDir: string, templatePath: string
   const urls = precacheUrlsFor(paths);
   const version = cacheVersionOf(files);
   const template = await readFile(templatePath, "utf8");
-  await writeFile(join(outDir, SW_FILE), buildServiceWorker(template, urls, version));
+  const code = buildServiceWorker(template, urls, version);
+  await writeFile(join(outDir, SW_FILE), code);
+  if (mirrorDir !== undefined) {
+    await mkdir(mirrorDir, { recursive: true });
+    await writeFile(join(mirrorDir, SW_FILE), code);
+  }
   return { version, urls };
 }
