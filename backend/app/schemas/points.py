@@ -1,7 +1,7 @@
 """Cuerpos y respuestas de las rutas de puntos, sesiones, partidos y convocatoria."""
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
@@ -18,13 +18,27 @@ MAX_MINUTES_LATE = 300
 MAX_WINNERS = 30
 
 
+# Fechas razonables para un club que empezó a usar la app en 2026: sin esto se aceptaban años como
+# 0001 o 9999 y se podían crear movimientos con fechas absurdas. El mínimo es fijo (no relativo a
+# hoy) para que los datos y las pruebas antiguas no caduquen con el tiempo.
+MIN_DATE = date(2020, 1, 1)
+MAX_DAYS_AHEAD = 366
+
+
+def _check_plausible(day: date) -> date:
+    if day < MIN_DATE or day > date.today() + timedelta(days=MAX_DAYS_AHEAD):
+        raise ValueError("Fecha fuera de un rango razonable")
+    return day
+
+
 def _check_monday(day: date) -> date:
     if day.weekday() != MONDAY:
         raise ValueError("La semana debe empezar en lunes")
     return day
 
 
-WeekStart = Annotated[date, AfterValidator(_check_monday)]
+PlausibleDate = Annotated[date, AfterValidator(_check_plausible)]
+WeekStart = Annotated[PlausibleDate, AfterValidator(_check_monday)]
 
 
 class StrictModel(BaseModel):
@@ -39,7 +53,7 @@ class SanctionOut(BaseModel):
 
 class SessionCreate(StrictModel):
     kind: SessionKind
-    held_on: date
+    held_on: PlausibleDate
     notes: str | None = Field(default=None, max_length=MAX_NOTES_LENGTH)
 
 
@@ -117,7 +131,7 @@ class MovementsCreated(BaseModel):
 class InfractionIn(StrictModel):
     player_id: uuid.UUID
     infraction_code: str = Field(min_length=1, max_length=16)
-    occurred_on: date
+    occurred_on: PlausibleDate
     session_id: uuid.UUID | None = None
     in_match: bool = False
     reason: str | None = Field(default=None, min_length=1, max_length=MAX_NOTES_LENGTH)
@@ -146,7 +160,7 @@ class InfractionOut(BaseModel):
 
 
 class MatchCreate(StrictModel):
-    held_on: date
+    held_on: PlausibleDate
     opponent: str = Field(min_length=1, max_length=MAX_OPPONENT_LENGTH)
 
 
