@@ -12,6 +12,15 @@ describe("ScoreBanner", () => {
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("3 – 2");
   });
 
+  it("usa un encabezado de nivel 2 salvo que se pida el 1", () => {
+    const { rerender } = render(<ScoreBanner eyebrow="Final" title="vs Rival" score={{ for: 1, against: 0 }} />);
+    expect(screen.getByRole("heading", { level: 2, name: "vs Rival" })).toBeInTheDocument();
+
+    rerender(<ScoreBanner eyebrow="Final" title="vs Rival" level={1} score={{ for: 1, against: 0 }} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "vs Rival" })).toBeInTheDocument();
+  });
+
   it("muestra la nota solo si se da", () => {
     const { rerender } = render(
       <ScoreBanner eyebrow="Final" title="Partido terminado" score={{ for: 0, against: 0 }} />,

@@ -205,6 +205,29 @@ describe("EstadisticasPage: temporada", () => {
     expect(await screen.findByText("Acumulado de 2 partidos cerrados")).toBeInTheDocument();
   });
 
+  it("destaca a los líderes de la temporada", async () => {
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    const leaders = await screen.findByRole("list", { name: "Líderes de la temporada" });
+    const goleador = within(leaders).getByText("Goleador").closest("li") as HTMLElement;
+    expect(within(goleador).getByText("Ana Ruiz")).toBeInTheDocument();
+    expect(within(goleador).getByText("4")).toBeInTheDocument();
+    const minutos = within(leaders).getByText("Más minutos").closest("li") as HTMLElement;
+    expect(within(minutos).getByText("80:00")).toBeInTheDocument();
+  });
+
+  it("sin partidos cerrados no hay líderes", async () => {
+    season = { matches: 0, players: [], warnings: [] };
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    await screen.findByText(/Todavía no hay partidos cerrados/);
+    expect(screen.queryByRole("list", { name: "Líderes de la temporada" })).not.toBeInTheDocument();
+  });
+
   it("con un solo partido cerrado habla en singular", async () => {
     season = { ...SEASON, matches: 1 };
     api();
