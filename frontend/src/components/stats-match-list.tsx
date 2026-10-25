@@ -11,6 +11,7 @@ import { getSeasonStats } from "@/lib/api/stats";
 import type { SeasonPlayerStats, SeasonStats } from "@/lib/api/stats-types";
 import { formatClock } from "@/lib/match/clock";
 import { seasonLeaders, type Leader } from "@/lib/season-leaders";
+import { sortMatchesByDate } from "@/lib/sort-matches";
 import { formatShortDay } from "@/lib/weeks";
 
 function leaderValue(leader: Leader): string {
@@ -148,7 +149,7 @@ export function StatsMatchList() {
 
       {matches && matches.length > 0 ? (
         <ul aria-label="Partidos" className="grid gap-3 md:grid-cols-2">
-          {matches.map((match) => (
+          {sortMatchesByDate(matches).map((match) => (
             <li key={match.id}>
               <Link
                 href={`/estadisticas?id=${match.id}`}
