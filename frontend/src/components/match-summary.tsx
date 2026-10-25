@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { RedCards } from "@/components/red-cards";
+import { ScoreBanner } from "@/components/score-banner";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { finalizeMatch } from "@/lib/api/matches";
@@ -13,7 +14,8 @@ import { formatClock } from "@/lib/match/clock";
 import { secondsByPlayer, type Stint } from "@/lib/match/lineup";
 
 const CONFLICT = 409;
-const LINK = "inline-flex min-h-12 items-center px-3 underline";
+const LINK =
+  "inline-flex min-h-12 items-center rounded-2xl border-2 bg-card px-5 font-bold [@media(hover:hover)]:hover:bg-muted";
 const CLOSE_ERROR = "No se pudo cerrar el partido. Inténtalo de nuevo.";
 
 interface MatchSummaryProps {
@@ -53,6 +55,8 @@ export function MatchSummary({
     .filter(([, total]) => total > 0)
     .sort(([, a], [, b]) => b - a)
     .map(([id, total]) => ({ id, name: nameOf(id), total }));
+  // Ordenados de más a menos: el primero marca el 100 % de las barras.
+  const mostMinutes = played[0]?.total ?? 1;
 
   async function close(force: boolean) {
     if (busy) return;
@@ -73,26 +77,30 @@ export function MatchSummary({
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold">Partido terminado</h2>
-          {closed ? <p className="text-lg font-medium text-muted-foreground">Partido cerrado</p> : null}
-        </div>
-        <p aria-label="Marcador" className="text-5xl font-bold tabular-nums">
-          {score.for} – {score.against}
-        </p>
-      </div>
+      <ScoreBanner
+        eyebrow="Final"
+        title="Partido terminado"
+        note={closed ? "Partido cerrado" : undefined}
+        score={score}
+      />
 
-      <div className="space-y-2">
-        <h3 className="text-lg font-semibold">Minutos jugados</h3>
-        <ul aria-label="Minutos jugados" className="grid gap-2 md:grid-cols-2">
+      <div className="space-y-3">
+        <h3 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
+          Minutos jugados
+        </h3>
+        <ul aria-label="Minutos jugados" className="grid gap-2.5 md:grid-cols-2">
           {played.map((player) => (
-            <li
-              key={player.id}
-              className="flex items-center justify-between rounded-xl border bg-card p-3 text-lg"
-            >
-              <span>{player.name}</span>
-              <span className="font-semibold tabular-nums">{formatClock(player.total)}</span>
+            <li key={player.id} className="space-y-2 rounded-2xl border bg-card p-3.5">
+              <div className="flex items-center justify-between text-lg font-bold">
+                <span>{player.name}</span>
+                <span className="tabular-nums">{formatClock(player.total)}</span>
+              </div>
+              <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${Math.round((player.total / mostMinutes) * 100)}%` }}
+                />
+              </div>
             </li>
           ))}
         </ul>
@@ -152,7 +160,13 @@ export function MatchSummary({
         </div>
       ) : null}
       {!closed ? (
-        <Button size="lg" disabled={busy || pending > 0 || blocked} onClick={() => void close(false)}>
+        <Button
+          size="lg"
+          variant="cta"
+          className="h-[60px] rounded-2xl text-xl"
+          disabled={busy || pending > 0 || blocked}
+          onClick={() => void close(false)}
+        >
           Cerrar partido
         </Button>
       ) : null}

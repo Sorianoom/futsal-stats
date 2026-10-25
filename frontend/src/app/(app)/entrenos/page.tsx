@@ -12,7 +12,15 @@ import { listSessions } from "@/lib/api/points";
 import { listPlayers } from "@/lib/api/players";
 import type { Player, TeamSession } from "@/lib/api/types";
 import { SESSION_KIND_LABEL } from "@/lib/labels";
-import { currentWeekStart, formatShortDay, weekStartOf } from "@/lib/weeks";
+import { cn } from "@/lib/utils";
+import {
+  currentWeekStart,
+  formatShortDay,
+  formatWeekdayShort,
+  todayInMadrid,
+  weekDays,
+  weekStartOf,
+} from "@/lib/weeks";
 
 interface LoadedSessions {
   week: string;
@@ -23,6 +31,7 @@ export default function EntrenosPage() {
   const { user } = useAuth();
   const isHeadCoach = user?.role === "head_coach";
   const [week, setWeek] = useState(() => currentWeekStart());
+  const [today] = useState(() => todayInMadrid());
   // null hasta que llega la plantilla: sin ella no se puede pasar lista ni dar victorias.
   const [players, setPlayers] = useState<Player[] | null>(null);
   const [loadedSessions, setLoadedSessions] = useState<LoadedSessions | null>(null);
@@ -102,6 +111,43 @@ export default function EntrenosPage() {
         Nueva sesión
       </Button>
 
+      {sessions ? (
+        <ol aria-label="Días de la semana" className="grid grid-cols-7 gap-2">
+          {weekDays(week).map((day) => {
+            const isToday = day === today;
+            const hasSession = sessions.some((session) => session.held_on === day);
+            return (
+              <li
+                key={day}
+                aria-current={isToday ? "date" : undefined}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 rounded-2xl border-2 py-3",
+                  isToday ? "border-primary bg-primary text-primary-foreground" : "bg-card",
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-xs font-extrabold tracking-widest uppercase",
+                    isToday ? "text-primary-foreground/90" : "text-muted-foreground",
+                  )}
+                >
+                  {formatWeekdayShort(day)}
+                </span>
+                <span className="text-2xl font-extrabold tabular-nums">{Number(day.slice(-2))}</span>
+                {hasSession ? <span className="sr-only">Con sesión</span> : null}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "mt-1 size-2 rounded-full",
+                    hasSession ? (isToday ? "bg-cta" : "bg-primary") : "bg-transparent",
+                  )}
+                />
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+
       {sessionsFailed ? (
         <div role="alert" className="flex items-center justify-between rounded-lg border p-4">
           <p>No se pudieron cargar las sesiones</p>
@@ -130,12 +176,12 @@ export default function EntrenosPage() {
           {sessions.map((session) => {
             const title = `${SESSION_KIND_LABEL[session.kind]} ${formatShortDay(session.held_on)}`;
             return (
-              <li key={session.id} className="flex items-center gap-4 rounded-xl border bg-card p-4">
-                <span className="w-20 shrink-0 text-muted-foreground">
+              <li key={session.id} className="flex items-center gap-4 rounded-3xl border-2 bg-card p-4">
+                <span className="w-24 shrink-0 rounded-2xl bg-primary/10 px-2 py-3 text-center text-base font-extrabold text-primary">
                   {formatShortDay(session.held_on)}
                 </span>
                 <span className="flex-1">
-                  <span className="block text-lg font-medium">{SESSION_KIND_LABEL[session.kind]}</span>
+                  <span className="block text-xl font-extrabold">{SESSION_KIND_LABEL[session.kind]}</span>
                   {session.notes ? (
                     <span className="block text-muted-foreground">{session.notes}</span>
                   ) : null}

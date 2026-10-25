@@ -137,7 +137,7 @@ export function CorrectEvents({ matchId, nameOf, settings }: CorrectEventsProps)
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xl font-semibold">Eventos</h2>
+      <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Eventos</h2>
       {undoError ? (
         <p role="alert" className="text-base text-destructive">
           {undoError}
@@ -156,7 +156,7 @@ export function CorrectEvents({ matchId, nameOf, settings }: CorrectEventsProps)
           const description = describeEvent(event, nameOf);
           const when = formatClock(elapsedToDisplay(event.t, settings));
           return (
-            <li key={event.id} className="space-y-2 rounded-xl border bg-card p-4">
+            <li key={event.id} className="space-y-2 rounded-2xl border-2 bg-card p-4">
               <div className="flex items-center gap-4">
                 <span className="flex-1 text-lg">{`${event.part}ª parte · ${when} · ${description}`}</span>
                 {confirmingId === event.id ? (

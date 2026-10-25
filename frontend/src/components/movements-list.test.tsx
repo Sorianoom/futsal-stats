@@ -52,5 +52,24 @@ describe("MovementsList", () => {
     setup([]);
 
     expect(screen.getByText("No hay movimientos esta semana")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Resumen de la semana" })).not.toBeInTheDocument();
+  });
+
+  it("resume la semana: cuántos movimientos, lo que suman y lo que restan", () => {
+    setup([movement("a", 2, "Ejercicio ganado"), movement("b", 3, "Partidillo ganado"), movement("c", -10, "Falta")]);
+
+    const summary = within(screen.getByRole("group", { name: "Resumen de la semana" }));
+
+    expect(summary.getByText("Movimientos").previousElementSibling).toHaveTextContent("3");
+    expect(summary.getByText("Suman").previousElementSibling).toHaveTextContent("+5");
+    expect(summary.getByText("Restan").previousElementSibling).toHaveTextContent("-10");
+  });
+
+  it("si nada resta, lo deja en 0 sin signo", () => {
+    setup([movement("a", 2, "Ejercicio ganado")]);
+
+    const summary = within(screen.getByRole("group", { name: "Resumen de la semana" }));
+
+    expect(summary.getByText("Restan").previousElementSibling).toHaveTextContent(/^0$/);
   });
 });

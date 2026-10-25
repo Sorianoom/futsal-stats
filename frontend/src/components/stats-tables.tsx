@@ -13,9 +13,9 @@ const PLAYER_COLUMNS = [
   { short: "Roj", title: "Rojas" },
 ] as const;
 
-const HEADER_CELL = "px-3 py-2 text-left text-sm font-semibold text-muted-foreground";
-const ROW_HEADER = "px-3 py-3 text-left text-lg font-medium";
-const SCROLLER = "overflow-x-auto rounded-xl border bg-card";
+const HEADER_CELL = "px-3 py-3 text-left text-xs font-extrabold tracking-wider text-muted-foreground uppercase";
+const ROW_HEADER = "px-3 py-3 text-left text-base font-bold";
+const SCROLLER = "overflow-x-auto rounded-3xl border bg-card";
 
 /** Cabecera de columna: abreviada a la vista pero con el nombre completo para lectores. */
 function ColumnHeader({ short, title }: { short: string; title: string }) {
@@ -26,7 +26,7 @@ function ColumnHeader({ short, title }: { short: string; title: string }) {
     </th>
   );
 }
-const CELL = "px-3 py-3 text-lg tabular-nums";
+const CELL = "px-3 py-3 text-base tabular-nums";
 
 function actionsOf(player: PlayerStats): number[] {
   return [

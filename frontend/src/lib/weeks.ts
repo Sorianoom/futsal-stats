@@ -44,6 +44,18 @@ export function currentWeekStart(now: Date = new Date()): string {
   return weekStartOf(todayInMadrid(now));
 }
 
+const WEEKDAY_SHORT = new Intl.DateTimeFormat("es-ES", { weekday: "short", timeZone: "UTC" });
+
+/** "lun", "mar"… */
+export function formatWeekdayShort(iso: string): string {
+  return WEEKDAY_SHORT.format(parseDay(iso));
+}
+
+/** Los siete días de la semana que empieza en `weekStart`, de lunes a domingo. */
+export function weekDays(weekStart: string): string[] {
+  return Array.from({ length: DAYS_PER_WEEK }, (_, offset) => addDays(weekStart, offset));
+}
+
 export function shiftWeek(weekStart: string, weeks: number): string {
   return addDays(weekStart, weeks * DAYS_PER_WEEK);
 }
