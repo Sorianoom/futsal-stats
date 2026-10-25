@@ -65,7 +65,7 @@ export function MovementsList({ movements, nameOf, onUndo }: MovementsListProps)
             </span>
             <span
               className={`w-14 text-right text-2xl font-bold tabular-nums ${
-                movement.points < 0 ? "text-destructive" : ""
+                movement.points < 0 ? "text-destructive" : "text-success-foreground"
               }`}
             >
               {signed(movement.points)}
