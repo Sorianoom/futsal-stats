@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { CourtSurface } from "@/components/court-surface";
 import { Button } from "@/components/ui/button";
@@ -96,6 +96,7 @@ export function StartersPicker({
   const [selected, setSelected] = useState<ReadonlySet<string>>(
     () => new Set(players.filter((p) => proposed.includes(p.id)).map((p) => p.id)),
   );
+  const checkboxes = useRef(new Map<string, HTMLInputElement>());
   const complete = selected.size === capacity;
   const chosen = players.filter((player) => selected.has(player.id));
 
@@ -105,9 +106,15 @@ export function StartersPicker({
     setSelected(next);
   }
 
+  // El botón de la pista desaparece al quitar al jugador: el foco pasa a su casilla para no perderse.
+  function removeFromCourt(playerId: string) {
+    toggle(playerId);
+    checkboxes.current.get(playerId)?.focus();
+  }
+
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_28rem]">
-      <CourtPreview chosen={chosen} capacity={capacity} onRemove={toggle} />
+      <CourtPreview chosen={chosen} capacity={capacity} onRemove={removeFromCourt} />
       <div className="flex flex-col gap-4">
         <fieldset className="grid grid-cols-2 gap-2">
           <legend className="col-span-full pb-2 text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
@@ -128,6 +135,10 @@ export function StartersPicker({
               >
                 <input
                   type="checkbox"
+                  ref={(element) => {
+                    if (element) checkboxes.current.set(player.id, element);
+                    else checkboxes.current.delete(player.id);
+                  }}
                   aria-label={player.name}
                   className="sr-only"
                   checked={checked}

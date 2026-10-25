@@ -125,7 +125,12 @@ export default function EntrenosPage() {
                   isToday ? "border-primary bg-primary text-primary-foreground" : "bg-card",
                 )}
               >
-                <span className="text-xs font-extrabold tracking-widest uppercase opacity-70">
+                <span
+                  className={cn(
+                    "text-xs font-extrabold tracking-widest uppercase",
+                    isToday ? "text-primary-foreground/90" : "text-muted-foreground",
+                  )}
+                >
                   {formatWeekdayShort(day)}
                 </span>
                 <span className="text-2xl font-extrabold tabular-nums">{Number(day.slice(-2))}</span>

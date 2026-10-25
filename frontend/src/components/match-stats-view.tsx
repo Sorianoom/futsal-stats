@@ -111,7 +111,7 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
     <div className="mx-auto max-w-6xl space-y-6">
       <ScoreBanner
         level={1}
-        eyebrow={match ? formatShortDay(match.held_on) : "Partido"}
+        eyebrow={match ? formatShortDay(match.held_on) : "Estadísticas"}
         title={match ? `vs ${match.opponent}` : "Partido"}
         score={{ for: stats.score.goals_for, against: stats.score.goals_against }}
       />

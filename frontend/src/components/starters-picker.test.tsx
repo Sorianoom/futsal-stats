@@ -76,6 +76,14 @@ describe("StartersPicker", () => {
     expect(screen.getByText("1 de 5 elegidos")).toBeInTheDocument();
   });
 
+  it("al quitar a un jugador desde la pista el foco pasa a su casilla, no se pierde", async () => {
+    renderPicker({ proposed: ["a", "b"] });
+
+    await userEvent.click(onCourt().getByRole("button", { name: /Quitar a Jugador a/ }));
+
+    expect(screen.getByLabelText("Jugador a")).toHaveFocus();
+  });
+
   it("no deja elegir más jugadores que huecos", () => {
     renderPicker({ proposed: ["gk", "a", "b", "c", "d"] });
 
