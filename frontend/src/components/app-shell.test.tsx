@@ -49,6 +49,29 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Plantilla" })).toBeInTheDocument();
   });
 
+  it("el logotipo lleva al inicio sin contarse como sección activa", () => {
+    navigation.pathname = "/";
+
+    renderWithAuth(<AppShell>contenido</AppShell>);
+
+    const logo = screen.getByRole("link", { name: "Futsal Stats" });
+    expect(logo).toHaveAttribute("href", "/");
+    expect(logo).not.toHaveAttribute("aria-current");
+  });
+
+  it("muestra el rol y el correo de la sesión junto al cierre de sesión", () => {
+    renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("assistant_coach") });
+
+    expect(screen.getByText(/Segundo entrenador/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+  });
+
+  it("pone el contenido en la región principal", () => {
+    renderWithAuth(<AppShell>contenido</AppShell>);
+
+    expect(screen.getByRole("main")).toHaveTextContent("contenido");
+  });
+
   it("cierra la sesión desde el botón", async () => {
     const { value } = renderWithAuth(<AppShell>contenido</AppShell>);
 
