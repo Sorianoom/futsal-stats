@@ -86,9 +86,9 @@ export default function EntrenosPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Entrenos</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">Entrenos</h1>
         <WeekNavigator
           week={week}
           onChange={(next) => {
@@ -98,7 +98,7 @@ export default function EntrenosPage() {
         />
       </header>
 
-      <Button size="lg" onClick={() => setCreating(true)}>
+      <Button variant="cta" size="lg" className="rounded-2xl" onClick={() => setCreating(true)}>
         Nueva sesión
       </Button>
 

@@ -2,32 +2,98 @@ import { SyncStatus } from "@/components/sync-status";
 import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/api/types";
 import type { ClockDirection } from "@/lib/match/clock";
+import { courtSlots } from "@/lib/match/court-layout";
 import type { LogStatus } from "@/lib/match/use-match-log";
 import { cn } from "@/lib/utils";
 
 const FOULS_WARNING_FROM = 5;
+const FOUL_PIPS = [1, 2, 3, 4, 5];
 
-interface PlayerCardsProps {
-  label: string;
+interface CourtProps {
   players: readonly Player[];
   onPick: (player: Player) => void;
-  emphasis: boolean;
 }
 
-function PlayerCards({ label, players, onPick, emphasis }: PlayerCardsProps) {
+/** Los de la pista, colocados sobre la cancha donde juegan. */
+function Court({ players, onPick }: CourtProps) {
   return (
-    <section className="space-y-2">
-      <h2 className="text-lg font-semibold">{label}</h2>
-      <ul aria-label={label} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <section className="relative aspect-[724/500] w-full overflow-hidden rounded-[28px] bg-primary lg:max-h-[calc(100dvh-21rem)]">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 724 500"
+        preserveAspectRatio="xMidYMid slice"
+        fill="none"
+        stroke="white"
+        strokeOpacity={0.28}
+        strokeWidth={3}
+        className="absolute inset-0 size-full"
+      >
+        <rect x="24" y="24" width="676" height="452" rx="8" />
+        <path d="M362 24v452" />
+        <circle cx="362" cy="250" r="62" />
+        <path d="M24 142a108 108 0 0 1 0 216M700 142a108 108 0 0 0 0 216" />
+      </svg>
+      <h2 className="absolute top-6 left-7 text-xs font-extrabold tracking-widest text-white/85 uppercase">
+        En pista · toca un jugador
+      </h2>
+      <ul aria-label="En pista" className="absolute inset-0">
+        {courtSlots(players).map(({ player, x, y }) => {
+          const keeper = player.position === "goalkeeper";
+          return (
+            <li
+              key={player.id}
+              style={{ left: `${x}%`, top: `${y}%` }}
+              className="absolute -translate-x-1/2 -translate-y-1/2"
+            >
+              <button
+                type="button"
+                onClick={() => onPick(player)}
+                className="flex flex-col items-center gap-2 rounded-2xl p-1 transition-transform outline-none focus-visible:ring-4 focus-visible:ring-white/70 active:scale-95"
+              >
+                <span
+                  className={cn(
+                    "flex size-20 items-center justify-center rounded-full text-4xl font-extrabold shadow-[0_6px_0_rgba(8,24,80,0.35)] xl:size-[92px]",
+                    keeper ? "bg-cta text-cta-foreground" : "bg-white text-primary",
+                  )}
+                >
+                  {player.dorsal}
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 text-[15px] font-extrabold text-foreground">
+                  {player.name}
+                </span>
+                {keeper ? <span className="sr-only"> (portero)</span> : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+interface BenchProps {
+  players: readonly Player[];
+  onPick: (player: Player) => void;
+}
+
+function Bench({ players, onPick }: BenchProps) {
+  return (
+    <section className="space-y-2.5">
+      <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
+        Banquillo · toca para cambiar
+      </h2>
+      <ul aria-label="Banquillo" className="grid grid-cols-2 gap-2.5">
         {players.map((player) => (
           <li key={player.id}>
             <Button
-              variant={emphasis ? "default" : "outline"}
-              className="h-20 w-full flex-col gap-0 text-lg"
+              variant="outline"
+              className="h-12 w-full justify-start gap-3 rounded-2xl px-3 text-[15px] font-bold"
               onClick={() => onPick(player)}
             >
-              <span className="block">{player.name}</span>
-              <span className="block text-sm font-normal opacity-80">{player.dorsal}</span>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-extrabold text-secondary-foreground">
+                {player.dorsal}
+              </span>
+              <span className="truncate">{player.name}</span>
             </Button>
           </li>
         ))}
@@ -63,26 +129,32 @@ interface LivePanelProps {
 
 export function LivePanel(props: LivePanelProps) {
   const { score, teamFouls, direction } = props;
+  const fouling = teamFouls >= FOULS_WARNING_FROM;
   const toggleLabel =
     direction === "down"
       ? "Marcador hacia abajo. Cambiar a hacia arriba"
       : "Marcador hacia arriba. Cambiar a hacia abajo";
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xl font-semibold">{props.title}</p>
-          <p
-            className={cn(
-              "text-base",
-              teamFouls >= FOULS_WARNING_FROM ? "font-semibold text-destructive" : "text-muted-foreground",
-            )}
-          >
-            {`Faltas de equipo: ${teamFouls}`}
-          </p>
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-foreground px-7 py-4 text-background">
+        <div className="min-w-56 space-y-1.5">
+          <p className="text-xs font-extrabold tracking-widest text-cta uppercase">{props.title}</p>
+          <div className="flex items-center gap-3">
+            <p className={cn("text-base", fouling ? "font-bold text-warning" : "text-background/80")}>
+              {`Faltas de equipo: ${teamFouls}`}
+            </p>
+            <span aria-hidden="true" className="flex gap-1.5">
+              {FOUL_PIPS.map((pip) => (
+                <span
+                  key={pip}
+                  className={cn("h-2 w-5 rounded-full", pip <= teamFouls ? "bg-cta" : "bg-white/20")}
+                />
+              ))}
+            </span>
+          </div>
         </div>
-        <p aria-label="Marcador" className="text-5xl font-bold tabular-nums">
+        <p aria-label="Marcador" className="text-7xl leading-none font-extrabold tabular-nums">
           {score.for} – {score.against}
         </p>
         <div className="flex items-center gap-2">
@@ -91,14 +163,21 @@ export function LivePanel(props: LivePanelProps) {
             size="lg"
             aria-label={`Marcador a ${props.clockText}. Tocar para corregir`}
             onClick={props.onClock}
+            className="h-16 rounded-2xl border-white/25 bg-white/10 px-5 text-4xl font-extrabold tabular-nums text-background hover:bg-white/20 hover:text-background"
           >
             {props.clockText}
           </Button>
-          <Button variant="ghost" size="lg" aria-label={toggleLabel} onClick={props.onToggleDirection}>
+          <Button
+            variant="ghost"
+            size="lg"
+            aria-label={toggleLabel}
+            onClick={props.onToggleDirection}
+            className="text-background hover:bg-white/10 hover:text-background"
+          >
             {direction === "down" ? "↓" : "↑"}
           </Button>
         </div>
-      </div>
+      </header>
 
       <SyncStatus
         status={props.status}
@@ -108,24 +187,35 @@ export function LivePanel(props: LivePanelProps) {
         onReload={props.onReload}
       />
 
-      <PlayerCards label="En pista" players={props.court} onPick={props.onCourtPlayer} emphasis />
-      <PlayerCards label="Banquillo" players={props.bench} onPick={props.onBenchPlayer} emphasis={false} />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Court players={props.court} onPick={props.onCourtPlayer} />
 
-      <div className="flex flex-wrap gap-3">
-        <Button size="lg" variant="secondary" onClick={props.onRivalGoal}>
-          Gol rival
-        </Button>
-        <Button size="lg" variant="outline" disabled={!props.canUndo} onClick={props.onUndo}>
-          Deshacer
-        </Button>
-        <Button size="lg" variant="outline" onClick={props.onRate}>
-          Valorar quinteto
-        </Button>
-        <Button size="lg" variant="destructive" className="ml-auto" onClick={props.onEndPart}>
-          Fin de la parte
-        </Button>
+        <div className="flex flex-col gap-5">
+          <Bench players={props.bench} onPick={props.onBenchPlayer} />
+          <div className="mt-auto flex flex-col gap-3">
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-14 rounded-2xl border-2 border-destructive text-lg font-extrabold text-destructive hover:bg-destructive/10"
+              onClick={props.onRivalGoal}
+            >
+              Gol rival
+            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" className="rounded-2xl" disabled={!props.canUndo} onClick={props.onUndo}>
+                Deshacer
+              </Button>
+              <Button variant="outline" className="rounded-2xl" onClick={props.onRate}>
+                Valorar quinteto
+              </Button>
+            </div>
+            <Button size="lg" variant="cta" className="h-[60px] rounded-2xl text-xl" onClick={props.onEndPart}>
+              Fin de la parte
+            </Button>
+            {props.undoNote ? <p className="text-sm text-muted-foreground">{props.undoNote}</p> : null}
+          </div>
+        </div>
       </div>
-      {props.undoNote ? <p className="text-sm text-muted-foreground">{props.undoNote}</p> : null}
     </div>
   );
 }

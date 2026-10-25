@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   currentWeekStart,
+  formatLongDay,
   formatShortDay,
   formatWeekRange,
   shiftWeek,
@@ -55,6 +56,16 @@ describe("shiftWeek", () => {
   it("cruza el cambio de hora y de año sin desplazar el día", () => {
     expect(shiftWeek("2026-10-26", -1)).toBe("2026-10-19");
     expect(shiftWeek("2026-12-28", 1)).toBe("2027-01-04");
+  });
+});
+
+describe("formatLongDay", () => {
+  it("muestra el día de la semana, el día y el mes en español", () => {
+    const text = formatLongDay("2026-10-25");
+
+    expect(text).toMatch(/domingo/i);
+    expect(text).toContain("25");
+    expect(text).toMatch(/octubre/i);
   });
 });
 

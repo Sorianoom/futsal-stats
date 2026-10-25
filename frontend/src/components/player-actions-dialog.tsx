@@ -17,6 +17,9 @@ const QUICK_KINDS: readonly EventKind[] = ["assist", "shot", "turnover", "steal"
 
 interface PlayerActionsDialogProps {
   player: Player | null;
+  /** Los del banquillo: se ofrecen para cambiar al jugador con un solo toque. */
+  bench: readonly Player[];
+  onSubstituteWith: (candidate: Player) => void;
   onClose: () => void;
   onQuick: (kind: EventKind) => void;
   onGoal: () => void;
@@ -26,6 +29,8 @@ interface PlayerActionsDialogProps {
 
 export function PlayerActionsDialog({
   player,
+  bench,
+  onSubstituteWith,
   onClose,
   onQuick,
   onGoal,
@@ -55,6 +60,28 @@ export function PlayerActionsDialog({
             Cambio
           </Button>
         </div>
+        {bench.length > 0 ? (
+          <div role="group" aria-label="Cambiar por" className="space-y-2">
+            <p aria-hidden="true" className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
+              Cambiar por
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {bench.map((candidate) => (
+                <Button
+                  key={candidate.id}
+                  variant="outline"
+                  className="h-12 justify-start gap-3 rounded-2xl px-3 text-[15px] font-bold"
+                  onClick={() => onSubstituteWith(candidate)}
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-extrabold text-secondary-foreground">
+                    {candidate.dorsal}
+                  </span>
+                  <span className="truncate">{candidate.name}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );

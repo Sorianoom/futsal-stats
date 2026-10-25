@@ -10,7 +10,7 @@ import { RatingDialog } from "@/components/rating-dialog";
 import { StartersPicker } from "@/components/starters-picker";
 import { SyncStatus } from "@/components/sync-status";
 import { SubstitutionDialog, type SubstitutionAnchor } from "@/components/substitution-dialog";
-import { TimeKeypad } from "@/components/time-keypad";
+import { QuickTimeDialog } from "@/components/quick-time-dialog";
 import { Button } from "@/components/ui/button";
 import { UndoDialog } from "@/components/undo-dialog";
 import type { LineupEventRecord, LoggedEvent, Match, StintRecord } from "@/lib/api/match-types";
@@ -20,6 +20,7 @@ import {
   elapsedToDisplay,
   formatClock,
   loadClockSettings,
+  suggestElapsed,
   saveClockSettings,
   type ClockSettings,
 } from "@/lib/match/clock";
@@ -60,6 +61,11 @@ export interface BoardData {
 }
 
 type Replayed = { state: LineupState } | { error: string };
+
+/** Hora real en ms. Solo se llama desde manejadores de eventos, nunca al pintar. */
+function realNow(): number {
+  return Date.now();
+}
 
 function replayLineup(lineup: readonly LineupEventRecord[]): Replayed {
   try {
@@ -120,7 +126,13 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   });
   const [settings, setSettings] = useState<ClockSettings>(() => loadClockSettings());
   // Último tiempo anotado en la parte en juego: se reutiliza en lo que se anota con un toque.
-  const [memo, setMemo] = useState({ part: 0, t: 0 });
+  // `at` es la hora real (Date.now) de ese tiempo: con ella se estima por dónde va el marcador.
+  const [memo, setMemo] = useState<{ part: number; t: number; at: number | null }>({
+    part: 0,
+    t: 0,
+    at: null,
+  });
+  const [suggested, setSuggested] = useState(0);
   const [sheetPlayer, setSheetPlayer] = useState<Player | null>(null);
   const [anchor, setAnchor] = useState<SubstitutionAnchor | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -211,6 +223,19 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     return true;
   }
 
+  /** Abre el diálogo de tiempo proponiendo el tiempo estimado del marcador. */
+  function ask(action: Pending) {
+    setSuggested(
+      suggestElapsed({
+        lastElapsed: now,
+        lastAt: memo.part === part ? memo.at : null,
+        nowMs: realNow(),
+        maxElapsed: settings.partSeconds,
+      }),
+    );
+    setPending(action);
+  }
+
   function confirmTime(elapsed: number) {
     if (!pending || part === null) return;
     if (blockedByConflict()) {
@@ -218,7 +243,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
       return;
     }
     const accepted = commit(pending, part, elapsed);
-    if (accepted) setMemo({ part, t: elapsed });
+    if (accepted) setMemo({ part, t: elapsed, at: realNow() });
     setPending(null);
   }
 
@@ -265,7 +290,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     const [out, entering] =
       anchor.side === "court" ? [anchor.player, candidate] : [candidate, anchor.player];
     setAnchor(null);
-    setPending({ type: "sub", out: out.id, in: entering.id });
+    ask({ type: "sub", out: out.id, in: entering.id });
   }
 
   if (!state) {
@@ -388,10 +413,10 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         syncProblem={log.problem}
         onCourtPlayer={setSheetPlayer}
         onBenchPlayer={(player) => setAnchor({ player, side: "bench" })}
-        onClock={() => setPending({ type: "clock" })}
+        onClock={() => ask({ type: "clock" })}
         onToggleDirection={toggleDirection}
-        onRivalGoal={() => setPending({ type: "rival_goal" })}
-        onEndPart={() => setPending({ type: "end" })}
+        onRivalGoal={() => ask({ type: "rival_goal" })}
+        onEndPart={() => ask({ type: "end" })}
         onUndo={() => setUndoing(true)}
         onRate={() => setRating(true)}
         onRetry={() => void log.flush()}
@@ -400,14 +425,19 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
 
       <PlayerActionsDialog
         player={sheetPlayer}
+        bench={bench}
+        onSubstituteWith={(candidate) => {
+          if (sheetPlayer) ask({ type: "sub", out: sheetPlayer.id, in: candidate.id });
+          setSheetPlayer(null);
+        }}
         onClose={() => setSheetPlayer(null)}
         onQuick={quick}
         onGoal={() => {
-          if (sheetPlayer) setPending({ type: "goal", playerId: sheetPlayer.id });
+          if (sheetPlayer) ask({ type: "goal", playerId: sheetPlayer.id });
           setSheetPlayer(null);
         }}
         onRed={() => {
-          if (sheetPlayer) setPending({ type: "red", playerId: sheetPlayer.id });
+          if (sheetPlayer) ask({ type: "red", playerId: sheetPlayer.id });
           setSheetPlayer(null);
         }}
         onSubstitute={() => {
@@ -421,11 +451,12 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         onPick={pickCandidate}
         onClose={() => setAnchor(null)}
       />
-      <TimeKeypad
+      <QuickTimeDialog
         open={pending !== null}
         title={pending ? TITLES[pending.type] : "Tiempo"}
         settings={settings}
-        initialElapsed={pending?.type === "end" ? settings.partSeconds : now}
+        suggested={suggested}
+        endOfPart={pending?.type === "end"}
         minElapsed={minElapsed}
         onConfirm={confirmTime}
         onCancel={() => setPending(null)}

@@ -4,13 +4,6 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   elapsedToDisplay,
   formatClock,
   parseScoreboard,
@@ -38,7 +31,7 @@ interface BodyProps {
   onCancel: () => void;
 }
 
-/** Teclado sin diálogo, para usarlo dentro de otro (p. ej. el formulario de un tramo). */
+/** Teclado numérico para escribir lo que marca el marcador de mesa (mm:ss), para usarlo dentro de un diálogo (p. ej. el de tiempo de una jugada o el formulario de un tramo). */
 export function KeypadBody({ settings, initialElapsed, minElapsed, onConfirm, onCancel }: BodyProps) {
   const [digits, setDigits] = useState(() => secondsToDigits(elapsedToDisplay(initialElapsed, settings)));
   // Hasta la primera pulsación el tiempo mostrado es el anterior; la primera tecla lo sustituye.
@@ -101,25 +94,5 @@ export function KeypadBody({ settings, initialElapsed, minElapsed, onConfirm, on
         Cancelar
       </Button>
     </div>
-  );
-}
-
-interface TimeKeypadProps extends BodyProps {
-  open: boolean;
-  title: string;
-}
-
-/** Teclado numérico para escribir lo que marca el marcador de mesa (mm:ss). */
-export function TimeKeypad({ open, title, onCancel, ...body }: TimeKeypadProps) {
-  return (
-    <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Escribe el tiempo que marca el marcador</DialogDescription>
-        </DialogHeader>
-        <KeypadBody {...body} onCancel={onCancel} />
-      </DialogContent>
-    </Dialog>
   );
 }

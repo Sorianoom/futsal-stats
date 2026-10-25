@@ -9,6 +9,8 @@ import {
   parseScoreboard,
   saveClockSettings,
   secondsToDigits,
+  shiftDisplay,
+  suggestElapsed,
   type ClockSettings,
 } from "./clock";
 
@@ -88,6 +90,52 @@ describe("conversión entre marcador y tiempo jugado", () => {
       ok: false,
       error: "Ese tiempo no cabe en una parte de 20:00",
     });
+  });
+});
+
+describe("suggestElapsed", () => {
+  const base = { lastElapsed: 300, lastAt: 1_000_000, maxElapsed: 1200 };
+
+  it("suma el tiempo real transcurrido desde el último tiempo confirmado, de 10 en 10 segundos", () => {
+    expect(suggestElapsed({ ...base, nowMs: 1_000_000 + 94_000 })).toBe(390);
+  });
+
+  it("con poco tiempo transcurrido no se mueve del último tiempo", () => {
+    expect(suggestElapsed({ ...base, nowMs: 1_000_000 + 9_000 })).toBe(300);
+  });
+
+  it("sin referencia de tiempo real (tras recargar) devuelve el último tiempo", () => {
+    expect(suggestElapsed({ ...base, lastAt: null, nowMs: 9_000_000 })).toBe(300);
+  });
+
+  it("no pasa del final de la parte", () => {
+    expect(suggestElapsed({ ...base, nowMs: 1_000_000 + 3_600_000 })).toBe(1200);
+  });
+
+  it("si el reloj del dispositivo retrocede no baja del último tiempo", () => {
+    expect(suggestElapsed({ ...base, nowMs: 1_000_000 - 60_000 })).toBe(300);
+  });
+});
+
+describe("shiftDisplay", () => {
+  it("con el marcador hacia abajo, +20 s sube lo que se ve y retrasa lo jugado hacia atrás", () => {
+    expect(shiftDisplay(300, 20, DOWN)).toBe(280);
+    expect(shiftDisplay(300, -60, DOWN)).toBe(360);
+  });
+
+  it("con el marcador hacia arriba, +20 s suma a lo jugado", () => {
+    expect(shiftDisplay(300, 20, UP)).toBe(320);
+    expect(shiftDisplay(300, -60, UP)).toBe(240);
+  });
+
+  it("no baja del mínimo permitido", () => {
+    expect(shiftDisplay(300, -60, UP, 280)).toBe(280);
+    expect(shiftDisplay(300, 60, DOWN, 280)).toBe(280);
+  });
+
+  it("no sale de la parte", () => {
+    expect(shiftDisplay(1190, 60, UP)).toBe(1200);
+    expect(shiftDisplay(10, 60, DOWN)).toBe(0);
   });
 });
 
