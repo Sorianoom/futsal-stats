@@ -63,6 +63,44 @@ export function parseScoreboard(digits: string, settings: ClockSettings): Parsed
   return { ok: true, elapsed };
 }
 
+const MS_PER_SECOND = 1000;
+const ESTIMATE_STEP_SECONDS = 10;
+
+export interface ElapsedSuggestion {
+  /** Último tiempo de la parte confirmado, en segundos jugados. */
+  lastElapsed: number;
+  /** Cuándo se confirmó (`Date.now()`); `null` si no se sabe (p. ej. tras recargar). */
+  lastAt: number | null;
+  nowMs: number;
+  maxElapsed: number;
+}
+
+/**
+ * Tiempo que probablemente marca el marcador ahora: el último confirmado más lo que ha pasado en
+ * la vida real, de 10 en 10 segundos. Es una estimación (el marcador se para en cada pausa), así
+ * que solo es el punto de partida que luego se ajusta con un par de toques.
+ */
+export function suggestElapsed({ lastElapsed, lastAt, nowMs, maxElapsed }: ElapsedSuggestion): number {
+  if (lastAt === null) return lastElapsed;
+  const realSeconds = Math.max(0, (nowMs - lastAt) / MS_PER_SECOND);
+  const steps = Math.floor(realSeconds / ESTIMATE_STEP_SECONDS) * ESTIMATE_STEP_SECONDS;
+  return Math.min(lastElapsed + steps, maxElapsed);
+}
+
+/**
+ * Mueve lo que se VE en el marcador `deltaSeconds` (positivo = el número sube) y devuelve los
+ * segundos jugados resultantes, sin salir de la parte ni bajar de `minElapsed`.
+ */
+export function shiftDisplay(
+  elapsed: number,
+  deltaSeconds: number,
+  settings: ClockSettings,
+  minElapsed = 0,
+): number {
+  const moved = settings.direction === "down" ? elapsed - deltaSeconds : elapsed + deltaSeconds;
+  return Math.min(Math.max(moved, minElapsed), settings.partSeconds);
+}
+
 function isValid(value: unknown): value is ClockSettings {
   if (typeof value !== "object" || value === null) return false;
   const { direction, partSeconds } = value as Record<string, unknown>;
