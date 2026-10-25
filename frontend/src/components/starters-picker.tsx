@@ -106,10 +106,10 @@ export function StartersPicker({
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_28rem]">
       <CourtPreview chosen={chosen} capacity={capacity} onRemove={toggle} />
       <div className="flex flex-col gap-4">
-        <fieldset className="grid grid-cols-2 gap-2.5 lg:grid-cols-1">
+        <fieldset className="grid grid-cols-2 gap-2">
           <legend className="col-span-full pb-2 text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
             Elige los {capacity} que salen a pista
           </legend>
@@ -120,7 +120,7 @@ export function StartersPicker({
               <label
                 key={player.id}
                 className={cn(
-                  "flex min-h-14 items-center gap-3 rounded-2xl border-2 bg-card px-3 text-base font-bold",
+                  "flex min-h-12 items-center gap-2.5 rounded-2xl border-2 bg-card px-2.5 text-[15px] font-bold",
                   "has-[:checked]:border-primary has-[:checked]:bg-primary/5",
                   "has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-ring/40",
                   "has-[:disabled]:opacity-50",
@@ -137,7 +137,7 @@ export function StartersPicker({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-full text-base font-extrabold",
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold",
                     checked
                       ? keeper
                         ? "bg-cta text-cta-foreground"
@@ -149,7 +149,7 @@ export function StartersPicker({
                 </span>
                 <span className="flex-1">
                   <span className="block leading-tight">{player.name}</span>
-                  <span className="block text-sm font-medium text-muted-foreground">
+                  <span className="block text-xs font-medium text-muted-foreground">
                     {POSITION_LABEL[player.position]}
                   </span>
                 </span>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ScoreBanner } from "@/components/score-banner";
 import { StartersPicker } from "@/components/starters-picker";
 import type { Player } from "@/lib/api/types";
 
@@ -19,12 +20,7 @@ interface PartBreakProps {
 export function PartBreak({ part, score, players, capacity, proposed, error, onStart }: PartBreakProps) {
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xl font-semibold">{`Parte ${part - 1} terminada`}</p>
-        <p aria-label="Marcador" className="text-5xl font-bold tabular-nums">
-          {score.for} – {score.against}
-        </p>
-      </div>
+      <ScoreBanner eyebrow="Descanso" title={`Parte ${part - 1} terminada`} score={score} />
       <StartersPicker
         part={part}
         players={players}
