@@ -15,7 +15,11 @@ export const metadata: Metadata = {
   title: "Futsal Stats",
   description: "Gestión del equipo: plantilla, puntos, convocatorias y partidos en vivo",
   manifest: "/manifest.webmanifest",
-  icons: { apple: "/icons/apple-touch-icon.png" },
+  icons: {
+    // El SVG, para los navegadores modernos. El .ico (16, 32 y 48 px) lo enlaza Next por convención.
+    icon: { url: "/icon.svg", type: "image/svg+xml" },
+    apple: "/icons/apple-touch-icon.png",
+  },
   appleWebApp: { capable: true, title: "Futsal Stats", statusBarStyle: "default" },
 };
 
