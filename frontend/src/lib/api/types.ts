@@ -18,6 +18,8 @@ export interface LoginData {
 export interface Player {
   id: string;
   name: string;
+  /** Cómo le llaman en el equipo; si falta, se usa el nombre completo. */
+  alias?: string | null;
   dorsal: number;
   position: Position;
   status: PlayerStatus;
@@ -26,6 +28,7 @@ export interface Player {
 
 export interface NewPlayer {
   name: string;
+  alias?: string | null;
   dorsal: number;
   position: Position;
 }

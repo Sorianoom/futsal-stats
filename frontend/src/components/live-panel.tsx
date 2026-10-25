@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/api/types";
 import type { ClockDirection } from "@/lib/match/clock";
 import { courtSlots } from "@/lib/match/court-layout";
+import { shortName } from "@/lib/player-name";
 import type { LogStatus } from "@/lib/match/use-match-log";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,7 @@ function Court({ players, onPick }: CourtProps) {
                   {player.dorsal}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1 text-[15px] font-extrabold text-foreground">
-                  {player.name}
+                  {shortName(player)}
                 </span>
                 {keeper ? <span className="sr-only"> (portero)</span> : null}
               </button>
@@ -76,7 +77,7 @@ function Bench({ players, onPick }: BenchProps) {
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-extrabold text-secondary-foreground">
                 {player.dorsal}
               </span>
-              <span className="truncate">{player.name}</span>
+              <span className="truncate">{shortName(player)}</span>
             </Button>
           </li>
         ))}

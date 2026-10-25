@@ -11,6 +11,7 @@ import {
 import type { Player } from "@/lib/api/types";
 import { EVENT_LABEL } from "@/lib/labels";
 import type { EventKind } from "@/lib/match/events";
+import { shortName } from "@/lib/player-name";
 
 /** Se anotan con un toque, con el último tiempo del marcador. */
 const QUICK_KINDS: readonly EventKind[] = ["assist", "shot", "turnover", "steal", "foul", "yellow"];
@@ -76,7 +77,7 @@ export function PlayerActionsDialog({
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-extrabold text-secondary-foreground">
                     {candidate.dorsal}
                   </span>
-                  <span className="truncate">{candidate.name}</span>
+                  <span className="truncate">{shortName(candidate)}</span>
                 </Button>
               ))}
             </div>

@@ -13,6 +13,7 @@ import { POSITION_LABEL, STATUS_LABEL } from "@/lib/labels";
 
 const MIN_DORSAL = 0;
 const MAX_DORSAL = 99;
+const MAX_ALIAS_LENGTH = 30;
 const SAVE_ERROR = "No se pudo guardar. Inténtalo de nuevo.";
 const SELECT_CLASS =
   "h-12 w-full rounded-lg border border-input bg-transparent px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -44,6 +45,7 @@ interface PlayerFormProps {
 
 function PlayerForm({ player, onClose, onSaved }: PlayerFormProps) {
   const [name, setName] = useState(player?.name ?? "");
+  const [alias, setAlias] = useState(player?.alias ?? "");
   const [dorsal, setDorsal] = useState(player ? String(player.dorsal) : "");
   const [position, setPosition] = useState<Position>(player?.position ?? "field");
   const [status, setStatus] = useState<PlayerStatus>(player?.status ?? "available");
@@ -72,8 +74,12 @@ function PlayerForm({ player, onClose, onSaved }: PlayerFormProps) {
     setErrors(found);
     if (found.name || found.dorsal) return;
     const values = { name: name.trim(), dorsal: Number(dorsal), position };
+    const trimmedAlias = alias.trim();
+    // Al crear, sin alias no se envía nada; al editar, un alias vacío (`null`) lo borra.
     void run(() =>
-      player ? updatePlayer(player.id, { ...values, status }) : createPlayer(values),
+      player
+        ? updatePlayer(player.id, { ...values, alias: trimmedAlias || null, status })
+        : createPlayer(trimmedAlias ? { ...values, alias: trimmedAlias } : values),
     );
   }
 
@@ -95,6 +101,21 @@ function PlayerForm({ player, onClose, onSaved }: PlayerFormProps) {
             {errors.name}
           </p>
         ) : null}
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="player-alias" className="text-base">
+          Alias
+        </Label>
+        <Input
+          id="player-alias"
+          maxLength={MAX_ALIAS_LENGTH}
+          value={alias}
+          aria-describedby="player-alias-hint"
+          onChange={(e) => setAlias(e.target.value)}
+        />
+        <p id="player-alias-hint" className="text-sm text-muted-foreground">
+          Opcional. Es el nombre corto que se ve en la pista y en el banquillo.
+        </p>
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="player-dorsal" className="text-base">

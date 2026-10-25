@@ -145,6 +145,7 @@ export default function PlantillaPage() {
             <div className="flex items-end justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate text-lg font-extrabold">{player.name}</p>
+                {player.alias ? <p className="truncate text-base font-bold text-primary">{player.alias}</p> : null}
                 <p className="text-sm font-semibold text-muted-foreground">{POSITION_LABEL[player.position]}</p>
               </div>
               {canEdit ? (

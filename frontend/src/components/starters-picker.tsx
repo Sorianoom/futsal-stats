@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/api/types";
 import { POSITION_LABEL } from "@/lib/labels";
 import { COURT_SLOTS, courtSlots } from "@/lib/match/court-layout";
+import { shortName } from "@/lib/player-name";
 import { cn } from "@/lib/utils";
 
 interface StartersPickerProps {
@@ -61,7 +62,7 @@ function CourtPreview({ chosen, capacity, onRemove }: CourtPreviewProps) {
                   {player.dorsal}
                 </span>
                 <span className="rounded-full bg-white px-2.5 py-0.5 text-sm font-extrabold text-foreground">
-                  {player.name}
+                  {shortName(player)}
                 </span>
               </button>
             </li>

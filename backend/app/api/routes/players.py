@@ -61,7 +61,12 @@ async def update_player(
     player_id: uuid.UUID, payload: PlayerUpdate, session: SessionDep, _: HeadCoach
 ) -> Envelope[PlayerOut]:
     player = await _existing(session, player_id)
-    changes = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    # Un `null` explícito solo significa algo para el alias (borrarlo); en el resto, no cambiar.
+    changes = {
+        k: v
+        for k, v in payload.model_dump(exclude_unset=True).items()
+        if v is not None or k == "alias"
+    }
     try:
         await players_repo.update_player(session, player, changes)
     except players_repo.DuplicateDorsalError as error:

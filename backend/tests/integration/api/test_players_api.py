@@ -30,6 +30,54 @@ async def test_head_coach_creates_a_player(client: AsyncClient, login: Login) ->
     assert data["is_active"] is True
 
 
+async def test_a_player_has_no_alias_unless_given(client: AsyncClient, login: Login) -> None:
+    headers = await login(Role.HEAD_COACH)
+
+    response = await create(client, headers)
+
+    assert response.json()["data"]["alias"] is None
+
+
+async def test_a_player_can_be_created_with_an_alias(client: AsyncClient, login: Login) -> None:
+    headers = await login(Role.HEAD_COACH)
+
+    created = await create(client, headers, alias="Pedri")
+    listing = await client.get("/players", headers=headers)
+
+    assert created.json()["data"]["alias"] == "Pedri"
+    assert listing.json()["data"][0]["alias"] == "Pedri"
+
+
+async def test_the_alias_can_be_changed_and_removed(client: AsyncClient, login: Login) -> None:
+    headers = await login(Role.HEAD_COACH)
+    player_id = (await create(client, headers, alias="Pedri")).json()["data"]["id"]
+
+    changed = await client.patch(f"/players/{player_id}", json={"alias": "Pedro"}, headers=headers)
+    removed = await client.patch(f"/players/{player_id}", json={"alias": None}, headers=headers)
+
+    assert changed.json()["data"]["alias"] == "Pedro"
+    assert removed.json()["data"]["alias"] is None
+    assert removed.json()["data"]["name"] == "Pedro Gómez"
+
+
+async def test_updating_other_fields_keeps_the_alias(client: AsyncClient, login: Login) -> None:
+    headers = await login(Role.HEAD_COACH)
+    player_id = (await create(client, headers, alias="Pedri")).json()["data"]["id"]
+
+    response = await client.patch(f"/players/{player_id}", json={"dorsal": 9}, headers=headers)
+
+    assert response.json()["data"]["alias"] == "Pedri"
+
+
+async def test_an_alias_cannot_be_blank_or_too_long(client: AsyncClient, login: Login) -> None:
+    headers = await login(Role.HEAD_COACH)
+
+    blank = await create(client, headers, alias="   ")
+    too_long = await create(client, headers, alias="x" * 31)
+
+    assert (blank.status_code, too_long.status_code) == (422, 422)
+
+
 async def test_assistant_coach_cannot_create_update_or_delete(
     client: AsyncClient, login: Login
 ) -> None:

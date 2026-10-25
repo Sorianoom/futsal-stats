@@ -50,6 +50,15 @@ describe("StartersPicker", () => {
     expect(screen.getByText("3 de 5 elegidos")).toBeInTheDocument();
   });
 
+  it("en la pista pone el alias, pero el botón y la lista conservan el nombre completo", () => {
+    const players = ROSTER.map((p) => (p.id === "a" ? { ...p, alias: "Alias A" } : p));
+    renderPicker({ players, proposed: ["a"] });
+
+    expect(onCourt().getByText("Alias A")).toBeInTheDocument();
+    expect(onCourt().getByRole("button", { name: "Quitar a Jugador a" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Jugador a")).toBeChecked();
+  });
+
   it("la pista empieza vacía si no hay propuesta", () => {
     renderPicker();
 
