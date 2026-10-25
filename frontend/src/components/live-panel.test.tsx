@@ -52,6 +52,21 @@ describe("LivePanel", () => {
     expect(within(screen.getByRole("list", { name: "Banquillo" })).getAllByRole("listitem")).toHaveLength(2);
   });
 
+  it("muestra el alias en la pista y el banquillo, y el nombre completo si no tiene", () => {
+    renderPanel({
+      court: [{ ...player("gk", 1, "goalkeeper"), alias: "Gordo" }, player("a", 7)],
+      bench: [{ ...player("e", 5), alias: "Ñoño" }, player("f", 11)],
+    });
+
+    const court = within(courtList());
+    expect(court.getByText("Gordo")).toBeInTheDocument();
+    expect(court.getByText("Jugador a")).toBeInTheDocument();
+    expect(court.queryByText("Jugador gk")).not.toBeInTheDocument();
+    const bench = within(screen.getByRole("list", { name: "Banquillo" }));
+    expect(bench.getByText("Ñoño")).toBeInTheDocument();
+    expect(bench.getByText("Jugador f")).toBeInTheDocument();
+  });
+
   it("coloca a cada jugador de la pista en una posición distinta de la cancha", () => {
     renderPanel();
 

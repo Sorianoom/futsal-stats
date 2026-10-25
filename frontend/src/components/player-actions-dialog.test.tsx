@@ -36,6 +36,15 @@ describe("PlayerActionsDialog", () => {
     expect(props.onSubstituteWith).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }));
   });
 
+  it("en los botones de cambio rápido pone el alias, y el título lleva el nombre completo", () => {
+    setup([{ ...player("b", 9), alias: "Bebé" }, player("c", 11)]);
+
+    const group = within(screen.getByRole("group", { name: "Cambiar por" }));
+    expect(group.getByText("Bebé")).toBeInTheDocument();
+    expect(group.getByText("Jugador c")).toBeInTheDocument();
+    expect(screen.getByText("7 · Jugador a")).toBeInTheDocument();
+  });
+
   it("no muestra el apartado de cambio rápido si no hay nadie en el banquillo", () => {
     setup([]);
 

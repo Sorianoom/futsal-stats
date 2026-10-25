@@ -48,6 +48,62 @@ describe("PlantillaPage", () => {
     expect(screen.getByText("Disponible")).toBeInTheDocument();
   });
 
+  it("muestra el alias de cada jugador bajo su nombre completo", async () => {
+    roster = [LUIS, { ...PEDRO, alias: "Pedri" }];
+    api();
+
+    renderWithAuth(<PlantillaPage />);
+
+    expect(await screen.findByText("Pedro Gómez")).toBeInTheDocument();
+    expect(screen.getByText("Pedri")).toBeInTheDocument();
+  });
+
+  it("el entrenador añade un jugador con alias", async () => {
+    const server = api({
+      "POST /players": (request) => {
+        const created = { ...(request.body as object), id: "p3", status: "available", is_active: true };
+        roster = [...roster, created as Player];
+        return { status: 201, data: created };
+      },
+    });
+    renderWithAuth(<PlantillaPage />);
+    await screen.findByText("Luis Prado");
+
+    await userEvent.click(screen.getByRole("button", { name: "Añadir jugador" }));
+    await userEvent.type(screen.getByLabelText("Nombre"), "Ana López");
+    await userEvent.type(screen.getByLabelText("Alias"), "Anita");
+    await userEvent.type(screen.getByLabelText("Dorsal"), "10");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(await screen.findByText("Anita")).toBeInTheDocument();
+    expect(server.calls.find((c) => c.method === "POST")?.body).toEqual({
+      name: "Ana López",
+      alias: "Anita",
+      dorsal: 10,
+      position: "field",
+    });
+  });
+
+  it("el entrenador cambia y borra el alias de un jugador", async () => {
+    roster = [LUIS, { ...PEDRO, alias: "Pedri" }];
+    const server = api({
+      "PATCH /players/p2": (request) => {
+        roster = roster.map((p) => (p.id === "p2" ? { ...p, ...(request.body as object) } : p));
+        return { data: roster[1] };
+      },
+    });
+    renderWithAuth(<PlantillaPage />);
+    await screen.findByText("Pedri");
+
+    await userEvent.click(screen.getByRole("button", { name: "Editar Pedro Gómez" }));
+    expect(screen.getByLabelText("Alias")).toHaveValue("Pedri");
+    await userEvent.clear(screen.getByLabelText("Alias"));
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(screen.queryByText("Pedri")).not.toBeInTheDocument());
+    expect(server.calls.find((c) => c.method === "PATCH")?.body).toMatchObject({ alias: null });
+  });
+
   it("indica cuando la plantilla está vacía", async () => {
     roster = [];
     api();
