@@ -22,7 +22,8 @@ import {
 
 const NOT_FOUND = 404;
 const DELETE_ERROR = "No se pudo borrar el tramo. Inténtalo de nuevo.";
-const LINK = "inline-flex min-h-12 items-center px-3 underline";
+const LINK =
+  "inline-flex min-h-12 items-center rounded-2xl border-2 bg-card px-5 font-bold [@media(hover:hover)]:hover:bg-muted";
 const PARTS = [1, 2] as const;
 
 interface Loaded {
@@ -67,9 +68,9 @@ function StintRow({
   onConfirmDelete,
 }: RowProps) {
   return (
-    <li key={stint.id} className="flex items-center gap-4 rounded-xl border bg-card p-4">
+    <li key={stint.id} className="flex items-center gap-4 rounded-2xl border-2 bg-card p-4">
       <span className="flex-1">
-        <span className="block text-lg font-medium">{name}</span>
+        <span className="block text-lg font-extrabold">{name}</span>
         <span className="block text-muted-foreground">{range}</span>
       </span>
       {confirming ? (
@@ -183,15 +184,17 @@ export function CorrectMatch({ matchId }: { matchId: string }) {
   const ordered = [...stints].sort((a, b) => a.part - b.part || a.start_s - b.start_s);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">{match ? `Corregir vs ${match.opponent}` : "Corregir partido"}</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">
+          {match ? `Corregir vs ${match.opponent}` : "Corregir partido"}
+        </h1>
         <Link href={`/estadisticas?id=${matchId}`} className={LINK}>
           Ver estadísticas
         </Link>
       </header>
 
-      <p className="rounded-lg border p-3 text-muted-foreground">
+      <p className="rounded-2xl bg-card p-4 text-muted-foreground">
         Rehacer el cierre del partido borra estas correcciones y vuelve a calcular los tramos desde la
         alineación original. Las horas se muestran como las vería el marcador.
       </p>
@@ -215,7 +218,7 @@ export function CorrectMatch({ matchId }: { matchId: string }) {
           if (inPart.length === 0) return null;
           return (
             <section key={part} className="space-y-2">
-              <h2 className="text-xl font-semibold">{`Parte ${part}`}</h2>
+              <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">{`Parte ${part}`}</h2>
               <ul aria-label={`Tramos de la parte ${part}`} className="space-y-3">
                 {inPart.map((stint) => (
                   <StintRow
@@ -236,7 +239,7 @@ export function CorrectMatch({ matchId }: { matchId: string }) {
         })
       )}
 
-      <Button size="lg" onClick={() => setTarget({ kind: "add" })}>
+      <Button size="lg" variant="cta" className="rounded-2xl" onClick={() => setTarget({ kind: "add" })}>
         Añadir tramo
       </Button>
 
