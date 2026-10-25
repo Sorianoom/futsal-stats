@@ -135,6 +135,46 @@ describe("PlantillaPage", () => {
     expect(server.calls.some((c) => c.method === "POST")).toBe(false);
   });
 
+  it("indica cuántos jugadores hay en cada filtro y marca el activo", async () => {
+    api();
+    renderWithAuth(<PlantillaPage />);
+    await screen.findByText("Luis Prado");
+
+    expect(screen.getByRole("button", { name: "Todos 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Campo 1" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Porteros 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lesionados 1" })).toBeInTheDocument();
+  });
+
+  it("filtra la lista por posición y por lesionados", async () => {
+    api();
+    renderWithAuth(<PlantillaPage />);
+    await screen.findByText("Luis Prado");
+
+    await userEvent.click(screen.getByRole("button", { name: "Porteros 1" }));
+    expect(screen.getByText("Luis Prado")).toBeInTheDocument();
+    expect(screen.queryByText("Pedro Gómez")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Lesionados 1" }));
+    expect(screen.getByText("Pedro Gómez")).toBeInTheDocument();
+    expect(screen.queryByText("Luis Prado")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Todos 2" }));
+    expect(screen.getByText("Luis Prado")).toBeInTheDocument();
+    expect(screen.getByText("Pedro Gómez")).toBeInTheDocument();
+  });
+
+  it("avisa cuando el filtro no tiene jugadores", async () => {
+    roster = [LUIS];
+    api();
+    renderWithAuth(<PlantillaPage />);
+    await screen.findByText("Luis Prado");
+
+    await userEvent.click(screen.getByRole("button", { name: "Lesionados 0" }));
+
+    expect(screen.getByText("No hay jugadores con este filtro")).toBeInTheDocument();
+  });
+
   it("el entrenador cambia el estado de un jugador", async () => {
     const server = api({
       "PATCH /players/p2": (request) => {

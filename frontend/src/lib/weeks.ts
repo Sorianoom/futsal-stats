@@ -53,6 +53,18 @@ export function formatShortDay(iso: string): string {
   return SHORT_DAY.format(parseDay(iso));
 }
 
+const LONG_DAY = new Intl.DateTimeFormat("es-ES", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/** "domingo, 25 de octubre" */
+export function formatLongDay(iso: string): string {
+  return LONG_DAY.format(parseDay(iso));
+}
+
 /** "19 oct – 25 oct 2026" */
 export function formatWeekRange(weekStart: string): string {
   const sunday = addDays(weekStart, DAYS_PER_WEEK - 1);
