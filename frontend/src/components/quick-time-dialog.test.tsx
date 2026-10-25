@@ -136,6 +136,18 @@ describe("QuickTimeDialog", () => {
     expect(onConfirm).toHaveBeenCalledWith(450);
   });
 
+  it("cada vez que se abre vuelve a empezar desde el tiempo propuesto, sin arrastrar ajustes", async () => {
+    const props = { title: "Cambio", settings: DOWN, suggested: 300, onConfirm: vi.fn(), onCancel: vi.fn() };
+    const { rerender } = render(<QuickTimeDialog open {...props} />);
+    await tap("−1 min");
+    expect(screen.getByRole("status")).toHaveTextContent("14:00");
+
+    rerender(<QuickTimeDialog open={false} {...props} />);
+    rerender(<QuickTimeDialog open {...props} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("15:00");
+  });
+
   it("cancelar no confirma nada", async () => {
     const { onConfirm, onCancel } = setup();
 
