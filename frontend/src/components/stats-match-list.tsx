@@ -97,7 +97,7 @@ export function StatsMatchList() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <h1 className="text-3xl font-bold">Estadísticas</h1>
+      <h1 className="text-4xl font-extrabold tracking-tight">Estadísticas</h1>
 
       <Season />
 

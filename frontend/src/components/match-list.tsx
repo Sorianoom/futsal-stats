@@ -39,9 +39,9 @@ export function MatchList() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Partidos</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">Partidos</h1>
         <Button size="lg" onClick={() => setCreating(true)}>
           Nuevo partido
         </Button>

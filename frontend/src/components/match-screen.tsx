@@ -217,7 +217,7 @@ export function MatchScreen({ matchId }: { matchId: string }) {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">vs {loaded.data.match.opponent}</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">vs {loaded.data.match.opponent}</h1>
         <Link
           href="/partido"
           className="inline-flex min-h-12 items-center px-3 underline"
