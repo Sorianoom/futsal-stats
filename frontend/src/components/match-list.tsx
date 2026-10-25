@@ -8,6 +8,7 @@ import { NewMatchDialog } from "@/components/new-match-dialog";
 import { Button } from "@/components/ui/button";
 import type { Match } from "@/lib/api/match-types";
 import { listMatches } from "@/lib/api/matches";
+import { sortMatchesByDate } from "@/lib/sort-matches";
 import { formatShortDay } from "@/lib/weeks";
 
 export function MatchList() {
@@ -64,7 +65,7 @@ export function MatchList() {
 
       {matches && matches.length > 0 ? (
         <ul aria-label="Partidos" className="grid gap-3 md:grid-cols-2">
-          {matches.map((match) => (
+          {sortMatchesByDate(matches).map((match) => (
             <li key={match.id}>
               <Link
                 href={`/partido?id=${match.id}`}

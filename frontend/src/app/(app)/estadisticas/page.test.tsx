@@ -149,6 +149,24 @@ describe("EstadisticasPage: lista de partidos", () => {
     expect(screen.getByRole("link", { name: /Cádiz/ })).toHaveAttribute("href", "/estadisticas?id=m0");
   });
 
+  it("los ordena por fecha, de 2026 a 2027, aunque el servidor los mande al revés", async () => {
+    matches = [
+      { ...MATCH, id: "m3", held_on: "2027-02-28", opponent: "Deporama" },
+      { ...MATCH, id: "m1", held_on: "2026-10-18", opponent: "Botellines" },
+      { ...MATCH, id: "m4", held_on: "2027-01-24", opponent: "Nevada" },
+    ];
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    const list = await screen.findByRole("list", { name: "Partidos" });
+    expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      expect.stringContaining("Botellines"),
+      expect.stringContaining("Nevada"),
+      expect.stringContaining("Deporama"),
+    ]);
+  });
+
   it("indica cuando no hay partidos", async () => {
     matches = [];
     api();
