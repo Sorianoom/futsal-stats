@@ -1,0 +1,18 @@
+# C.D. Ogijares 89 C.F. · 2ª Andaluza Senior Masculino F.S. (Granada), grupo 2 · temporada 2026/27
+# Fuente: Universo RFAF. Una línea por partido: AAAA-MM-DD Rival
+# Descansa en las jornadas 2 y 9.
+#
+# Importar (ver antes qué haría, sin escribir nada):
+#   uv run python -m app.cli import-matches docs/calendario-2026-27.txt --dry-run
+2026-10-18 Botellines de Lanjarón
+2026-11-08 Nevada Eagles
+2026-11-15 Puerto de Motril
+2026-11-22 Athletic Txapeldunak
+2026-11-29 Santa Fe
+2026-12-13 Deporama Fútbol Sala
+2026-12-20 Botellines de Lanjarón
+2027-01-24 Nevada Eagles
+2027-01-31 Puerto de Motril
+2027-02-07 Athletic Txapeldunak
+2027-02-14 Santa Fe
+2027-02-28 Deporama Fútbol Sala
