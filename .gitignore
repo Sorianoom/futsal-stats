@@ -23,3 +23,7 @@ __pycache__/
 *:Zone.Identifier
 .mypy_cache/
 .ruff_cache/
+
+# Descargas de Universo RFAF (llevan datos personales de la cuenta)
+docs/Universo RFAF.html
+docs/Universo RFAF_files/
