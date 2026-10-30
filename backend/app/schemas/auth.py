@@ -29,3 +29,7 @@ class TokenData(BaseModel):
 
 class LoginData(TokenData):
     user: UserOut
+
+
+class SessionsRevoked(BaseModel):
+    revoked: int

@@ -167,3 +167,50 @@ def test_short_secret_is_a_configuration_error() -> None:
 def test_wildcard_cors_origin_is_rejected() -> None:
     with pytest.raises(ValueError, match="CORS"):
         Settings(_env_file=None, cors_origins=["*"])
+
+
+def test_refresh_token_round_trips_its_jti() -> None:
+    jti = uuid.uuid4()
+    token = create_token(USER_ID, Role.HEAD_COACH, TokenType.REFRESH, settings(), jti=jti)
+
+    claims = decode_token(token, TokenType.REFRESH, settings())
+
+    assert claims.jti == jti
+
+
+def test_a_token_without_jti_decodes_with_none() -> None:
+    token = create_token(USER_ID, Role.HEAD_COACH, TokenType.REFRESH, settings())
+
+    assert decode_token(token, TokenType.REFRESH, settings()).jti is None
+
+
+def test_a_malformed_jti_is_rejected() -> None:
+    payload = {**forged_payload(), "type": "refresh", "jti": "no-es-un-uuid"}
+    token = jwt.encode(payload, SECRET, algorithm="HS256")
+
+    with pytest.raises(TokenError):
+        decode_token(token, TokenType.REFRESH, settings())
+
+
+def test_expiry_is_capped_by_the_absolute_limit() -> None:
+    issued = datetime.now(UTC)
+    cap = issued + timedelta(days=3)
+    token = create_token(
+        USER_ID, Role.HEAD_COACH, TokenType.REFRESH, settings(), now=issued, expires_cap=cap
+    )
+
+    exp = jwt.decode(token, SECRET, algorithms=["HS256"], options={"verify_aud": False})["exp"]
+
+    assert exp == int(cap.timestamp())
+
+
+def test_a_cap_beyond_the_normal_lifetime_does_not_extend_it() -> None:
+    issued = datetime.now(UTC)
+    cap = issued + timedelta(days=365)
+    token = create_token(
+        USER_ID, Role.HEAD_COACH, TokenType.ACCESS, settings(), now=issued, expires_cap=cap
+    )
+
+    exp = jwt.decode(token, SECRET, algorithms=["HS256"], options={"verify_aud": False})["exp"]
+
+    assert exp == int((issued + timedelta(minutes=settings().access_token_ttl_minutes)).timestamp())

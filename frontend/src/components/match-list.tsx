@@ -2,42 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { NewMatchDialog } from "@/components/new-match-dialog";
 import { Button } from "@/components/ui/button";
-import type { Match } from "@/lib/api/match-types";
-import { listMatches } from "@/lib/api/matches";
+import { matchesQuery } from "@/lib/queries";
 import { sortMatchesByDate } from "@/lib/sort-matches";
+import { useApiQuery } from "@/lib/use-api-query";
 import { formatShortDay } from "@/lib/weeks";
 
 export function MatchList() {
   const router = useRouter();
-  const [matches, setMatches] = useState<Match[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: matches, failed: loadFailed, reload: retry } = useApiQuery(matchesQuery.key, matchesQuery.fetch);
   const [creating, setCreating] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    listMatches()
-      .then((list) => {
-        if (!active) return;
-        setMatches(list);
-        setLoadFailed(false);
-      })
-      .catch(() => {
-        if (active) setLoadFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [reloadKey]);
-
-  function retry() {
-    setLoadFailed(false);
-    setReloadKey((key) => key + 1);
-  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">

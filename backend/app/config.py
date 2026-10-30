@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 LOCAL_DEV_DATABASE_URL = "postgresql+asyncpg://futsal:futsal@localhost:54329/futsal"
@@ -24,7 +24,14 @@ class Settings(BaseSettings):
     jwt_issuer: str = "futsal-stats"
     jwt_audience: str = "futsal-stats-app"
     access_token_ttl_minutes: int = 15
-    refresh_token_ttl_days: int = 30
+    # Inactividad máxima de una sesión: cada renovación del refresco la vuelve a dar por este plazo.
+    refresh_token_ttl_days: int = Field(default=30, ge=1)
+    # Tope absoluto desde el inicio de sesión: pasado este plazo hay que volver a iniciar sesión,
+    # aunque se haya usado la app todos los días.
+    refresh_session_max_days: int = Field(default=30, ge=1, le=365)
+    # Tras rotar el refresco, el anterior sigue valiendo este tiempo: si la respuesta con la cookie
+    # nueva se pierde por un corte de red, el siguiente intento legítimo no cierra la sesión.
+    refresh_reuse_grace_seconds: int = Field(default=7200, ge=0, le=86400)
     cookie_secure: bool = True
     # Vercel entrega al backend la ruta original (/api/...): vacío en local, "/api" en producción.
     api_prefix: str = ""
@@ -52,6 +59,15 @@ class Settings(BaseSettings):
         if prefix and (not prefix.startswith("/") or prefix.endswith("/")):
             raise ValueError("API_PREFIX debe estar vacío o empezar por '/' y no terminar en '/'")
         return prefix
+
+    @model_validator(mode="after")
+    def _check_refresh_ttl_within_cap(self) -> "Settings":
+        if self.refresh_token_ttl_days > self.refresh_session_max_days:
+            raise ValueError(
+                "refresh_token_ttl_days no puede superar refresh_session_max_days: "
+                "la inactividad permitida no puede ser mayor que el tope de la sesión"
+            )
+        return self
 
     @property
     def refresh_cookie_path(self) -> str:

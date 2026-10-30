@@ -1,17 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 import { SeasonStatsTable } from "@/components/stats-tables";
 import { Button } from "@/components/ui/button";
-import type { Match } from "@/lib/api/match-types";
-import { listMatches } from "@/lib/api/matches";
-import { getSeasonStats } from "@/lib/api/stats";
-import type { SeasonPlayerStats, SeasonStats } from "@/lib/api/stats-types";
+import type { SeasonPlayerStats } from "@/lib/api/stats-types";
 import { formatClock } from "@/lib/match/clock";
+import { matchesQuery, seasonStatsQuery } from "@/lib/queries";
 import { seasonLeaders, type Leader } from "@/lib/season-leaders";
 import { sortMatchesByDate } from "@/lib/sort-matches";
+import { useApiQuery } from "@/lib/use-api-query";
 import { formatShortDay } from "@/lib/weeks";
 
 function leaderValue(leader: Leader): string {
@@ -36,25 +34,7 @@ function Leaders({ players }: { players: readonly SeasonPlayerStats[] }) {
 }
 
 function Season() {
-  const [season, setSeason] = useState<SeasonStats | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    getSeasonStats()
-      .then((loaded) => {
-        if (!active) return;
-        setSeason(loaded);
-        setFailed(false);
-      })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [reloadKey]);
+  const { data: season, failed, reload } = useApiQuery(seasonStatsQuery.key, seasonStatsQuery.fetch);
 
   return (
     <section className="space-y-3">
@@ -64,10 +44,7 @@ function Season() {
           <p>No se pudo cargar el acumulado</p>
           <Button
             variant="outline"
-            onClick={() => {
-              setFailed(false);
-              setReloadKey((key) => key + 1);
-            }}
+            onClick={reload}
           >
             Reintentar
           </Button>
@@ -100,25 +77,7 @@ function Season() {
 }
 
 export function StatsMatchList() {
-  const [matches, setMatches] = useState<Match[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    listMatches()
-      .then((list) => {
-        if (!active) return;
-        setMatches(list);
-        setFailed(false);
-      })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [reloadKey]);
+  const { data: matches, failed, reload } = useApiQuery(matchesQuery.key, matchesQuery.fetch);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -133,10 +92,7 @@ export function StatsMatchList() {
           <p>No se pudieron cargar los partidos</p>
           <Button
             variant="outline"
-            onClick={() => {
-              setFailed(false);
-              setReloadKey((key) => key + 1);
-            }}
+            onClick={reload}
           >
             Reintentar
           </Button>

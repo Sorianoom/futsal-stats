@@ -3,6 +3,8 @@
  * httpOnly que gestiona el navegador. Ante un 401 se renueva la sesión una sola vez.
  */
 
+import { queryCache } from "@/lib/query-cache";
+
 const DEV_API_URL = "http://localhost:8000";
 
 /** En producción la URL es obligatoria y https: un export estático con localhost no sirve. */
@@ -67,7 +69,10 @@ let pendingRefresh: Promise<boolean> | null = null;
 let sessionEpoch = 0;
 
 export function setAccessToken(token: string | null): void {
-  if (token === null) sessionEpoch += 1;
+  if (token === null) {
+    sessionEpoch += 1;
+    queryCache.clear(); // lo cacheado era de la sesión que se cierra
+  }
   accessToken = token;
 }
 

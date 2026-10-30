@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { PlayerFormDialog } from "@/components/player-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listPlayers } from "@/lib/api/players";
 import type { Player } from "@/lib/api/types";
 import { POSITION_LABEL, STATUS_LABEL } from "@/lib/labels";
+import { playersQuery } from "@/lib/queries";
+import { useApiQuery } from "@/lib/use-api-query";
 import { cn } from "@/lib/utils";
 
 type RosterFilter = "all" | "field" | "goalkeeper" | "injured";
@@ -23,31 +24,13 @@ const FILTERS: { id: RosterFilter; label: string; matches: (player: Player) => b
 export default function PlantillaPage() {
   const { user } = useAuth();
   const canEdit = user?.role === "head_coach";
-  const [players, setPlayers] = useState<Player[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: players, failed: loadFailed, reload } = useApiQuery(playersQuery.key, playersQuery.fetch);
   const [editing, setEditing] = useState<Player | "new" | null>(null);
   const [filter, setFilter] = useState<RosterFilter>("all");
 
-  useEffect(() => {
-    let active = true;
-    listPlayers()
-      .then((list) => {
-        if (!active) return;
-        setPlayers(list);
-        setLoadFailed(false);
-      })
-      .catch(() => {
-        if (active) setLoadFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [reloadKey]);
-
   function handleSaved() {
     setEditing(null);
-    setReloadKey((key) => key + 1);
+    reload();
   }
 
   const activeFilter = FILTERS.find((candidate) => candidate.id === filter) ?? FILTERS[0];
@@ -74,7 +57,7 @@ export default function PlantillaPage() {
       {loadFailed ? (
         <div role="alert" className="flex items-center justify-between rounded-2xl border p-4">
           <p>No se pudo cargar la plantilla</p>
-          <Button variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
+          <Button variant="outline" onClick={reload}>
             Reintentar
           </Button>
         </div>
