@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,16 +72,37 @@ async def adopt_legacy(
     return Rotation(row, row.current_jti)
 
 
-async def _lock_by_jti(db: AsyncSession, jti: uuid.UUID) -> RefreshSession | None:
-    query = (
-        select(RefreshSession)
-        .where(or_(RefreshSession.current_jti == jti, RefreshSession.previous_jti == jti))
-        .with_for_update()
-    )
-    row = (await db.execute(query)).scalar_one_or_none()
+async def _lock_one(db: AsyncSession, condition: ColumnElement[bool]) -> RefreshSession | None:
+    row = (
+        await db.execute(select(RefreshSession).where(condition).with_for_update())
+    ).scalar_one_or_none()
     if row is not None:
         await db.refresh(row)  # con el bloqueo tomado, ver lo que confirmó la petición anterior
     return row
+
+
+async def _lock_by_jti(db: AsyncSession, jti: uuid.UUID) -> RefreshSession | None:
+    return await _lock_one(
+        db, or_(RefreshSession.current_jti == jti, RefreshSession.previous_jti == jti)
+    )
+
+
+async def replay_legacy(
+    db: AsyncSession, token_hash: str, now: datetime, grace_seconds: int
+) -> Rotation | None:
+    """Un refresco anterior a las sesiones que ya se adoptó vuelve a presentarse.
+
+    Dentro de la gracia desde la adopción se acepta (la respuesta con la cookie nueva pudo
+    perderse) y se reenvía el `jti` vigente. Pasada la gracia es una reutilización: se revoca.
+    """
+    row = await _lock_one(db, RefreshSession.legacy_token_hash == token_hash)
+    if row is None or not _is_usable(row, now):
+        return None
+    if now - row.created_at <= timedelta(seconds=grace_seconds):
+        return Rotation(row, row.current_jti)
+    _revoke_row(row, RevokeReason.REUSE, now)
+    await db.flush()
+    return None
 
 
 def _is_usable(row: RefreshSession, now: datetime) -> bool:

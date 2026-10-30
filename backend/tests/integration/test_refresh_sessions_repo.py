@@ -125,3 +125,44 @@ async def test_adopting_a_legacy_token_creates_one_session_only_once(
 
     assert first is not None
     assert again is None
+
+
+async def test_a_legacy_token_replayed_within_the_grace_returns_the_current_jti(
+    session: AsyncSession,
+) -> None:
+    user = await make_user(session)
+    adopted = await repo.adopt_legacy(session, user.id, "b" * 64, NOW, MAX_DAYS)
+    assert adopted is not None
+
+    replay = await repo.replay_legacy(session, "b" * 64, NOW + timedelta(seconds=GRACE), GRACE)
+
+    assert replay is not None
+    assert replay.jti == adopted.jti
+
+
+async def test_a_legacy_token_replayed_after_the_grace_revokes_the_session(
+    session: AsyncSession,
+) -> None:
+    user = await make_user(session)
+    adopted = await repo.adopt_legacy(session, user.id, "c" * 64, NOW, MAX_DAYS)
+    assert adopted is not None
+
+    late = await repo.replay_legacy(session, "c" * 64, NOW + timedelta(seconds=GRACE + 1), GRACE)
+
+    assert late is None
+    assert adopted.session.revoke_reason is RevokeReason.REUSE
+
+
+async def test_a_legacy_token_that_was_never_adopted_is_not_replayed(
+    session: AsyncSession,
+) -> None:
+    assert await repo.replay_legacy(session, "d" * 64, NOW, GRACE) is None
+
+
+async def test_a_revoked_session_does_not_accept_its_legacy_token(session: AsyncSession) -> None:
+    user = await make_user(session)
+    adopted = await repo.adopt_legacy(session, user.id, "e" * 64, NOW, MAX_DAYS)
+    assert adopted is not None
+    await repo.revoke(session, adopted.jti, RevokeReason.LOGOUT, NOW)
+
+    assert await repo.replay_legacy(session, "e" * 64, NOW, GRACE) is None
