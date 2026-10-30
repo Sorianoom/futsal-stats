@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -134,6 +134,22 @@ def _revoke_row(row: RefreshSession, reason: RevokeReason, now: datetime) -> Non
     if row.revoked_at is None:
         row.revoked_at = now
         row.revoke_reason = reason
+
+
+async def revoke_all_for_user(db: AsyncSession, user_id: uuid.UUID, now: datetime) -> int:
+    """Cierra por orden administrativa todas las sesiones abiertas del usuario. Devuelve cuántas.
+
+    Las que ya estaban cerradas conservan su motivo.
+    """
+    statement = (
+        update(RefreshSession)
+        .where(RefreshSession.user_id == user_id, RefreshSession.revoked_at.is_(None))
+        .values(revoked_at=now, revoke_reason=RevokeReason.ADMIN)
+        .returning(RefreshSession.id)
+    )
+    closed = (await db.execute(statement)).scalars().all()
+    await db.flush()
+    return len(closed)
 
 
 async def revoke(db: AsyncSession, jti: uuid.UUID, reason: RevokeReason, now: datetime) -> None:

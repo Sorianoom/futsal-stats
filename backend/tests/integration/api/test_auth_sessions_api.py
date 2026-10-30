@@ -12,7 +12,7 @@ from app.auth.tokens import TokenType, create_token
 from app.db.models import RefreshSession
 from app.domain.auth_sessions import RevokeReason
 from app.domain.roles import Role
-from tests.integration.api.conftest import PASSWORD, TEST_SETTINGS, MakeUser
+from tests.integration.api.conftest import PASSWORD, TEST_SETTINGS, Login, MakeUser
 
 EMAIL = "coach@club.es"
 GRACE = TEST_SETTINGS.refresh_reuse_grace_seconds
@@ -215,3 +215,71 @@ async def test_a_legacy_token_of_a_user_that_no_longer_exists_is_unauthorized(
     ghost = create_token(uuid.uuid4(), Role.HEAD_COACH, TokenType.REFRESH, TEST_SETTINGS)
 
     assert (await refresh_with(client, ghost)).status_code == 401
+
+
+async def tablet_cookie(client: AsyncClient, make_user: MakeUser) -> tuple[uuid.UUID, str]:
+    """Inicia sesión como el ayudante desde 'su iPad' y devuelve su id y su cookie."""
+    tablet_user = await make_user("ipad@club.es", Role.ASSISTANT_COACH)
+    response = await client.post(
+        "/auth/login", json={"email": "ipad@club.es", "password": PASSWORD}
+    )
+    return tablet_user.id, cookie_of(response)
+
+
+async def test_the_head_coach_closes_every_session_of_a_lost_ipad(
+    client: AsyncClient, make_user: MakeUser, login: Login, session: AsyncSession
+) -> None:
+    headers = await login(Role.HEAD_COACH)
+    user_id, cookie = await tablet_cookie(client, make_user)
+
+    response = await client.delete(f"/auth/users/{user_id}/sessions", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"revoked": 1}
+    assert (await refresh_with(client, cookie)).status_code == 401
+    rows = (
+        await session.execute(select(RefreshSession).where(RefreshSession.user_id == user_id))
+    ).scalars()
+    assert {row.revoke_reason for row in rows} == {RevokeReason.ADMIN}
+
+
+async def test_closing_the_sessions_of_one_user_keeps_the_others_open(
+    client: AsyncClient, make_user: MakeUser, login: Login
+) -> None:
+    headers = await login(Role.HEAD_COACH)
+    user_id, _ = await tablet_cookie(client, make_user)
+    me = (await client.get("/auth/me", headers=headers)).json()["data"]
+    own = await client.post("/auth/login", json={"email": me["email"], "password": PASSWORD})
+
+    await client.delete(f"/auth/users/{user_id}/sessions", headers=headers)
+
+    assert (await refresh_with(client, cookie_of(own))).status_code == 200
+
+
+async def test_the_assistant_coach_cannot_close_sessions(
+    client: AsyncClient, make_user: MakeUser, login: Login
+) -> None:
+    headers = await login(Role.ASSISTANT_COACH)
+    user_id, cookie = await tablet_cookie(client, make_user)
+
+    response = await client.delete(f"/auth/users/{user_id}/sessions", headers=headers)
+
+    assert response.status_code == 403
+    assert (await refresh_with(client, cookie)).status_code == 200
+
+
+async def test_closing_sessions_requires_authentication(client: AsyncClient) -> None:
+    response = await client.delete(f"/auth/users/{uuid.uuid4()}/sessions")
+
+    assert response.status_code == 401
+
+
+async def test_closing_the_sessions_of_an_unknown_user_is_not_found(
+    client: AsyncClient, login: Login
+) -> None:
+    headers = await login(Role.HEAD_COACH)
+
+    response = await client.delete(f"/auth/users/{uuid.uuid4()}/sessions", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"

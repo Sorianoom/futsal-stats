@@ -1,5 +1,6 @@
 """Login, refresco, cierre de sesión y usuario actual."""
 
+import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response
 
 from app.api.deps import (
     CurrentUser,
+    HeadCoach,
     SessionDep,
     SettingsDep,
     require_trusted_origin,
@@ -25,10 +27,10 @@ from app.auth.refresh_flow import rotate_refresh_token
 from app.auth.tokens import TokenError, TokenType, create_token, decode_token
 from app.config import Settings
 from app.db.models import User
-from app.db.refresh_sessions_repo import Rotation, create_session, revoke
+from app.db.refresh_sessions_repo import Rotation, create_session, revoke, revoke_all_for_user
 from app.db.users_repo import get_user, get_user_by_email
 from app.domain.auth_sessions import RevokeReason
-from app.schemas.auth import LoginData, LoginRequest, TokenData, UserOut
+from app.schemas.auth import LoginData, LoginRequest, SessionsRevoked, TokenData, UserOut
 
 REFRESH_COOKIE = "refresh_token"
 SECONDS_PER_DAY = 86400
@@ -187,3 +189,18 @@ async def logout(
 @router.get("/me", response_model=Envelope[UserOut])
 async def me(user: CurrentUser) -> Envelope[UserOut]:
     return ok(UserOut.model_validate(user))
+
+
+@router.delete("/users/{user_id}/sessions", response_model=Envelope[SessionsRevoked])
+async def revoke_user_sessions(
+    user_id: uuid.UUID, _: HeadCoach, session: SessionDep
+) -> Envelope[SessionsRevoked]:
+    """Cierra todas las sesiones de un usuario (iPad perdido, baja). Solo el entrenador principal.
+
+    Los tokens de acceso ya emitidos siguen valiendo hasta que caducan (minutos); el refresco no.
+    """
+    if await get_user(session, user_id) is None:
+        raise ApiError(404, "not_found", "Usuario no encontrado")
+    revoked = await revoke_all_for_user(session, user_id, datetime.now(UTC))
+    await session.commit()
+    return ok(SessionsRevoked(revoked=revoked))

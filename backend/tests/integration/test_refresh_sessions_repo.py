@@ -166,3 +166,45 @@ async def test_a_revoked_session_does_not_accept_its_legacy_token(session: Async
     await repo.revoke(session, adopted.jti, RevokeReason.LOGOUT, NOW)
 
     assert await repo.replay_legacy(session, "e" * 64, NOW, GRACE) is None
+
+
+async def test_revoking_all_sessions_of_a_user_leaves_other_users_alone(
+    session: AsyncSession,
+) -> None:
+    user, other = await make_user(session), await make_user(session)
+    mine_a = await repo.create_session(session, user.id, NOW, MAX_DAYS)
+    mine_b = await repo.create_session(session, user.id, NOW, MAX_DAYS)
+    theirs = await repo.create_session(session, other.id, NOW, MAX_DAYS)
+
+    count = await repo.revoke_all_for_user(session, user.id, NOW)
+
+    assert count == 2
+    await session.refresh(mine_a)
+    await session.refresh(mine_b)
+    await session.refresh(theirs)
+    assert mine_a.revoke_reason is RevokeReason.ADMIN
+    assert mine_b.revoked_at == NOW
+    assert theirs.revoked_at is None
+
+
+async def test_revoking_all_keeps_the_reason_of_sessions_already_closed(
+    session: AsyncSession,
+) -> None:
+    user = await make_user(session)
+    closed = await repo.create_session(session, user.id, NOW, MAX_DAYS)
+    await repo.revoke(session, closed.current_jti, RevokeReason.LOGOUT, NOW)
+    await repo.create_session(session, user.id, NOW, MAX_DAYS)
+
+    count = await repo.revoke_all_for_user(session, user.id, NOW + timedelta(hours=1))
+
+    await session.refresh(closed)
+    assert count == 1
+    assert closed.revoke_reason is RevokeReason.LOGOUT
+
+
+async def test_revoking_all_of_a_user_without_sessions_returns_zero(
+    session: AsyncSession,
+) -> None:
+    user = await make_user(session)
+
+    assert await repo.revoke_all_for_user(session, user.id, NOW) == 0
