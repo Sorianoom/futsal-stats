@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { AttendanceDialog } from "@/components/attendance-dialog";
@@ -8,78 +8,33 @@ import { SessionFormDialog } from "@/components/session-form-dialog";
 import { Button } from "@/components/ui/button";
 import { WeekNavigator } from "@/components/week-navigator";
 import { WinsDialog } from "@/components/wins-dialog";
-import { listSessions } from "@/lib/api/points";
-import { listPlayers } from "@/lib/api/players";
-import type { Player, TeamSession } from "@/lib/api/types";
+import type { TeamSession } from "@/lib/api/types";
 import { SESSION_KIND_LABEL } from "@/lib/labels";
+import { playersQuery, sessionsQuery } from "@/lib/queries";
+import { useApiQuery } from "@/lib/use-api-query";
 import { currentWeekStart, formatShortDay, weekStartOf } from "@/lib/weeks";
-
-interface LoadedSessions {
-  week: string;
-  items: TeamSession[];
-}
 
 export default function EntrenosPage() {
   const { user } = useAuth();
   const isHeadCoach = user?.role === "head_coach";
   const [week, setWeek] = useState(() => currentWeekStart());
-  // null hasta que llega la plantilla: sin ella no se puede pasar lista ni dar victorias.
-  const [players, setPlayers] = useState<Player[] | null>(null);
-  const [loadedSessions, setLoadedSessions] = useState<LoadedSessions | null>(null);
-  const [sessionsFailed, setSessionsFailed] = useState(false);
-  const [playersFailed, setPlayersFailed] = useState(false);
-  const [sessionsKey, setSessionsKey] = useState(0);
-  const [playersKey, setPlayersKey] = useState(0);
   const [creating, setCreating] = useState(false);
   const [attendanceOf, setAttendanceOf] = useState<TeamSession | null>(null);
   const [winsOf, setWinsOf] = useState<TeamSession | null>(null);
 
-  // Solo se muestran las sesiones de la semana visible: nunca las de otra.
-  const sessions = loadedSessions?.week === week ? loadedSessions.items : null;
-
-  useEffect(() => {
-    if (!isHeadCoach) return;
-    let active = true;
-    listPlayers()
-      .then((list) => {
-        if (!active) return;
-        setPlayers(list);
-        setPlayersFailed(false);
-      })
-      .catch(() => {
-        if (active) setPlayersFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [isHeadCoach, playersKey]);
-
-  useEffect(() => {
-    if (!isHeadCoach) return;
-    let active = true;
-    listSessions(week)
-      .then((items) => {
-        if (!active) return;
-        setLoadedSessions({ week, items });
-        setSessionsFailed(false);
-      })
-      .catch(() => {
-        if (active) setSessionsFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [week, sessionsKey, isHeadCoach]);
-
-  function retrySessions() {
-    setSessionsFailed(false);
-    setSessionsKey((key) => key + 1);
-  }
-
-  function retryPlayers() {
-    setPlayersFailed(false);
-    setPlayersKey((key) => key + 1);
-  }
+  // null hasta que llega la plantilla: sin ella no se puede pasar lista ni dar victorias.
+  const {
+    data: players,
+    failed: playersFailed,
+    reload: retryPlayers,
+  } = useApiQuery(isHeadCoach ? playersQuery.key : null, playersQuery.fetch);
+  // La clave lleva la semana: nunca se muestran sesiones de otra semana.
+  const sessionsRequest = sessionsQuery(week);
+  const {
+    data: sessions,
+    failed: sessionsFailed,
+    reload: retrySessions,
+  } = useApiQuery(isHeadCoach ? sessionsRequest.key : null, sessionsRequest.fetch);
 
   if (!isHeadCoach) {
     return <p className="text-lg">Solo el entrenador puede gestionar los entrenos</p>;
@@ -89,13 +44,7 @@ export default function EntrenosPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Entrenos</h1>
-        <WeekNavigator
-          week={week}
-          onChange={(next) => {
-            setWeek(next);
-            setSessionsFailed(false);
-          }}
-        />
+        <WeekNavigator week={week} onChange={setWeek} />
       </header>
 
       <Button size="lg" onClick={() => setCreating(true)}>
@@ -168,7 +117,7 @@ export default function EntrenosPage() {
           setCreating(false);
           // Si la sesión cae en otra semana, se muestra esa semana para que se vea.
           setWeek(weekStartOf(created.held_on));
-          setSessionsKey((key) => key + 1);
+          retrySessions();
         }}
       />
       <AttendanceDialog

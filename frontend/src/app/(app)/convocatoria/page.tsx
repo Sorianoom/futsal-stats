@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { BreakdownDialog } from "@/components/breakdown-dialog";
@@ -8,50 +8,25 @@ import { CallupRanking } from "@/components/callup-ranking";
 import { CallupSummary } from "@/components/callup-summary";
 import { Button } from "@/components/ui/button";
 import { WeekNavigator } from "@/components/week-navigator";
-import { getCallup } from "@/lib/api/points";
-import type { Callup } from "@/lib/api/types";
+import { callupQuery } from "@/lib/queries";
+import { useApiQuery } from "@/lib/use-api-query";
 import { currentWeekStart } from "@/lib/weeks";
 
 export default function ConvocatoriaPage() {
   const { user } = useAuth();
   const isHeadCoach = user?.role === "head_coach";
   const [week, setWeek] = useState(() => currentWeekStart());
-  const [loaded, setLoaded] = useState<Callup | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Solo se muestra lo cargado para la semana visible: nunca datos de otra semana.
-  const callup = loaded?.week === week ? loaded : null;
+  // La clave lleva la semana: nunca se muestran datos de otra semana.
+  const request = callupQuery(week);
+  const {
+    data: callup,
+    failed: loadFailed,
+    reload: retry,
+  } = useApiQuery(isHeadCoach ? request.key : null, request.fetch);
   const selected = callup?.ranking.find((player) => player.player_id === selectedId) ?? null;
-
-  useEffect(() => {
-    if (!isHeadCoach) return;
-    let active = true;
-    getCallup(week)
-      .then((result) => {
-        if (!active) return;
-        setLoaded(result);
-        setLoadFailed(false);
-      })
-      .catch(() => {
-        if (active) setLoadFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [week, reloadKey, isHeadCoach]);
-
-  function changeWeek(next: string) {
-    setWeek(next);
-    setLoadFailed(false);
-  }
-
-  function retry() {
-    setLoadFailed(false);
-    setReloadKey((key) => key + 1);
-  }
 
   function openBreakdown(playerId: string) {
     setSelectedId(playerId);
@@ -66,7 +41,7 @@ export default function ConvocatoriaPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Convocatoria</h1>
-        <WeekNavigator week={week} onChange={changeWeek} />
+        <WeekNavigator week={week} onChange={setWeek} />
       </header>
 
       {loadFailed ? (
