@@ -31,6 +31,7 @@ class TokenClaims:
     user_id: uuid.UUID
     role: Role
     type: TokenType
+    jti: uuid.UUID | None = None  # solo los refrescos de una sesión lo llevan
 
 
 def _lifetime(token_type: TokenType, settings: Settings) -> timedelta:
@@ -45,17 +46,25 @@ def create_token(
     token_type: TokenType,
     settings: Settings,
     now: datetime | None = None,
+    jti: uuid.UUID | None = None,
+    expires_cap: datetime | None = None,
 ) -> str:
+    """`expires_cap` acota la caducidad (tope absoluto de la sesión); nunca la alarga."""
     issued_at = now or datetime.now(UTC)
-    payload = {
+    expires_at = issued_at + _lifetime(token_type, settings)
+    if expires_cap is not None:
+        expires_at = min(expires_at, expires_cap)
+    payload: dict[str, object] = {
         "sub": str(user_id),
         "role": role.value,
         "type": token_type.value,
         "iss": settings.jwt_issuer,
         "aud": settings.jwt_audience,
         "iat": int(issued_at.timestamp()),
-        "exp": int((issued_at + _lifetime(token_type, settings)).timestamp()),
+        "exp": int(expires_at.timestamp()),
     }
+    if jti is not None:
+        payload["jti"] = str(jti)
     return jwt.encode(payload, settings.require_jwt_secret(), algorithm=ALGORITHM)
 
 
@@ -74,6 +83,7 @@ def decode_token(token: str, expected_type: TokenType, settings: Settings) -> To
             user_id=uuid.UUID(payload["sub"]),
             role=Role(payload["role"]),
             type=TokenType(payload["type"]),
+            jti=uuid.UUID(payload["jti"]) if "jti" in payload else None,
         )
     except (jwt.PyJWTError, ValueError) as error:
         raise TokenError("Token no válido") from error
