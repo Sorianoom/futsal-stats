@@ -83,6 +83,20 @@ describe("EntrenosPage", () => {
     expect(within(list).getByText("Táctica")).toBeInTheDocument();
   });
 
+  it("muestra la semana día a día, con hoy marcado y los días con sesión señalados", async () => {
+    api();
+
+    renderWithAuth(<EntrenosPage />);
+
+    const strip = await screen.findByRole("list", { name: "Días de la semana" });
+    const days = within(strip).getAllByRole("listitem");
+    expect(days).toHaveLength(7);
+    expect(days[0]).toHaveTextContent("19");
+    expect(days[2]).toHaveAttribute("aria-current", "date");
+    expect(within(days[1]).getByText("Con sesión")).toBeInTheDocument();
+    expect(within(days[0]).queryByText("Con sesión")).not.toBeInTheDocument();
+  });
+
   it("indica cuando no hay sesiones y cambia de semana", async () => {
     sessions = [];
     const server = api();

@@ -107,7 +107,7 @@ function NewMatchForm({ busy, setBusy, onClose, onCreated }: FormProps) {
         <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" variant="cta" disabled={busy}>
           Crear
         </Button>
       </DialogFooter>

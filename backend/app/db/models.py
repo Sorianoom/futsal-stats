@@ -80,6 +80,7 @@ class Player(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     name: Mapped[str] = mapped_column(String(100))
+    alias: Mapped[str | None] = mapped_column(String(30), default=None)
     dorsal: Mapped[int] = mapped_column(Integer, unique=True)
     position: Mapped[Position] = mapped_column(_enum(Position))
     status: Mapped[PlayerStatus] = mapped_column(

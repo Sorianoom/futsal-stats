@@ -96,6 +96,16 @@ describe("ConvocatoriaPage", () => {
     expect(within(eva).getByText("No juega")).toBeInTheDocument();
   });
 
+  it("cuenta los confirmados sobre las plazas de cada grupo", async () => {
+    api();
+    renderWithAuth(<ConvocatoriaPage />);
+    await rowOf("Ana Ruiz");
+
+    expect(within(screen.getByRole("region", { name: "Campo" })).getByText("2 de 3")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Porteros" })).getByText("1 de 1")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Titulares" })).getByText("1 de 2")).toBeInTheDocument();
+  });
+
   it("resume campo y porteros con los empates y las plazas por decidir", async () => {
     api();
     renderWithAuth(<ConvocatoriaPage />);

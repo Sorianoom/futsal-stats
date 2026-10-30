@@ -44,6 +44,18 @@ export function currentWeekStart(now: Date = new Date()): string {
   return weekStartOf(todayInMadrid(now));
 }
 
+const WEEKDAY_SHORT = new Intl.DateTimeFormat("es-ES", { weekday: "short", timeZone: "UTC" });
+
+/** "lun", "mar"… */
+export function formatWeekdayShort(iso: string): string {
+  return WEEKDAY_SHORT.format(parseDay(iso));
+}
+
+/** Los siete días de la semana que empieza en `weekStart`, de lunes a domingo. */
+export function weekDays(weekStart: string): string[] {
+  return Array.from({ length: DAYS_PER_WEEK }, (_, offset) => addDays(weekStart, offset));
+}
+
 export function shiftWeek(weekStart: string, weeks: number): string {
   return addDays(weekStart, weeks * DAYS_PER_WEEK);
 }
@@ -51,6 +63,18 @@ export function shiftWeek(weekStart: string, weeks: number): string {
 /** "20 oct" */
 export function formatShortDay(iso: string): string {
   return SHORT_DAY.format(parseDay(iso));
+}
+
+const LONG_DAY = new Intl.DateTimeFormat("es-ES", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/** "domingo, 25 de octubre" */
+export function formatLongDay(iso: string): string {
+  return LONG_DAY.format(parseDay(iso));
 }
 
 /** "19 oct – 25 oct 2026" */

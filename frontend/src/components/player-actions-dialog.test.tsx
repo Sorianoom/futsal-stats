@@ -1,0 +1,61 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import type { Player } from "@/lib/api/types";
+
+import { PlayerActionsDialog } from "./player-actions-dialog";
+
+function player(id: string, dorsal: number): Player {
+  return { id, name: `Jugador ${id}`, dorsal, position: "field", status: "available", is_active: true };
+}
+
+function setup(bench: Player[]) {
+  const props = {
+    player: player("a", 7),
+    bench,
+    onClose: vi.fn(),
+    onQuick: vi.fn(),
+    onGoal: vi.fn(),
+    onRed: vi.fn(),
+    onSubstitute: vi.fn(),
+    onSubstituteWith: vi.fn(),
+  };
+  render(<PlayerActionsDialog {...props} />);
+  return props;
+}
+
+describe("PlayerActionsDialog", () => {
+  it("ofrece el banquillo para cambiar al jugador con un solo toque", async () => {
+    const props = setup([player("b", 9), player("c", 11)]);
+
+    const group = screen.getByRole("group", { name: "Cambiar por" });
+    expect(within(group).getAllByRole("button")).toHaveLength(2);
+    await userEvent.click(within(group).getByRole("button", { name: /Jugador c/ }));
+
+    expect(props.onSubstituteWith).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }));
+  });
+
+  it("en los botones de cambio rápido pone el alias, y el título lleva el nombre completo", () => {
+    setup([{ ...player("b", 9), alias: "Bebé" }, player("c", 11)]);
+
+    const group = within(screen.getByRole("group", { name: "Cambiar por" }));
+    expect(group.getByText("Bebé")).toBeInTheDocument();
+    expect(group.getByText("Jugador c")).toBeInTheDocument();
+    expect(screen.getByText("7 · Jugador a")).toBeInTheDocument();
+  });
+
+  it("no muestra el apartado de cambio rápido si no hay nadie en el banquillo", () => {
+    setup([]);
+
+    expect(screen.queryByRole("group", { name: "Cambiar por" })).not.toBeInTheDocument();
+  });
+
+  it("mantiene el botón Cambio para elegir con la lista completa", async () => {
+    const props = setup([player("b", 9)]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Cambio" }));
+
+    expect(props.onSubstitute).toHaveBeenCalled();
+  });
+});

@@ -95,6 +95,7 @@ describe("partido: copia local de los datos", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
     const keypad = screen.getByRole("dialog");
+    await userEvent.click(within(keypad).getByRole("button", { name: "Teclear el tiempo" }));
     for (const digit of "1700") {
       await userEvent.click(within(keypad).getByRole("button", { name: digit }));
     }

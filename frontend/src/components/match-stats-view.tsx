@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { ScoreBanner } from "@/components/score-banner";
 import { PlayerStatsTable, QuintetStatsTable } from "@/components/stats-tables";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -15,7 +16,8 @@ import { formatShortDay } from "@/lib/weeks";
 
 const NOT_FOUND = 404;
 const CONFLICT = 409;
-const BACK_LINK = "inline-flex min-h-12 items-center px-3 underline";
+const BACK_LINK =
+  "inline-flex min-h-12 items-center rounded-2xl border-2 bg-card px-5 font-bold [@media(hover:hover)]:hover:bg-muted";
 
 interface Loaded {
   stats: MatchStats;
@@ -107,14 +109,15 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">{match ? `vs ${match.opponent}` : "Partido"}</h1>
-          {match ? <p className="text-muted-foreground">{formatShortDay(match.held_on)}</p> : null}
-        </div>
-        <p aria-label="Marcador" className="text-5xl font-bold tabular-nums">
-          {stats.score.goals_for} – {stats.score.goals_against}
-        </p>
+      <ScoreBanner
+        level={1}
+        eyebrow={match ? formatShortDay(match.held_on) : "Estadísticas"}
+        title={match ? `vs ${match.opponent}` : "Partido"}
+        score={{ for: stats.score.goals_for, against: stats.score.goals_against }}
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="rounded-2xl bg-card px-4 py-2.5 text-base font-bold">{`Faltas de equipo: ${foulsText(stats)}`}</p>
         <div className="flex flex-wrap items-center gap-2">
           {user?.role === "head_coach" && stats.closed ? (
             <Link href={`/corregir?id=${matchId}`} className={BACK_LINK}>
@@ -125,9 +128,7 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
             Todas las estadísticas
           </Link>
         </div>
-      </header>
-
-      <p className="text-lg">{`Faltas de equipo: ${foulsText(stats)}`}</p>
+      </div>
 
       {stats.warnings.map((warning) => (
         <p key={warning} className="rounded-lg border p-3 text-muted-foreground">
@@ -136,12 +137,12 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
       ))}
 
       <section className="space-y-2">
-        <h2 className="text-xl font-semibold">Jugadores</h2>
+        <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Jugadores</h2>
         <PlayerStatsTable players={stats.players} />
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-xl font-semibold">Quintetos</h2>
+        <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Quintetos</h2>
         {stats.closed ? (
           <QuintetStatsTable quintets={stats.quintets} nameOf={nameOf} />
         ) : (

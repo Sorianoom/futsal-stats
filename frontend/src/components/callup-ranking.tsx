@@ -31,7 +31,7 @@ interface CallupRankingProps {
 
 export function CallupRanking({ callup, onSelect }: CallupRankingProps) {
   return (
-    <ul aria-label="Ranking" className="space-y-3">
+    <ul aria-label="Ranking" className="grid gap-3 lg:grid-cols-2">
       {callup.ranking.map((player) => {
         const tags = tagsOf(callup, player);
         const spoken = [`${player.points} puntos`, ...tags.map((tag) => tag.label)].join(", ");
@@ -41,7 +41,7 @@ export function CallupRanking({ callup, onSelect }: CallupRankingProps) {
               type="button"
               aria-label={`Ver desglose de ${player.name}: ${spoken}`}
               onClick={() => onSelect(player)}
-              className="flex min-h-16 w-full items-center gap-4 rounded-xl border bg-card p-4 text-left active:bg-muted [@media(hover:hover)]:hover:bg-muted"
+              className="flex min-h-16 w-full items-center gap-3 rounded-2xl border bg-card p-3 text-left active:bg-muted [@media(hover:hover)]:hover:bg-muted"
             >
               <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
                 {player.dorsal}

@@ -12,6 +12,15 @@ function signed(points: number): string {
   return points > 0 ? `+${points}` : String(points);
 }
 
+function SummaryCell({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-3xl bg-card px-5 py-4">
+      <p className={`text-4xl leading-none font-extrabold tabular-nums ${tone ?? ""}`}>{value}</p>
+      <p className="mt-1.5 text-xs font-extrabold tracking-widest text-muted-foreground uppercase">{label}</p>
+    </div>
+  );
+}
+
 interface MovementsListProps {
   movements: Movement[];
   nameOf: (playerId: string) => string;
@@ -43,8 +52,16 @@ export function MovementsList({ movements, nameOf, onUndo }: MovementsListProps)
     return <p className="text-muted-foreground">No hay movimientos esta semana</p>;
   }
 
+  const added = movements.reduce((sum, movement) => sum + Math.max(movement.points, 0), 0);
+  const removed = movements.reduce((sum, movement) => sum + Math.min(movement.points, 0), 0);
+
   return (
     <div className="space-y-3">
+      <div role="group" aria-label="Resumen de la semana" className="grid grid-cols-3 gap-3">
+        <SummaryCell label="Movimientos" value={String(movements.length)} />
+        <SummaryCell label="Suman" value={signed(added)} tone="text-success-foreground" />
+        <SummaryCell label="Restan" value={signed(removed)} tone="text-destructive" />
+      </div>
       {failed ? (
         <p role="alert" className="text-base text-destructive">
           {UNDO_ERROR}
@@ -54,7 +71,7 @@ export function MovementsList({ movements, nameOf, onUndo }: MovementsListProps)
         {movements.map((movement) => (
           <li
             key={movement.id}
-            className="flex items-center gap-4 rounded-xl border bg-card p-4"
+            className="flex items-center gap-4 rounded-2xl border bg-card p-4"
           >
             <span className="w-16 shrink-0 text-muted-foreground">
               {formatShortDay(movement.occurred_on)}
@@ -65,7 +82,7 @@ export function MovementsList({ movements, nameOf, onUndo }: MovementsListProps)
             </span>
             <span
               className={`w-14 text-right text-2xl font-bold tabular-nums ${
-                movement.points < 0 ? "text-destructive" : ""
+                movement.points < 0 ? "text-destructive" : "text-success-foreground"
               }`}
             >
               {signed(movement.points)}

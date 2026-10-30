@@ -69,13 +69,13 @@ export default function PuntosPage() {
   const activePlayers = reference?.players.filter((player) => player.is_active) ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Puntos</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">Puntos</h1>
         <WeekNavigator week={week} onChange={setWeek} />
       </header>
 
-      <Button size="lg" disabled={reference === null} onClick={() => setFormOpen(true)}>
+      <Button variant="cta" size="lg" className="rounded-2xl" disabled={reference === null} onClick={() => setFormOpen(true)}>
         Registrar falta
       </Button>
 

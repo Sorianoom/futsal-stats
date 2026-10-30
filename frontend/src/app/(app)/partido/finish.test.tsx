@@ -74,6 +74,7 @@ const posts = (server: ReturnType<typeof mockApi>) =>
 
 async function typeTime(digits: string) {
   const keypad = screen.getByRole("dialog");
+  await userEvent.click(within(keypad).getByRole("button", { name: "Teclear el tiempo" }));
   for (const digit of digits) {
     await userEvent.click(within(keypad).getByRole("button", { name: digit }));
   }
@@ -82,17 +83,17 @@ async function typeTime(digits: string) {
 
 async function endPart() {
   await userEvent.click(await screen.findByRole("button", { name: "Fin de la parte" }));
-  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Aceptar" }));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Terminó en/ }));
 }
 
 describe("fin de parte y parte 2", () => {
-  it("el fin de la parte arranca en lo que marcaría el final y pasa al descanso", async () => {
+  it("el fin de la parte se confirma con un toque en lo que marcaría el final y pasa al descanso", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Fin de la parte" }));
-    expect(within(screen.getByRole("dialog")).getByRole("status")).toHaveTextContent("00:00");
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Aceptar" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Aceptar" })).not.toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Terminó en 00:00" }));
 
     expect(await screen.findByText("Parte 1 terminada")).toBeInTheDocument();
     await waitFor(() => expect(posts(server)).toHaveLength(1));
@@ -134,6 +135,7 @@ describe("fin de parte y parte 2", () => {
     renderWithAuth(<PartidoPage />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Fin de la parte" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Otro tiempo" }));
     await typeTime("1500");
 
     expect(screen.getByRole("alert")).toHaveTextContent("anterior al último movimiento (10:00)");

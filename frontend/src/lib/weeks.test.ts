@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   currentWeekStart,
+  formatLongDay,
   formatShortDay,
+  formatWeekdayShort,
   formatWeekRange,
   shiftWeek,
   todayInMadrid,
+  weekDays,
   weekStartOf,
 } from "./weeks";
 
@@ -13,6 +16,34 @@ describe("formatShortDay", () => {
   it("muestra día y mes abreviado en español", () => {
     expect(formatShortDay("2026-10-20")).toBe("20 oct");
     expect(formatShortDay("2026-01-05")).toBe("5 ene");
+  });
+});
+
+describe("formatWeekdayShort", () => {
+  it("da el día de la semana abreviado en español", () => {
+    expect(formatWeekdayShort("2026-10-19")).toBe("lun");
+    expect(formatWeekdayShort("2026-10-25")).toBe("dom");
+  });
+});
+
+describe("weekDays", () => {
+  it("devuelve de lunes a domingo", () => {
+    expect(weekDays("2026-10-19")).toEqual([
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25",
+    ]);
+  });
+
+  it("cruza el cambio de mes", () => {
+    const days = weekDays("2026-10-26");
+
+    expect(days[5]).toBe("2026-10-31");
+    expect(days[6]).toBe("2026-11-01");
   });
 });
 
@@ -55,6 +86,16 @@ describe("shiftWeek", () => {
   it("cruza el cambio de hora y de año sin desplazar el día", () => {
     expect(shiftWeek("2026-10-26", -1)).toBe("2026-10-19");
     expect(shiftWeek("2026-12-28", 1)).toBe("2027-01-04");
+  });
+});
+
+describe("formatLongDay", () => {
+  it("muestra el día de la semana, el día y el mes en español", () => {
+    const text = formatLongDay("2026-10-25");
+
+    expect(text).toMatch(/domingo/i);
+    expect(text).toContain("25");
+    expect(text).toMatch(/octubre/i);
   });
 });
 

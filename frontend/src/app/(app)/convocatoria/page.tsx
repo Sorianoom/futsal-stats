@@ -38,9 +38,9 @@ export default function ConvocatoriaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Convocatoria</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">Convocatoria</h1>
         <WeekNavigator week={week} onChange={setWeek} />
       </header>
 

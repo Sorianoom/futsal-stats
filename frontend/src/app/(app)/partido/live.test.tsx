@@ -93,6 +93,7 @@ async function tapCourt(name: string) {
 
 async function typeTime(digits: string) {
   const keypad = screen.getByRole("dialog");
+  await userEvent.click(within(keypad).getByRole("button", { name: "Teclear el tiempo" }));
   for (const digit of digits) {
     await userEvent.click(within(keypad).getByRole("button", { name: digit }));
   }
@@ -184,6 +185,28 @@ describe("panel en vivo", () => {
     });
   });
 
+  it("cambia a un jugador de la pista con un solo toque sobre el banquillo de su ficha", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    const { court, bench } = await openBoard();
+
+    const sheet = await tapCourt("Ana Ruiz");
+    await userEvent.click(
+      within(within(sheet).getByRole("group", { name: "Cambiar por" })).getByRole("button", { name: /Gema Ruiz/ }),
+    );
+    await typeTime("1500");
+
+    await waitFor(() => expect(within(court).getByText("Gema Ruiz")).toBeInTheDocument());
+    expect(within(bench).getByText("Ana Ruiz")).toBeInTheDocument();
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].lineup_events[0].payload).toMatchObject({
+      type: "substituted",
+      t: 300,
+      player_out: "p1",
+      player_in: "p7",
+    });
+  });
+
   it("hace un cambio desde el banquillo", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
@@ -249,6 +272,42 @@ describe("panel en vivo", () => {
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 1");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     expect(posts(server)[0].events[0]).toMatchObject({ kind: "rival_goal", player_id: null, t: 180 });
+  });
+
+  it("anota un gol del rival sin teclear, solo ajustando el tiempo propuesto", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("20:00");
+    await userEvent.click(within(dialog).getByRole("button", { name: "−1 min" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "−20 s" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].events[0]).toMatchObject({ kind: "rival_goal", t: 80 });
+  });
+
+  it("propone un tiempo estimado con el reloj real desde el último tiempo anotado", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-24T18:00:00Z"));
+    try {
+      api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+
+      await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
+      await typeTime("1500");
+      vi.setSystemTime(new Date("2026-10-24T18:01:34Z"));
+      await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
+
+      // Se anotó a 05:00 jugados; 94 s después se propone 06:30 jugados = 13:30 en el marcador.
+      expect(within(screen.getByRole("dialog")).getByRole("status")).toHaveTextContent("13:30");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("deshacer pide confirmación, dice qué se deshace y baja el marcador", async () => {

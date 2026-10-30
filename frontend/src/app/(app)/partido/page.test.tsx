@@ -77,6 +77,26 @@ describe("PartidoPage: lista de partidos", () => {
     expect(link).toHaveTextContent("20 oct");
   });
 
+  it("los ordena por fecha, de 2026 a 2027, aunque el servidor los mande al revés", async () => {
+    matches = [
+      { ...MATCH, id: "m3", held_on: "2027-02-28", opponent: "Deporama" },
+      { ...MATCH, id: "m2", held_on: "2026-12-13", opponent: "Santa Fe" },
+      { ...MATCH, id: "m1", held_on: "2026-10-18", opponent: "Botellines" },
+      { ...MATCH, id: "m4", held_on: "2027-01-24", opponent: "Nevada" },
+    ];
+    api();
+
+    renderWithAuth(<PartidoPage />);
+
+    const list = await screen.findByRole("list", { name: "Partidos" });
+    expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      expect.stringContaining("Botellines"),
+      expect.stringContaining("Santa Fe"),
+      expect.stringContaining("Nevada"),
+      expect.stringContaining("Deporama"),
+    ]);
+  });
+
   it("indica cuando todavía no hay partidos", async () => {
     matches = [];
     api();

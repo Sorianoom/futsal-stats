@@ -5,7 +5,6 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
@@ -47,12 +46,44 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Futsal Stats</CardTitle>
-        </CardHeader>
-        <CardContent>
+    <main className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
+      <aside className="relative hidden flex-col justify-between overflow-hidden bg-primary p-14 text-primary-foreground lg:flex">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 760 520"
+          fill="none"
+          stroke="white"
+          strokeOpacity={0.16}
+          strokeWidth={3}
+          className="pointer-events-none absolute -bottom-14 -left-28 h-[520px] w-[760px]"
+        >
+          <rect x="20" y="20" width="720" height="480" rx="8" />
+          <path d="M380 20v480" />
+          <circle cx="380" cy="260" r="90" />
+          <path d="M20 150a110 110 0 0 1 0 220M740 150a110 110 0 0 0 0 220" />
+        </svg>
+        <p className="relative flex items-center gap-3 text-xl font-extrabold">
+          <span
+            aria-hidden="true"
+            className="flex size-11 items-center justify-center rounded-2xl bg-white text-lg text-primary"
+          >
+            FS
+          </span>
+          Futsal Stats
+        </p>
+        <div className="relative max-w-md space-y-4">
+          <p className="text-6xl leading-none font-extrabold tracking-tight">Cada punto, cada minuto.</p>
+          <p className="text-lg font-semibold text-white/90">
+            Convocatorias, puntos y partidos en vivo, también sin conexión.
+          </p>
+        </div>
+      </aside>
+      <section className="flex items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-extrabold tracking-tight">Entrar</h1>
+            <p className="text-muted-foreground">Accede con tu cuenta de entrenador.</p>
+          </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="email" className="text-base">
@@ -85,12 +116,12 @@ export default function LoginPage() {
                 {error}
               </p>
             ) : null}
-            <Button type="submit" size="lg" disabled={submitting}>
+            <Button type="submit" variant="cta" size="lg" className="rounded-2xl" disabled={submitting}>
               {submitting ? "Entrando…" : "Entrar"}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </main>
   );
 }

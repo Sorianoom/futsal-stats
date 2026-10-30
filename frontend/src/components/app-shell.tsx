@@ -46,39 +46,64 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh">
-      <aside className="flex w-60 shrink-0 flex-col gap-2 border-r bg-card p-4">
-        <p className="px-2 pb-4 text-xl font-bold">Futsal Stats</p>
-        <nav aria-label="Principal" className="flex flex-1 flex-col gap-2">
-          {visibleItems.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={isActive(pathname, href) ? "page" : undefined}
-              className={cn(
-                "flex h-14 items-center rounded-lg px-4 text-lg font-medium hover:bg-muted",
-                isActive(pathname, href) && "bg-primary text-primary-foreground hover:bg-primary",
-              )}
-            >
-              {label}
-            </Link>
-          ))}
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-20 flex h-[72px] shrink-0 items-center gap-3 border-b bg-card px-4 lg:gap-6 lg:px-7">
+        <Link
+          href="/"
+          aria-label="Futsal Stats"
+          className="flex shrink-0 items-center gap-2.5 rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <span
+            aria-hidden="true"
+            className="flex size-9 items-center justify-center rounded-xl bg-primary text-[15px] font-extrabold text-primary-foreground"
+          >
+            FS
+          </span>
+          <span aria-hidden="true" className="hidden text-[17px] font-extrabold xl:inline">
+            Futsal Stats
+          </span>
+        </Link>
+        <nav
+          aria-label="Principal"
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:justify-center"
+        >
+          {visibleItems.map(({ href, label }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-[15px] font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  active && "bg-foreground font-bold text-background hover:bg-foreground hover:text-background",
+                )}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </nav>
-        <div className="flex flex-col gap-2 border-t pt-4">
-          <p className="px-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-3">
+          <p className="hidden text-sm text-muted-foreground 2xl:block">
             {user ? `${ROLE_LABEL[user.role]} · ${user.email}` : null}
           </p>
-          {logoutFailed ? (
-            <p role="alert" className="px-2 text-sm text-destructive">
-              {LOGOUT_ERROR}
-            </p>
-          ) : null}
-          <Button variant="outline" disabled={loggingOut} onClick={() => void handleLogout()}>
+          <Button
+            variant="outline"
+            className="h-11 rounded-full px-4 text-sm font-semibold"
+            disabled={loggingOut}
+            onClick={() => void handleLogout()}
+          >
             Cerrar sesión
           </Button>
         </div>
-      </aside>
-      <main className="flex-1 overflow-y-auto p-6">{children}</main>
+      </header>
+      {logoutFailed ? (
+        <p role="alert" className="bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive lg:px-7">
+          {LOGOUT_ERROR}
+        </p>
+      ) : null}
+      <main className="flex-1 p-4 lg:p-7">{children}</main>
     </div>
   );
 }

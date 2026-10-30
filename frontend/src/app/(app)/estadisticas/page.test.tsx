@@ -149,6 +149,24 @@ describe("EstadisticasPage: lista de partidos", () => {
     expect(screen.getByRole("link", { name: /Cádiz/ })).toHaveAttribute("href", "/estadisticas?id=m0");
   });
 
+  it("los ordena por fecha, de 2026 a 2027, aunque el servidor los mande al revés", async () => {
+    matches = [
+      { ...MATCH, id: "m3", held_on: "2027-02-28", opponent: "Deporama" },
+      { ...MATCH, id: "m1", held_on: "2026-10-18", opponent: "Botellines" },
+      { ...MATCH, id: "m4", held_on: "2027-01-24", opponent: "Nevada" },
+    ];
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    const list = await screen.findByRole("list", { name: "Partidos" });
+    expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      expect.stringContaining("Botellines"),
+      expect.stringContaining("Nevada"),
+      expect.stringContaining("Deporama"),
+    ]);
+  });
+
   it("indica cuando no hay partidos", async () => {
     matches = [];
     api();
@@ -203,6 +221,29 @@ describe("EstadisticasPage: temporada", () => {
     renderWithAuth(<EstadisticasPage />);
 
     expect(await screen.findByText("Acumulado de 2 partidos cerrados")).toBeInTheDocument();
+  });
+
+  it("destaca a los líderes de la temporada", async () => {
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    const leaders = await screen.findByRole("list", { name: "Líderes de la temporada" });
+    const goleador = within(leaders).getByText("Goleador").closest("li") as HTMLElement;
+    expect(within(goleador).getByText("Ana Ruiz")).toBeInTheDocument();
+    expect(within(goleador).getByText("4")).toBeInTheDocument();
+    const minutos = within(leaders).getByText("Más minutos").closest("li") as HTMLElement;
+    expect(within(minutos).getByText("80:00")).toBeInTheDocument();
+  });
+
+  it("sin partidos cerrados no hay líderes", async () => {
+    season = { matches: 0, players: [], warnings: [] };
+    api();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    await screen.findByText(/Todavía no hay partidos cerrados/);
+    expect(screen.queryByRole("list", { name: "Líderes de la temporada" })).not.toBeInTheDocument();
   });
 
   it("con un solo partido cerrado habla en singular", async () => {

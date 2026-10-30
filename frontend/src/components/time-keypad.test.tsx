@@ -4,17 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ClockSettings } from "@/lib/match/clock";
 
-import { TimeKeypad } from "./time-keypad";
+import { KeypadBody } from "./time-keypad";
 
 const DOWN: ClockSettings = { direction: "down", partSeconds: 1200 };
 
-function setup(props: Partial<React.ComponentProps<typeof TimeKeypad>> = {}) {
+function setup(props: Partial<React.ComponentProps<typeof KeypadBody>> = {}) {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
   render(
-    <TimeKeypad
-      open
-      title="Cambio"
+    <KeypadBody
       settings={DOWN}
       initialElapsed={300}
       onConfirm={onConfirm}
@@ -29,12 +27,11 @@ async function type(digits: string) {
   for (const digit of digits) await userEvent.click(screen.getByRole("button", { name: digit }));
 }
 
-describe("TimeKeypad", () => {
+describe("KeypadBody", () => {
   it("muestra el tiempo inicial tal y como lo vería el marcador", () => {
     setup();
 
     expect(screen.getByRole("status")).toHaveTextContent("15:00");
-    expect(screen.getByRole("dialog", { name: "Cambio" })).toBeInTheDocument();
   });
 
   it("al teclear sustituye lo anterior y entrega los segundos jugados", async () => {
@@ -122,14 +119,4 @@ describe("TimeKeypad", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it("cada vez que se abre vuelve a empezar desde el tiempo inicial", async () => {
-    const props = { title: "Cambio", settings: DOWN, initialElapsed: 300, onConfirm: vi.fn(), onCancel: vi.fn() };
-    const { rerender } = render(<TimeKeypad open {...props} />);
-    await type("1230");
-
-    rerender(<TimeKeypad open={false} {...props} />);
-    rerender(<TimeKeypad open {...props} />);
-
-    expect(screen.getByRole("status")).toHaveTextContent("15:00");
-  });
 });
