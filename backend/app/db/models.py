@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from app.domain.auth_sessions import RevokeReason
 from app.domain.points.attendance import AttendanceStatus, SessionKind
 from app.domain.points.callup import PlayerStatus, Position
 from app.domain.points.catalog import Deferral, SanctionKind, Severity
@@ -274,6 +275,43 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(String(300))
+
+
+class RefreshSession(Base):
+    """Sesión de refresco: una fila por inicio de sesión, revocable y con tope absoluto.
+
+    Guarda el `jti` vigente y el anterior (para tolerar una respuesta perdida tras rotar). Los jti
+    no son secretos: sin JWT_SECRET no se puede firmar un token con ellos.
+    """
+
+    __tablename__ = "refresh_sessions"
+    __table_args__ = (
+        CheckConstraint("absolute_expires_at > created_at", name="expires_after_creation"),
+        CheckConstraint(
+            "(revoked_at IS NULL) = (revoke_reason IS NULL)", name="revocation_is_complete"
+        ),
+        CheckConstraint(
+            "previous_jti IS DISTINCT FROM current_jti", name="previous_differs_from_current"
+        ),
+        CheckConstraint(
+            "(previous_jti IS NULL) = (rotated_at IS NULL)", name="rotation_is_complete"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    current_jti: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    previous_jti: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    last_used_at: Mapped[datetime] = _created_at()
+    absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoke_reason: Mapped[RevokeReason | None] = mapped_column(_enum(RevokeReason), nullable=True)
+    # sha256 del refresco anterior a las sesiones: identifica la sesión que se adopta al migrarlo.
+    legacy_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
 
 
 class IdempotencyKeyRow(Base):
