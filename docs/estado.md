@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-05.
+Última actualización: 2026-11-05 (tras fusionar las PR #8 y #9).
 
 ## Hecho y en producción
 
@@ -13,13 +13,12 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   `lib/queries.ts` (clave y petición de cada pestaña) y `CacheWarmer`, que precarga las pestañas
   al abrir sesión. La caché es solo de memoria y se vacía al perder la sesión.
 - Migraciones 0003 (alias de jugador) y 0004 aplicadas en Neon a mano.
+- **Región `fra1`** (PR #8): la función corre en Fráncfort, junto a Neon (`x-vercel-id` con `fra1`).
+  Latencia de una llamada con BD: de 1,2 s a ~0,45 s en caliente; la primera tras un rato sin uso
+  sigue tardando ~3 s (arranque en frío).
 
 ## Pendiente
 
-- **PR #8**: `"regions": ["fra1"]` en `vercel.json`. La función corría en `iad1` (Washington) con
-  Neon en Fráncfort. Abierta, sin fusionar. Tras fusionarla: comprobar que `x-vercel-id` de
-  `/api/health` salga con `fra1` y repetir la medición de latencia.
-  Antes de ella: `/api/health` 0,2-0,5 s; una llamada con BD 1,2 s en caliente y 2,7 s en frío.
 - **Puntuación de 1 a 10 por jugador** (encaja con la fase 12): sin diseñar. Faltan decisiones:
   - si es informativa o alimenta el Fantasy;
   - pesos de goles, asistencias, robos, pérdidas, faltas y tarjetas;
