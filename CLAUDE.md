@@ -11,3 +11,4 @@
 - Reglamento de puntos y convocatorias: `docs/regimen-interno.pdf` (fuente de verdad).
 - Plan por fases y decisiones cerradas: `docs/plan.md`.
 - Uso principal: iPad en horizontal durante partidos; registro rápido y tolerante a cortes de red.
+- Estado actual y pendientes: `docs/estado.md`. Leerlo al empezar una sesión y actualizarlo al terminarla (junto con el commit), para poder retomar el trabajo desde otro ordenador.
