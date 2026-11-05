@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-05 (nota por jugador subida a `main` en `5621d5b`).
+Última actualización: 2026-11-05 (caché por clave e invalidación de la temporada).
 
 ## Hecho y en producción
 
@@ -17,13 +17,7 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   Latencia de una llamada con BD: de 1,2 s a ~0,45 s en caliente; la primera tras un rato sin uso
   sigue tardando ~3 s (arranque en frío).
 - **Nota de 1 a 10 por jugador y partido** (push directo a `main`, `5621d5b`, sin PR): tests en
-  verde; el despliegue no se ha comprobado en producción. Alimentará el Fantasy (fase 12).
-- **Caché del detalle de un partido** (rama `feat/cache-detalle-y-limpieza-sesiones`):
-  `matchStatsQuery(id)` con clave `stats:match:${id}`. Las escrituras del partido (`syncMatch`,
-  `finalizeMatch` y las de tramos) invalidan su clave en la capa API, también si fallan.
-- **Limpieza de sesiones caducadas** (misma rama): cada login borra, en otra transacción, las
-  sesiones con `absolute_expires_at` anterior a hace 1 día (`EXPIRED_SESSION_RETENTION`), revocadas
-  o no. Si falla, se registra y el login sigue. Sin migración: el índice ya estaba en la 0004.
+  verde. Alimentará el Fantasy (fase 12).
   - Cálculo en `backend/app/domain/rating/score.py`, con las tablas de pesos al principio.
     Base 6,0; gol +1,5; asistencia +0,7; robo +0,3; pérdida −0,3; falta −0,2; amarilla −0,5;
     roja −2,0. Campo: tiro sin gol +0,1 y ±0,3 por gol a favor o en contra en pista. Portero:
@@ -36,14 +30,23 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     calcula en cada consulta, sin guardarse: cambiar los pesos recalcula todos los partidos.
   - Portero = posición de su ficha, no el puesto en que jugó ese partido. Los partidos anteriores
     al botón no tienen paradas.
+- **Caché del detalle de un partido** (push directo a `main`, `1c2f48f`): `matchStatsQuery(id)`
+  con clave `stats:match:${id}`. Las escrituras del partido (`syncMatch`, `finalizeMatch` y las de
+  tramos) invalidan su clave y la de temporada (`stats:season`) en la capa API, también si fallan.
+  La invalidación es por clave: no impide cachear las respuestas en curso de otras pestañas.
+- **Limpieza de sesiones caducadas** (push directo a `main`, `1c2f48f`): cada login borra, en otra
+  transacción, las sesiones con `absolute_expires_at` anterior a hace 1 día
+  (`EXPIRED_SESSION_RETENTION`), revocadas o no. Si falla, se registra y el login sigue. Sin
+  migración: el índice ya estaba en la 0004.
+- Ninguno de los despliegues de la nota, la caché del detalle y la limpieza se ha comprobado aún
+  en producción.
 
 ## Pendiente
 
+- Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
+- Fase 12, el Fantasy: empezar por el limitador de login en la BD (ahora en memoria; en Vercel no
+  bloquea de forma fiable), que no depende de nada más.
 - Decidir si se congelan las notas al cerrar un partido cuando exista el Fantasy.
-- `queryCache.invalidate` sube un contador de versión común a todas las claves: invalidar un
-  partido impide cachear las respuestas en curso de otras pestañas (se muestran, pero no se
-  guardan). Arreglo posible: contador por clave.
-- Invalidar también `stats:season` al cambiar un partido (ahora se ve vieja un instante).
 
 ## Decisiones tomadas
 

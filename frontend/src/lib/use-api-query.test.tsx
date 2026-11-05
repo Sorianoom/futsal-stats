@@ -133,6 +133,16 @@ describe("useApiQuery", () => {
     expect(queryCache.get("k")).toBeUndefined();
   });
 
+  it("invalidar otra clave no impide guardar la respuesta en curso", async () => {
+    const pending = deferred<string>();
+    renderHook(() => useApiQuery("k", () => pending.promise));
+
+    queryCache.invalidate("otra");
+    await act(async () => pending.resolve("vigente"));
+
+    expect(queryCache.get("k")).toBe("vigente");
+  });
+
   it("una respuesta que salió antes de cerrar la sesión no rellena la caché vaciada", async () => {
     const pending = deferred<string>();
     renderHook(() => useApiQuery("k", () => pending.promise));

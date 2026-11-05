@@ -81,6 +81,16 @@ describe("CacheWarmer", () => {
     expect(queryCache.get("/players")).toBeUndefined();
   });
 
+  it("invalidar otra clave con las peticiones en vuelo no impide guardarlas", async () => {
+    mockApi(ROUTES);
+
+    renderWithAuth(<CacheWarmer />);
+    queryCache.invalidate("stats:match:m1"); // la cola offline sincroniza un partido
+
+    await waitFor(() => expect(queryCache.get("/players")).toBeDefined());
+    await waitFor(() => expect(queryCache.get("stats:season")).toBeDefined());
+  });
+
   it("pide cada lectura una sola vez", async () => {
     const api = mockApi(ROUTES);
 

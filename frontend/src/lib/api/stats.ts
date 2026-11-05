@@ -8,12 +8,17 @@ export function matchStatsKey(matchId: string): string {
   return `stats:match:${matchId}`;
 }
 
+/** Clave de caché del acumulado de temporada (la usa `seasonStatsQuery`). */
+export const SEASON_STATS_KEY = "stats:season";
+
 /**
  * Tras registrar o corregir eventos, alineación o tramos de un partido sus estadísticas cacheadas
- * dejan de valer: se olvidan para que la próxima apertura del detalle espere a las nuevas.
+ * dejan de valer, y también el acumulado de temporada, que las suma: se olvidan para que la próxima
+ * apertura espere a las nuevas.
  */
 export function invalidateMatchStats(matchId: string): void {
   queryCache.invalidate(matchStatsKey(matchId));
+  queryCache.invalidate(SEASON_STATS_KEY);
 }
 
 export function getMatchStats(matchId: string): Promise<MatchStats> {

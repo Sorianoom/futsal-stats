@@ -7,7 +7,7 @@ import type { Match } from "@/lib/api/match-types";
 import { listMatches } from "@/lib/api/matches";
 import { listPlayers } from "@/lib/api/players";
 import { getCallup, listInfractions, listMovements, listSessions } from "@/lib/api/points";
-import { getMatchStats, getSeasonStats, matchStatsKey } from "@/lib/api/stats";
+import { SEASON_STATS_KEY, getMatchStats, getSeasonStats, matchStatsKey } from "@/lib/api/stats";
 import type { MatchStats, SeasonStats } from "@/lib/api/stats-types";
 import type { Callup, Infraction, Movement, Player, TeamSession } from "@/lib/api/types";
 
@@ -23,8 +23,9 @@ export interface PointsReference {
 
 export const playersQuery: Query<Player[]> = { key: "/players", fetch: () => listPlayers() };
 export const matchesQuery: Query<Match[]> = { key: "/matches", fetch: listMatches };
+/** Se invalida junto con el detalle de cualquier partido (ver `invalidateMatchStats`). */
 export const seasonStatsQuery: Query<SeasonStats> = {
-  key: "stats:season",
+  key: SEASON_STATS_KEY,
   fetch: getSeasonStats,
 };
 
