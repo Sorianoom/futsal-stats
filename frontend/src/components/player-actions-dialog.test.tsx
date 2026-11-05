@@ -10,9 +10,9 @@ function player(id: string, dorsal: number): Player {
   return { id, name: `Jugador ${id}`, dorsal, position: "field", status: "available", is_active: true };
 }
 
-function setup(bench: Player[]) {
+function setup(bench: Player[], current: Player = player("a", 7)) {
   const props = {
-    player: player("a", 7),
+    player: current,
     bench,
     onClose: vi.fn(),
     onQuick: vi.fn(),
@@ -49,6 +49,21 @@ describe("PlayerActionsDialog", () => {
     setup([]);
 
     expect(screen.queryByRole("group", { name: "Cambiar por" })).not.toBeInTheDocument();
+  });
+
+  it("al portero le ofrece la parada con un solo toque", async () => {
+    const props = setup([], { ...player("k", 1), position: "goalkeeper" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Parada" }));
+
+    expect(props.onQuick).toHaveBeenCalledWith("save");
+  });
+
+  it("a un jugador de campo no le ofrece la parada", () => {
+    setup([]);
+
+    expect(screen.queryByRole("button", { name: "Parada" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tiro" })).toBeInTheDocument();
   });
 
   it("mantiene el botón Cambio para elegir con la lista completa", async () => {

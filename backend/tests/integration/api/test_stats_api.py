@@ -3,9 +3,12 @@
 import uuid
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 
 from app.db.models import Player
+from app.domain.points.callup import Position
+from app.domain.rating import RatingInput, player_rating
 from app.domain.roles import Role
 from tests.integration.api.conftest import Login, MakePlayer
 from tests.integration.api.test_stints_api import full_match, new_match
@@ -213,3 +216,149 @@ async def test_both_roles_can_read_and_unknown_or_anonymous_are_rejected(
 
     assert as_head.json()["data"] == as_assistant.json()["data"]
     assert (unknown.status_code, anonymous.status_code) == (404, 401)
+
+
+async def players_with_goalkeeper(make_player: MakePlayer) -> list[Player]:
+    """p2 (dorsal 2) es portero y juega todo el partido; el resto son de campo."""
+    return [
+        await make_player(n, position=Position.GOALKEEPER if n == 2 else Position.FIELD)
+        for n in range(1, 7)
+    ]
+
+
+async def test_saves_are_counted_and_undone_saves_are_not(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    p = await players_with_goalkeeper(make_player)
+    undone = str(uuid.uuid4())
+    saves = [
+        event(20, "save", 1, 500, p[1]),
+        event(21, "save", 2, 800, p[1]),
+        event(22, "save", 2, 900, p[1], id_=undone),
+        event(23, "undo", 2, 900, voids=undone),
+    ]
+    match_id, _ = await played_match(client, headers, make_player, saves, players=p)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    rows = by_player(stats)
+    assert rows[str(p[1].id)]["saves"] == 2
+    assert rows[str(p[0].id)]["saves"] == 0
+
+
+async def test_a_field_player_rating_uses_actions_minutes_and_goals_on_court(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id, p = await played_match(client, headers, make_player)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    # p5 juega los 2400 s, con un tiro sin gol y un robo, y está en pista en los tres goles.
+    expected = player_rating(
+        RatingInput(
+            is_goalkeeper=False,
+            seconds=2400,
+            shots=1,
+            steals=1,
+            goals_for_on_court=2,
+            goals_against_on_court=1,
+        )
+    )
+    rating = by_player(stats)[str(p[4].id)]["rating"]
+    assert expected is not None
+    assert rating == pytest.approx(expected)
+    assert 1 <= rating <= 10
+
+
+async def test_a_goalkeeper_rating_counts_saves_and_goals_conceded_on_court(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    p = await players_with_goalkeeper(make_player)
+    saves = [event(20, "save", 1, 500, p[1]), event(21, "save", 2, 800, p[1])]
+    match_id, _ = await played_match(client, headers, make_player, saves, players=p)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    expected = player_rating(
+        RatingInput(
+            is_goalkeeper=True,
+            seconds=2400,
+            assists=1,
+            yellows=1,
+            saves=2,
+            goals_for_on_court=2,
+            goals_against_on_court=1,
+        )
+    )
+    assert expected is not None
+    assert by_player(stats)[str(p[1].id)]["rating"] == pytest.approx(expected)
+
+
+async def test_a_goal_scorer_keeps_shots_as_recorded_because_a_goal_is_not_a_shot(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id, p = await played_match(client, headers, make_player)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    # p1 marca a los 100 s en el quinteto inicial (en pista: 1 a favor, 0 en contra).
+    expected = player_rating(
+        RatingInput(is_goalkeeper=False, seconds=300, goals=1, goals_for_on_court=1)
+    )
+    row = by_player(stats)[str(p[0].id)]
+    assert (row["goals"], row["shots"]) == (1, 0)
+    assert row["rating"] == pytest.approx(expected)
+
+
+async def test_a_player_with_less_than_three_minutes_has_no_rating(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id, p = await played_match(client, headers, make_player)
+    stints = (await client.get(f"/matches/{match_id}/stints", headers=headers)).json()["data"]
+    first_stint = next(s for s in stints if s["player_id"] == str(p[0].id))
+    await client.patch(f"/stints/{first_stint['id']}", json={"end_s": 150}, headers=headers)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    row = by_player(stats)[str(p[0].id)]
+    assert (row["seconds"], row["rating"]) == (150, None)
+
+
+async def test_an_unclosed_match_has_no_ratings(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id, _ = await played_match(client, headers, make_player, finalize=False)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    assert stats["players"] and all(row["rating"] is None for row in stats["players"])
+
+
+async def test_goals_outside_the_stints_do_not_count_on_court_for_the_rating(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id, p = await played_match(client, headers, make_player)
+    late_rival_goal = event(13, "rival_goal", 2, 1500)
+    await sync(client, headers, match_id, events=[late_rival_goal])
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
+
+    expected = player_rating(
+        RatingInput(
+            is_goalkeeper=False,
+            seconds=2400,
+            shots=1,
+            steals=1,
+            goals_for_on_court=2,
+            goals_against_on_court=1,
+        )
+    )
+    assert stats["score"]["goals_against"] == 2
+    assert by_player(stats)[str(p[4].id)]["rating"] == pytest.approx(expected)

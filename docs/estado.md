@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-05 (tras fusionar las PR #8 y #9).
+Última actualización: 2026-11-05 (nota por jugador en la rama `feat/nota-jugador`, sin fusionar).
 
 ## Hecho y en producción
 
@@ -17,17 +17,26 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   Latencia de una llamada con BD: de 1,2 s a ~0,45 s en caliente; la primera tras un rato sin uso
   sigue tardando ~3 s (arranque en frío).
 
+## En curso
+
+- **Nota de 1 a 10 por jugador y partido** (rama `feat/nota-jugador`): hecha y con tests en verde,
+  falta la PR. Alimentará el Fantasy (fase 12).
+  - Cálculo en `backend/app/domain/rating/score.py`, con las tablas de pesos al principio.
+    Base 6,0; gol +1,5; asistencia +0,7; robo +0,3; pérdida −0,3; falta −0,2; amarilla −0,5;
+    roja −2,0. Campo: tiro sin gol +0,1 y ±0,3 por gol a favor o en contra en pista. Portero:
+    parada +0,4, gol encajado −0,6 y portería a cero +1,0 (≥ 10 min sin encajar). Escala fija,
+    limitada a 1–10, con un decimal. Sin nota con menos de 3 minutos o con el partido sin cerrar.
+  - Solo usa lo que registra el segundo entrenador durante el partido. Nuevo evento `save`
+    (parada): botón en la ficha del portero y botón directo en el panel si hay un solo portero en
+    pista. Sin migración: `kind` es texto sin CHECK.
+  - Sale como `rating` en `GET /matches/{id}/stats` y `saves` también en la temporada. La nota se
+    calcula en cada consulta, sin guardarse: cambiar los pesos recalcula todos los partidos.
+  - Portero = posición de su ficha, no el puesto en que jugó ese partido. Los partidos anteriores
+    al botón no tienen paradas.
+
 ## Pendiente
 
-- **Puntuación de 1 a 10 por jugador** (encaja con la fase 12): sin diseñar. Faltan decisiones:
-  - si es informativa o alimenta el Fantasy;
-  - pesos de goles, asistencias, robos, pérdidas, faltas y tarjetas;
-  - porteros (no se registran paradas ni goles encajados);
-  - tratamiento de minutos bajos o cero;
-  - escala fija o relativa al partido.
-
-  Datos disponibles por jugador: segundos, goles, asistencias, tiros, pérdidas, robos, faltas,
-  amarillas, rojas y partidos jugados. Propuesta: módulo puro en `backend/app/domain/` con tests.
+- Decidir si se congelan las notas al cerrar un partido cuando exista el Fantasy.
 - Caché en el detalle de estadísticas de un partido (`match-stats-view.tsx`).
 - Limpieza de sesiones caducadas (borrado oportunista al hacer login o cron de Vercel).
 
@@ -49,3 +58,8 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 Fuera de git, hay que recrearlo: `backend/.env` (`JWT_SECRET`, `COOKIE_SECURE`), Docker con
 `docker compose up -d db`, `uv` y Corepack (`yarn`). Los tests de integración usan la base
 `futsal_test` en el puerto 54329.
+
+- Node 26 ya no trae Corepack: usar Node 24 (`mise use node@24`) y
+  `corepack enable --install-directory "$(dirname "$(which node)")"`.
+- En un checkout nuevo, `yarn typecheck` falla con `LayoutProps` hasta ejecutar `yarn next typegen`.
+- `yarn build` exige `NEXT_PUBLIC_API_URL` con https.

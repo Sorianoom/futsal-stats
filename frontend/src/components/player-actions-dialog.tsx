@@ -15,6 +15,12 @@ import { shortName } from "@/lib/player-name";
 
 /** Se anotan con un toque, con el último tiempo del marcador. */
 const QUICK_KINDS: readonly EventKind[] = ["assist", "shot", "turnover", "steal", "foul", "yellow"];
+/** Solo el portero para: a los de campo no se les ofrece. */
+const KEEPER_KINDS: readonly EventKind[] = ["save", ...QUICK_KINDS];
+
+function quickKindsFor(player: Player | null): readonly EventKind[] {
+  return player?.position === "goalkeeper" ? KEEPER_KINDS : QUICK_KINDS;
+}
 
 interface PlayerActionsDialogProps {
   player: Player | null;
@@ -49,7 +55,7 @@ export function PlayerActionsDialog({
           <Button size="lg" onClick={onGoal}>
             {EVENT_LABEL.goal}
           </Button>
-          {QUICK_KINDS.map((kind) => (
+          {quickKindsFor(player).map((kind) => (
             <Button key={kind} variant="outline" size="lg" onClick={() => onQuick(kind)}>
               {EVENT_LABEL[kind]}
             </Button>

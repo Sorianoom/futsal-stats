@@ -19,6 +19,7 @@ class EventKind(StrEnum):
     FOUL = "foul"
     YELLOW = "yellow"
     RED = "red"
+    SAVE = "save"  # parada del portero; lleva el jugador como el resto de acciones
     RIVAL_GOAL = "rival_goal"
     UNDO = "undo"
 

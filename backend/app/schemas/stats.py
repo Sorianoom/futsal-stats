@@ -28,6 +28,14 @@ class PlayerStatsOut(BaseModel):
     fouls: int
     yellows: int
     reds: int
+    saves: int
+
+
+class MatchPlayerStatsOut(PlayerStatsOut):
+    """Fila de un partido: añade la nota, que solo tiene sentido partido a partido."""
+
+    # Nota de 1 a 10; None si el partido no está cerrado o jugó menos de 3 minutos.
+    rating: float | None
 
 
 class QuintetStatsOut(BaseModel):
@@ -45,7 +53,7 @@ class MatchStatsOut(BaseModel):
     closed: bool
     score: ScoreOut
     team_fouls: list[TeamFoulsOut]
-    players: list[PlayerStatsOut]
+    players: list[MatchPlayerStatsOut]
     quintets: list[QuintetStatsOut]
     warnings: list[str]
 

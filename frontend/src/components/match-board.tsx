@@ -268,11 +268,14 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     }
   }
 
+  /** Se anota con un toque, con el último tiempo del marcador. */
+  function recordQuick(kind: EventKind, player: Player) {
+    if (part === null || blockedByConflict()) return;
+    log.recordEvent({ kind, part, t: now, player_id: player.id });
+  }
+
   function quick(kind: EventKind) {
-    if (!sheetPlayer || part === null) return;
-    if (!blockedByConflict()) {
-      log.recordEvent({ kind, part, t: now, player_id: sheetPlayer.id });
-    }
+    if (sheetPlayer) recordQuick(kind, sheetPlayer);
     setSheetPlayer(null);
   }
 
@@ -389,6 +392,9 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   const bench = data.players.filter(
     (p) => !onPitch.has(p.id) && !blocked.has(p.id) && p.status === "available",
   );
+  const keepers = court.filter((p) => p.position === "goalkeeper");
+  // Con dos porteros en pista (raro) no se sabe a quién: se anota desde la ficha de cada uno.
+  const keeper = keepers.length === 1 ? keepers[0] : null;
   const live = safeSummary(log.events, part);
   const title = part !== null ? `Parte ${part} en juego` : `Parte ${state.lastEndedPart} terminada`;
   // Anotar algo anterior al último cambio lo atribuiría al quinteto equivocado.
@@ -406,6 +412,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         direction={settings.direction}
         court={court}
         bench={bench}
+        keeper={keeper}
         canUndo={target !== null && target.kind !== "red"}
         undoNote={target?.kind === "red" ? "La roja no se puede deshacer desde aquí" : null}
         status={log.status}
@@ -416,6 +423,9 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         onClock={() => ask({ type: "clock" })}
         onToggleDirection={toggleDirection}
         onRivalGoal={() => ask({ type: "rival_goal" })}
+        onSave={() => {
+          if (keeper) recordQuick("save", keeper);
+        }}
         onEndPart={() => ask({ type: "end" })}
         onUndo={() => setUndoing(true)}
         onRate={() => setRating(true)}

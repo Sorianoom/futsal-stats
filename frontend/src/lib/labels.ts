@@ -74,6 +74,7 @@ export const EVENT_LABEL: Record<EventKind, string> = {
   yellow: "Amarilla",
   red: "Roja",
   rival_goal: "Gol rival",
+  save: "Parada",
   undo: "Deshacer",
 };
 

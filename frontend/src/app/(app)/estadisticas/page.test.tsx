@@ -39,6 +39,8 @@ const STATS: MatchStats = {
       fouls: 2,
       yellows: 1,
       reds: 0,
+      saves: 0,
+      rating: 7.5,
     },
     {
       player_id: "p2",
@@ -53,6 +55,8 @@ const STATS: MatchStats = {
       fouls: 0,
       yellows: 0,
       reds: 1,
+      saves: 6,
+      rating: null,
     },
   ],
   quintets: [
@@ -94,6 +98,7 @@ const SEASON: SeasonStats = {
       fouls: 3,
       yellows: 1,
       reds: 0,
+      saves: 0,
     },
     {
       player_id: "p2",
@@ -109,6 +114,7 @@ const SEASON: SeasonStats = {
       fouls: 0,
       yellows: 0,
       reds: 1,
+      saves: 11,
     },
   ],
 };
@@ -210,9 +216,13 @@ describe("EstadisticasPage: temporada", () => {
       "3",
       "1",
       "0",
+      "0",
     ]);
     const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
     expect(within(bea).getAllByRole("cell")[2]).toHaveTextContent("05:05");
+    expect(within(bea).getAllByRole("cell").at(-1)).toHaveTextContent("11");
+    expect(within(table).getByRole("columnheader", { name: "Paradas" })).toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "Nota" })).not.toBeInTheDocument();
   });
 
   it("dice de cuántos partidos cerrados sale el acumulado", async () => {
@@ -313,10 +323,30 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     const ana = within(table).getByText("9 · Ana Ruiz").closest("tr") as HTMLElement;
     const cells = within(ana).getAllByRole("cell").map((cell) => cell.textContent);
 
-    expect(cells).toEqual(["40:00", "2", "1", "6", "3", "4", "2", "1", "0"]);
+    expect(cells).toEqual(["40:00", "2", "1", "6", "3", "4", "2", "1", "0", "0", "7,5"]);
     const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
     expect(within(bea).getAllByRole("cell")[0]).toHaveTextContent("05:05");
     expect(within(bea).getAllByRole("cell")[8]).toHaveTextContent("1");
+    expect(within(bea).getAllByRole("cell")[9]).toHaveTextContent("6");
+  });
+
+  it("la nota lleva un decimal con coma y una raya si no hay nota", async () => {
+    stats = {
+      ...STATS,
+      players: [
+        { ...STATS.players[0], rating: 10 },
+        { ...STATS.players[1], rating: null },
+      ],
+    };
+    api();
+    renderWithAuth(<EstadisticasPage />);
+
+    const table = await screen.findByRole("table", { name: "Jugadores" });
+    const ana = within(table).getByText("9 · Ana Ruiz").closest("tr") as HTMLElement;
+    const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
+
+    expect(within(ana).getAllByRole("cell").at(-1)).toHaveTextContent("10,0");
+    expect(within(bea).getAllByRole("cell").at(-1)).toHaveTextContent("—");
   });
 
   it("el nombre del jugador es la cabecera de su fila y las columnas se leen con su nombre completo", async () => {
@@ -359,6 +389,8 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
       "Faltas",
       "Amarillas",
       "Rojas",
+      "Paradas",
+      "Nota",
     ]);
   });
 

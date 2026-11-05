@@ -13,6 +13,7 @@ export type EventKind =
   | "yellow"
   | "red"
   | "rival_goal"
+  | "save"
   | "undo";
 
 /** Misma forma que `EventOut` de la API. */

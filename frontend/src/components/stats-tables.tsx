@@ -1,4 +1,4 @@
-import type { PlayerStats, QuintetStats, SeasonPlayerStats } from "@/lib/api/stats-types";
+import type { MatchPlayerStats, PlayerStats, QuintetStats, SeasonPlayerStats } from "@/lib/api/stats-types";
 import { formatClock } from "@/lib/match/clock";
 
 const PLAYER_COLUMNS = [
@@ -11,7 +11,10 @@ const PLAYER_COLUMNS = [
   { short: "F", title: "Faltas" },
   { short: "Am", title: "Amarillas" },
   { short: "Roj", title: "Rojas" },
+  { short: "Par", title: "Paradas" },
 ] as const;
+
+const NOTE_COLUMN = { short: "Nota", title: "Nota" } as const;
 
 const HEADER_CELL = "px-3 py-3 text-left text-xs font-extrabold tracking-wider text-muted-foreground uppercase";
 const ROW_HEADER = "px-3 py-3 text-left text-base font-bold";
@@ -38,10 +41,18 @@ function actionsOf(player: PlayerStats): number[] {
     player.fouls,
     player.yellows,
     player.reds,
+    player.saves,
   ];
 }
 
-export function PlayerStatsTable({ players }: { players: readonly PlayerStats[] }) {
+const RATING = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** "7,5"; una raya si no hay nota. */
+function noteText(rating: number | null): string {
+  return rating === null ? "—" : RATING.format(rating);
+}
+
+export function PlayerStatsTable({ players }: { players: readonly MatchPlayerStats[] }) {
   return (
     <div role="region" aria-label="Tabla de jugadores" tabIndex={0} className={SCROLLER}>
       <table aria-label="Jugadores" className="w-full">
@@ -53,6 +64,7 @@ export function PlayerStatsTable({ players }: { players: readonly PlayerStats[] 
             {PLAYER_COLUMNS.map((column) => (
               <ColumnHeader key={column.title} short={column.short} title={column.title} />
             ))}
+            <ColumnHeader short={NOTE_COLUMN.short} title={NOTE_COLUMN.title} />
           </tr>
         </thead>
         <tbody>
@@ -65,6 +77,7 @@ export function PlayerStatsTable({ players }: { players: readonly PlayerStats[] 
                   {value}
                 </td>
               ))}
+              <td className={`${CELL} font-extrabold`}>{noteText(player.rating)}</td>
             </tr>
           ))}
         </tbody>
@@ -72,8 +85,6 @@ export function PlayerStatsTable({ players }: { players: readonly PlayerStats[] 
     </div>
   );
 }
-
-const RATING = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 function ratingText(quintet: QuintetStats): string {
   if (quintet.rating_average === null) return "Sin valorar";

@@ -8,6 +8,7 @@ from app.domain.stints.stats import (
     StatsError,
     build_segments,
     has_segment,
+    on_court_goals_by_player,
     quintet_stats,
     seconds_by_player,
 )
@@ -131,3 +132,33 @@ def test_has_segment_follows_the_same_rule_as_the_assignment_of_events() -> None
     assert has_segment(segments, 1, 1200)  # el último segundo de la parte
     assert not has_segment(segments, 1, 1201)
     assert not has_segment(segments, 2, 100)
+
+
+def test_on_court_goals_count_for_every_player_of_the_quintet_on_court() -> None:
+    segments = build_segments(one_substitution_match())
+    goals = [GoalEvent(1, 100, True), GoalEvent(1, 700, False), GoalEvent(1, 900, True)]
+
+    result = on_court_goals_by_player(segments, goals)
+
+    assert result["p1"] == (1, 0)
+    assert result["p6"] == (1, 1)
+    assert all(result[p] == (2, 1) for p in ("p2", "p3", "p4", "p5"))
+
+
+def test_on_court_goals_follow_the_change_and_end_of_part_rules() -> None:
+    segments = build_segments(one_substitution_match())
+    goals = [GoalEvent(1, 600, False), GoalEvent(1, 1200, True)]
+
+    result = on_court_goals_by_player(segments, goals)
+
+    assert result["p6"] == (1, 1)  # el gol en el segundo del cambio es del que entra
+    assert "p1" not in result
+
+
+def test_on_court_goals_without_goals_is_empty() -> None:
+    assert on_court_goals_by_player(build_segments(one_substitution_match()), []) == {}
+
+
+def test_on_court_goal_outside_any_segment_is_an_error() -> None:
+    with pytest.raises(StatsError):
+        on_court_goals_by_player(build_segments(one_substitution_match()), [GoalEvent(2, 5, True)])

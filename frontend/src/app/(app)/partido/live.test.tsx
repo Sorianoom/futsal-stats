@@ -165,6 +165,65 @@ describe("panel en vivo", () => {
     expect(posts(server)[0].events[0]).toMatchObject({ kind, player_id: "p3" });
   });
 
+  describe("paradas del portero", () => {
+    // Fran (p6) es el portero: sale de inicio en lugar de Elena.
+    beforeEach(() => {
+      lineup = [{ ...STARTED, payload: { type: "part_started", part: 1, starters: ["p6", "p1", "p2", "p3", "p4"] } }];
+    });
+
+    it("se anota con un toque desde la ficha del portero", async () => {
+      const server = api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+
+      const sheet = await tapCourt("Fran Ruiz");
+      await userEvent.click(within(sheet).getByRole("button", { name: "Parada" }));
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await waitFor(() => expect(posts(server)).toHaveLength(1));
+      expect(posts(server)[0].events[0]).toMatchObject({ kind: "save", player_id: "p6", t: 0, part: 1 });
+    });
+
+    it("el botón directo de parada se aplica al portero en pista sin abrir su ficha", async () => {
+      const server = api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+
+      await userEvent.click(screen.getByRole("button", { name: "Parada de Fran Ruiz" }));
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await waitFor(() => expect(posts(server)).toHaveLength(1));
+      expect(posts(server)[0].events[0]).toMatchObject({ kind: "save", player_id: "p6" });
+    });
+
+    it("una parada se puede deshacer y el aviso dice de quién era", async () => {
+      const server = api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+      await userEvent.click(screen.getByRole("button", { name: "Parada de Fran Ruiz" }));
+      await waitFor(() => expect(posts(server)).toHaveLength(1));
+
+      await userEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByText(/Parada de Fran Ruiz/)).toBeInTheDocument();
+      await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
+
+      await waitFor(() => expect(posts(server)).toHaveLength(2));
+      expect(posts(server)[1].events[0]).toMatchObject({
+        kind: "undo",
+        voids_event_id: posts(server)[0].events[0].id,
+      });
+    });
+  });
+
+  it("sin portero en pista no hay botón directo de parada", async () => {
+    api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    expect(screen.queryByRole("button", { name: /^Parada/ })).not.toBeInTheDocument();
+  });
+
   it("hace un cambio desde un jugador de la pista, pidiendo el tiempo del marcador", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);

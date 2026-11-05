@@ -36,6 +36,14 @@ describe("effectiveEvents", () => {
     expect(effectiveEvents(log)).toEqual([goal]);
   });
 
+  it("una parada cuenta como evento de jugador y se puede deshacer", () => {
+    const save = event({ kind: "save" });
+    const other = event({ kind: "save" });
+
+    expect(effectiveEvents([save, other, undo(other)])).toEqual([save]);
+    expect(undoTarget([save])).toEqual(save);
+  });
+
   it("rechaza ids duplicados", () => {
     const goal = event({ kind: "goal" });
 
@@ -100,6 +108,7 @@ describe("score", () => {
       undo(mistaken),
       event({ kind: "rival_goal" }),
       event({ kind: "shot" }),
+      event({ kind: "save" }),
     ];
 
     expect(score(log)).toEqual({ for: 2, against: 1 });

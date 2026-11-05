@@ -9,7 +9,7 @@ from app.db.models import MatchEvent
 from app.domain.roles import Role
 from app.domain.stints.events import EventKind
 from tests.integration.api.conftest import Login, MakePlayer
-from tests.integration.api.test_stats_api import played_match
+from tests.integration.api.test_stats_api import event, played_match
 
 
 def rows(response_json: dict) -> dict[str, dict]:  # type: ignore[type-arg]
@@ -137,3 +137,18 @@ async def test_both_roles_can_read_and_anonymous_cannot(
 
     assert as_head.json()["data"] == as_assistant.json()["data"]
     assert anonymous.status_code == 401
+
+
+async def test_saves_add_up_across_the_closed_matches(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    p = [await make_player(n) for n in range(1, 7)]
+    await played_match(client, headers, make_player, [event(20, "save", 1, 500, p[1])], players=p)
+    await played_match(client, headers, make_player, [event(20, "save", 2, 50, p[1])], players=p)
+
+    by_id = rows((await client.get("/stats/players", headers=headers)).json())
+
+    assert by_id[str(p[1].id)]["saves"] == 2
+    assert by_id[str(p[0].id)]["saves"] == 0
+    assert "rating" not in by_id[str(p[1].id)]

@@ -12,6 +12,8 @@ from app.api.errors import ApiError
 from app.db import match_repo, points_repo
 from app.db.models import MatchEvent as MatchEventRow
 from app.db.models import Player, StintRow
+from app.domain.points.callup import Position
+from app.domain.rating import RatingInput, player_rating
 from app.domain.stints.events import (
     EventError,
     EventKind,
@@ -23,13 +25,16 @@ from app.domain.stints.events import (
 from app.domain.stints.models import VALID_PARTS, Stint
 from app.domain.stints.stats import (
     GoalEvent,
+    LineupSegment,
     QuintetRating,
     build_segments,
     has_segment,
+    on_court_goals_by_player,
     quintet_stats,
     seconds_by_player,
 )
 from app.schemas.stats import (
+    MatchPlayerStatsOut,
     MatchStatsOut,
     PlayerStatsOut,
     QuintetStatsOut,
@@ -115,9 +120,7 @@ async def match_stats(
     ]
     quintets.sort(key=lambda q: -q.seconds)
 
-    rows = await _player_rows(db, set(seconds) | set(counts))
-    players = [_player_stats(rows[pid], seconds.get(pid, 0), counts.get(pid, {})) for pid in rows]
-    players.sort(key=lambda p: (-p.seconds, p.dorsal))
+    players = await _match_players(db, seconds, counts, segments, covered_goals)
 
     return ok(
         MatchStatsOut(
@@ -131,6 +134,47 @@ async def match_stats(
             players=players,
             quintets=quintets,
             warnings=_warning(uncovered) if stints else [],
+        )
+    )
+
+
+async def _match_players(
+    db: SessionDep,
+    seconds: dict[str, int],
+    counts: dict[str, dict[EventKind, int]],
+    segments: tuple[LineupSegment, ...],
+    covered_goals: list[GoalEvent],
+) -> list[MatchPlayerStatsOut]:
+    """Filas por jugador con su nota. Sin tramos (partido sin cerrar) no hay nota."""
+    rows = await _player_rows(db, set(seconds) | set(counts))
+    on_court = on_court_goals_by_player(segments, covered_goals)
+    players = []
+    for pid, player in rows.items():
+        base = _player_stats(player, seconds.get(pid, 0), counts.get(pid, {}))
+        rating = _rating(player, base, on_court.get(pid, (0, 0))) if segments else None
+        players.append(MatchPlayerStatsOut(**base.model_dump(), rating=rating))
+    players.sort(key=lambda p: (-p.seconds, p.dorsal))
+    return players
+
+
+def _rating(player: Player, stats: PlayerStatsOut, on_court: tuple[int, int]) -> float | None:
+    """Nota del jugador. `shots` ya son tiros sin gol: el gol no genera un evento de tiro."""
+    goals_for, goals_against = on_court
+    return player_rating(
+        RatingInput(
+            is_goalkeeper=player.position is Position.GOALKEEPER,
+            seconds=stats.seconds,
+            goals=stats.goals,
+            assists=stats.assists,
+            shots=stats.shots,
+            steals=stats.steals,
+            turnovers=stats.turnovers,
+            fouls=stats.fouls,
+            yellows=stats.yellows,
+            reds=stats.reds,
+            saves=stats.saves,
+            goals_for_on_court=goals_for,
+            goals_against_on_court=goals_against,
         )
     )
 
@@ -149,6 +193,7 @@ def _player_stats(player: Player, seconds: int, counts: dict[EventKind, int]) ->
         fouls=counts.get(EventKind.FOUL, 0),
         yellows=counts.get(EventKind.YELLOW, 0),
         reds=counts.get(EventKind.RED, 0),
+        saves=counts.get(EventKind.SAVE, 0),
     )
 
 

@@ -107,6 +107,25 @@ def _locate(segments: Sequence[LineupSegment], part: int, t: int) -> LineupSegme
     raise StatsError(f"Ningún tramo cubre la parte {part} en el segundo {t}")
 
 
+def on_court_goals_by_player(
+    segments: Sequence[LineupSegment], goals: Iterable[GoalEvent]
+) -> dict[str, tuple[int, int]]:
+    """Goles (a favor, en contra) con cada jugador en pista, con la misma regla que los quintetos.
+
+    Solo aparecen los jugadores que estaban en pista en algún gol.
+    """
+    goals_for: dict[str, int] = defaultdict(int)
+    goals_against: dict[str, int] = defaultdict(int)
+    for goal in goals:
+        target = goals_for if goal.for_team else goals_against
+        for player in _locate(segments, goal.part, goal.t).players:
+            target[player] += 1
+    return {
+        player: (goals_for.get(player, 0), goals_against.get(player, 0))
+        for player in goals_for.keys() | goals_against.keys()
+    }
+
+
 def quintet_stats(
     segments: Sequence[LineupSegment],
     goals: Iterable[GoalEvent],

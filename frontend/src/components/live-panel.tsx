@@ -94,6 +94,8 @@ interface LivePanelProps {
   direction: ClockDirection;
   court: readonly Player[];
   bench: readonly Player[];
+  /** El portero en pista, si hay uno solo: la parada se le anota con un toque, sin abrir su ficha. */
+  keeper: Player | null;
   canUndo: boolean;
   undoNote: string | null;
   status: LogStatus;
@@ -104,6 +106,7 @@ interface LivePanelProps {
   onClock: () => void;
   onToggleDirection: () => void;
   onRivalGoal: () => void;
+  onSave: () => void;
   onEndPart: () => void;
   onUndo: () => void;
   onRate: () => void;
@@ -177,6 +180,17 @@ export function LivePanel(props: LivePanelProps) {
         <div className="flex flex-col gap-5">
           <Bench players={props.bench} onPick={props.onBenchPlayer} />
           <div className="mt-auto flex flex-col gap-3">
+            {props.keeper ? (
+              <Button
+                size="lg"
+                variant="outline"
+                aria-label={`Parada de ${props.keeper.name}`}
+                className="h-14 rounded-2xl border-2 text-lg font-extrabold"
+                onClick={props.onSave}
+              >
+                {`Parada · ${shortName(props.keeper)}`}
+              </Button>
+            ) : null}
             <Button
               size="lg"
               variant="outline"

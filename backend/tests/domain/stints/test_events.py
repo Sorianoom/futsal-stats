@@ -125,3 +125,26 @@ def test_counts_by_player_groups_by_kind_and_ignores_events_without_player() -> 
         "p1": {EventKind.GOAL: 2},
         "p2": {EventKind.STEAL: 1},
     }
+
+
+def test_a_save_is_a_player_event_counted_for_the_goalkeeper() -> None:
+    log = [
+        event("e1", EventKind.SAVE, player_id="gk"),
+        event("e2", EventKind.SAVE, player_id="gk"),
+        event("e3", EventKind.RIVAL_GOAL, player_id=None),
+    ]
+
+    assert counts_by_player(log) == {"gk": {EventKind.SAVE: 2}}
+
+
+def test_an_undone_save_is_not_counted_and_is_not_a_team_foul() -> None:
+    log = [
+        event("e1", EventKind.SAVE, player_id="gk"),
+        event("e2", EventKind.SAVE, player_id="gk"),
+        event("e3", EventKind.UNDO, player_id=None, voids="e2"),
+    ]
+
+    assert counts_by_player(log) == {"gk": {EventKind.SAVE: 1}}
+    assert team_fouls_by_part(log) == {}
+    target = undo_target(log)
+    assert target is not None and target.id == "e1"

@@ -21,6 +21,7 @@ function renderPanel(overrides: Partial<PanelProps> = {}) {
     direction: "down",
     court: [player("gk", 1, "goalkeeper"), player("a", 7), player("b", 10), player("c", 4), player("d", 9)],
     bench: [player("e", 5), player("f", 11)],
+    keeper: null,
     canUndo: true,
     undoNote: null,
     status: "synced",
@@ -31,6 +32,7 @@ function renderPanel(overrides: Partial<PanelProps> = {}) {
     onClock: vi.fn(),
     onToggleDirection: vi.fn(),
     onRivalGoal: vi.fn(),
+    onSave: vi.fn(),
     onEndPart: vi.fn(),
     onUndo: vi.fn(),
     onRate: vi.fn(),
@@ -106,6 +108,20 @@ describe("LivePanel", () => {
     renderPanel();
 
     expect(screen.getByRole("button", { name: "Fin de la parte" })).toHaveClass("bg-cta");
+  });
+
+  it("con el portero en pista ofrece su parada con un toque", async () => {
+    const props = renderPanel({ keeper: player("gk", 1, "goalkeeper") });
+
+    await userEvent.click(screen.getByRole("button", { name: "Parada de Jugador gk" }));
+
+    expect(props.onSave).toHaveBeenCalled();
+  });
+
+  it("sin portero en pista no ofrece la parada directa", () => {
+    renderPanel();
+
+    expect(screen.queryByRole("button", { name: /^Parada/ })).not.toBeInTheDocument();
   });
 
   it("no deja deshacer si no hay nada que deshacer", () => {

@@ -11,6 +11,12 @@ export interface PlayerStats {
   fouls: number;
   yellows: number;
   reds: number;
+  saves: number;
+}
+
+export interface MatchPlayerStats extends PlayerStats {
+  /** Nota de 1,0 a 10,0. Null si jugó menos de 3 minutos o el partido no está cerrado. */
+  rating: number | null;
 }
 
 export interface QuintetStats {
@@ -28,7 +34,7 @@ export interface MatchStats {
   closed: boolean;
   score: { goals_for: number; goals_against: number };
   team_fouls: { part: number; fouls: number }[];
-  players: PlayerStats[];
+  players: MatchPlayerStats[];
   quintets: QuintetStats[];
   warnings: string[];
 }

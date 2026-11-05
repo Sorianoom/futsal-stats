@@ -18,6 +18,7 @@ function stats(id: string, overrides: Partial<SeasonPlayerStats> = {}): SeasonPl
     fouls: 0,
     yellows: 0,
     reds: 0,
+    saves: 0,
     matches_played: 1,
     ...overrides,
   };

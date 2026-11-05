@@ -3,6 +3,7 @@ from typing import Any
 
 from httpx import AsyncClient
 
+from app.domain.points.callup import Position
 from app.domain.roles import Role
 from tests.integration.api.conftest import Login, MakePlayer
 
@@ -233,6 +234,27 @@ async def test_rival_goals_have_no_player_and_are_accepted(
     response = await sync(client, headers, match_id, events=[rival])
 
     assert response.json()["data"]["accepted"] == [rival["id"]]
+
+
+async def test_saves_belong_to_a_goalkeeper_are_stored_and_can_be_undone(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    goalkeeper = await make_player(1, position=Position.GOALKEEPER)
+    save = event(1, "save", goalkeeper.id)
+    undo = event(2, "undo", voids=save["id"])
+
+    response = await sync(client, headers, match_id, events=[save, undo])
+    stored = await client.get(f"/matches/{match_id}/events", headers=headers)
+    without_player = await sync(client, headers, match_id, events=[event(3, "save", None)])
+
+    assert sorted(response.json()["data"]["accepted"]) == sorted([save["id"], undo["id"]])
+    assert [(e["kind"], e["player_id"]) for e in stored.json()["data"]] == [
+        ("save", str(goalkeeper.id)),
+        ("undo", None),
+    ]
+    assert without_player.status_code == 422
 
 
 async def test_lineup_payload_and_rating_validation(client: AsyncClient, login: Login) -> None:
