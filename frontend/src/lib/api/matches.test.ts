@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { queryCache } from "@/lib/query-cache";
+import { matchStatsQuery } from "@/lib/queries";
 import { mockApi } from "@/test/mock-api";
 
 import {
@@ -88,5 +90,38 @@ describe("API de partidos", () => {
       "/matches/m1/finalize",
       "/matches/m1/finalize?force=true",
     ]);
+  });
+
+  describe("olvida las estadísticas cacheadas del partido que cambia", () => {
+    const key = matchStatsQuery("m1").key;
+
+    it("al sincronizar eventos o alineación (también desde la cola offline)", async () => {
+      mockApi({ "POST /matches/m1/sync": { data: { accepted: [], duplicates: [], rejected: [] } } });
+      queryCache.set(key, "viejo");
+      queryCache.set(matchStatsQuery("m2").key, "otro");
+
+      await syncMatch("m1", { events: [] });
+
+      expect(queryCache.get(key)).toBeUndefined();
+      expect(queryCache.get(matchStatsQuery("m2").key)).toBe("otro");
+    });
+
+    it("aunque la sincronización falle, por si el servidor llegó a aplicarla", async () => {
+      mockApi({ "POST /matches/m1/sync": { status: 500, error: { code: "internal_error", message: "x" } } });
+      queryCache.set(key, "viejo");
+
+      await expect(syncMatch("m1", { events: [] })).rejects.toThrow();
+
+      expect(queryCache.get(key)).toBeUndefined();
+    });
+
+    it("al cerrar el partido", async () => {
+      mockApi({ "POST /matches/m1/finalize": { data: { stints: [], seconds_by_player: {} } } });
+      queryCache.set(key, "viejo");
+
+      await finalizeMatch("m1", true);
+
+      expect(queryCache.get(key)).toBeUndefined();
+    });
   });
 });

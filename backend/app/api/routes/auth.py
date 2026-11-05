@@ -1,10 +1,12 @@
 """Login, refresco, cierre de sesión y usuario actual."""
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import (
     CurrentUser,
@@ -27,7 +29,13 @@ from app.auth.refresh_flow import rotate_refresh_token
 from app.auth.tokens import TokenError, TokenType, create_token, decode_token
 from app.config import Settings
 from app.db.models import User
-from app.db.refresh_sessions_repo import Rotation, create_session, revoke, revoke_all_for_user
+from app.db.refresh_sessions_repo import (
+    Rotation,
+    create_session,
+    delete_expired,
+    revoke,
+    revoke_all_for_user,
+)
 from app.db.users_repo import get_user, get_user_by_email
 from app.domain.auth_sessions import RevokeReason
 from app.schemas.auth import LoginData, LoginRequest, SessionsRevoked, TokenData, UserOut
@@ -36,6 +44,7 @@ REFRESH_COOKIE = "refresh_token"
 SECONDS_PER_DAY = 86400
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 def _guard(request: Request) -> LoginGuard:
@@ -86,6 +95,19 @@ async def _revoke_presented_session(
     await session.commit()
 
 
+async def _purge_expired_sessions(session: SessionDep, now: datetime) -> None:
+    """Limpieza oportunista tras confirmar el login: si falla se registra y el login sigue."""
+    try:
+        deleted = await delete_expired(session, now)
+        await session.commit()
+    except SQLAlchemyError:
+        logger.exception("No se pudieron borrar las sesiones de refresco caducadas")
+        await session.rollback()
+        return
+    if deleted:
+        logger.info("Borradas %d sesiones de refresco caducadas", deleted)
+
+
 def _access_token(user: User, settings: Settings) -> TokenData:
     return TokenData(
         access_token=create_token(user.id, user.role, TokenType.ACCESS, settings),
@@ -130,7 +152,10 @@ async def login(
     await session.commit()
     _set_refresh_cookie(response, user, Rotation(opened, opened.current_jti), settings, now)
     token = _access_token(user, settings)
-    return ok(LoginData(**token.model_dump(), user=UserOut.model_validate(user)))
+    body = ok(LoginData(**token.model_dump(), user=UserOut.model_validate(user)))
+    # Después de construir la respuesta: un rollback de la limpieza caduca los objetos ORM.
+    await _purge_expired_sessions(session, now)
+    return body
 
 
 @router.post(

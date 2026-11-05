@@ -35,10 +35,12 @@ export function useApiQuery<T>(key: string | null, fetcher: () => Promise<T>): A
   useEffect(() => {
     if (key === null) return;
     let active = true;
+    const startedAt = queryCache.generation();
     latestFetcher.current()
       .then((data) => {
         if (!active) return;
-        queryCache.set(key, data);
+        // Si la clave se invalidó o la sesión se cerró mientras tanto, la respuesta puede ser vieja.
+        queryCache.setIfCurrent(key, data, startedAt);
         setLoaded({ key, data });
         setFailure(null);
       })

@@ -18,6 +18,12 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   sigue tardando ~3 s (arranque en frío).
 - **Nota de 1 a 10 por jugador y partido** (push directo a `main`, `5621d5b`, sin PR): tests en
   verde; el despliegue no se ha comprobado en producción. Alimentará el Fantasy (fase 12).
+- **Caché del detalle de un partido** (rama `feat/cache-detalle-y-limpieza-sesiones`):
+  `matchStatsQuery(id)` con clave `stats:match:${id}`. Las escrituras del partido (`syncMatch`,
+  `finalizeMatch` y las de tramos) invalidan su clave en la capa API, también si fallan.
+- **Limpieza de sesiones caducadas** (misma rama): cada login borra, en otra transacción, las
+  sesiones con `absolute_expires_at` anterior a hace 1 día (`EXPIRED_SESSION_RETENTION`), revocadas
+  o no. Si falla, se registra y el login sigue. Sin migración: el índice ya estaba en la 0004.
   - Cálculo en `backend/app/domain/rating/score.py`, con las tablas de pesos al principio.
     Base 6,0; gol +1,5; asistencia +0,7; robo +0,3; pérdida −0,3; falta −0,2; amarilla −0,5;
     roja −2,0. Campo: tiro sin gol +0,1 y ±0,3 por gol a favor o en contra en pista. Portero:
@@ -34,8 +40,10 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 ## Pendiente
 
 - Decidir si se congelan las notas al cerrar un partido cuando exista el Fantasy.
-- Caché en el detalle de estadísticas de un partido (`match-stats-view.tsx`).
-- Limpieza de sesiones caducadas (borrado oportunista al hacer login o cron de Vercel).
+- `queryCache.invalidate` sube un contador de versión común a todas las claves: invalidar un
+  partido impide cachear las respuestas en curso de otras pestañas (se muestran, pero no se
+  guardan). Arreglo posible: contador por clave.
+- Invalidar también `stats:season` al cambiar un partido (ahora se ve vieja un instante).
 
 ## Decisiones tomadas
 

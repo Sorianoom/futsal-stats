@@ -4,7 +4,10 @@
  * refresca, y nunca se enseña a otro usuario lo que vio el anterior.
  */
 const entries = new Map<string, unknown>();
-/** Sube en cada vaciado: una petición iniciada antes no debe rellenar la caché ya vaciada. */
+/**
+ * Sube en cada vaciado o invalidación: una petición iniciada antes no debe rellenar la caché con
+ * lo que había antes del cambio.
+ */
 let generation = 0;
 
 export const queryCache = {
@@ -20,6 +23,11 @@ export const queryCache = {
   /** Guarda solo si no se ha vaciado la caché desde que `startedAt` se leyó de `generation()`. */
   setIfCurrent(key: string, value: unknown, startedAt: number): void {
     if (startedAt === generation) entries.set(key, value);
+  },
+  /** Olvida una clave tras un cambio que la deja vieja: la próxima lectura espera a la red. */
+  invalidate(key: string): void {
+    generation += 1;
+    entries.delete(key);
   },
   clear(): void {
     generation += 1;

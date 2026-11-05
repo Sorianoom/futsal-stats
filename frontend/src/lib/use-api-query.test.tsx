@@ -122,4 +122,24 @@ describe("useApiQuery", () => {
 
     expect(queryCache.get("k")).toBeUndefined();
   });
+
+  it("una respuesta que salió antes de invalidar la clave no la vuelve a rellenar", async () => {
+    const pending = deferred<string>();
+    renderHook(() => useApiQuery("k", () => pending.promise));
+
+    queryCache.invalidate("k");
+    await act(async () => pending.resolve("de antes del cambio"));
+
+    expect(queryCache.get("k")).toBeUndefined();
+  });
+
+  it("una respuesta que salió antes de cerrar la sesión no rellena la caché vaciada", async () => {
+    const pending = deferred<string>();
+    renderHook(() => useApiQuery("k", () => pending.promise));
+
+    setAccessToken(null);
+    await act(async () => pending.resolve("de la sesión anterior"));
+
+    expect(queryCache.get("k")).toBeUndefined();
+  });
 });

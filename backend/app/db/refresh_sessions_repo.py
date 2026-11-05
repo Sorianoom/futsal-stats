@@ -8,12 +8,19 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import ColumnElement, or_, select, update
+from sqlalchemy import ColumnElement, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import RefreshSession
 from app.domain.auth_sessions import RevokeReason
+
+# Cuánto se guarda una sesión tras su tope antes de borrarla. Ningún refresco vale después del
+# tope (su `exp` nunca lo supera), pero `decode_token` admite unos segundos de desfase de reloj y
+# cada instancia usa su propio reloj: con este margen la fila sigue ahí mientras el último token
+# pueda decodificarse, así que un refresco antiguo sin `jti` nunca encuentra su sesión borrada y
+# la vuelve a adoptar como nueva. Un día sobra frente a segundos y no pesa en la tabla.
+EXPIRED_SESSION_RETENTION = timedelta(days=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,3 +166,19 @@ async def revoke(db: AsyncSession, jti: uuid.UUID, reason: RevokeReason, now: da
         return
     _revoke_row(row, reason, now)
     await db.flush()
+
+
+async def delete_expired(db: AsyncSession, now: datetime) -> int:
+    """Borra las sesiones que pasaron su tope (más el margen), revocadas o no. Devuelve cuántas.
+
+    Una revocada antes del tope se conserva: la detección por reutilización necesita su fila
+    mientras el refresco robado aún pueda presentarse.
+    """
+    statement = (
+        delete(RefreshSession)
+        .where(RefreshSession.absolute_expires_at < now - EXPIRED_SESSION_RETENTION)
+        .returning(RefreshSession.id)
+    )
+    deleted = (await db.execute(statement)).scalars().all()
+    await db.flush()
+    return len(deleted)

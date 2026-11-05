@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { queryCache } from "@/lib/query-cache";
+import { matchStatsQuery } from "@/lib/queries";
 import { mockApi } from "@/test/mock-api";
 
 import { createStint, deleteStint, updateStint } from "./stints";
@@ -36,5 +38,37 @@ describe("API de tramos", () => {
     await deleteStint("a/b");
 
     expect(api.calls[0].path).toBe("/stints/a%2Fb");
+  });
+
+  describe("olvida las estadísticas cacheadas del partido del tramo", () => {
+    const key = matchStatsQuery("m1").key;
+    const record = { id: "t1", match_id: "m1", player_id: "p1", part: 1, start_s: 0, end_s: 300 };
+
+    it("al crear un tramo", async () => {
+      mockApi({ "POST /matches/m1/stints": { data: record } });
+      queryCache.set(key, "viejo");
+
+      await createStint("m1", { player_id: "p1", part: 1, start_s: 0, end_s: 300 });
+
+      expect(queryCache.get(key)).toBeUndefined();
+    });
+
+    it("al editar un tramo", async () => {
+      mockApi({ "PATCH /stints/t1": { data: record } });
+      queryCache.set(key, "viejo");
+
+      await updateStint("t1", { end_s: 360 });
+
+      expect(queryCache.get(key)).toBeUndefined();
+    });
+
+    it("al borrar un tramo", async () => {
+      mockApi({ "DELETE /stints/t1": { data: record } });
+      queryCache.set(key, "viejo");
+
+      await deleteStint("t1");
+
+      expect(queryCache.get(key)).toBeUndefined();
+    });
   });
 });

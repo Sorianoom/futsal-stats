@@ -2,7 +2,9 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAccessToken } from "@/lib/api/client";
 import type { Match } from "@/lib/api/match-types";
+import { syncMatch } from "@/lib/api/matches";
 import type { MatchStats, SeasonStats } from "@/lib/api/stats-types";
 import { mockApi, type MockHandler } from "@/test/mock-api";
 import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
@@ -501,5 +503,104 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
       "href",
       "/estadisticas",
     );
+  });
+});
+
+describe("EstadisticasPage: caché del detalle de un partido", () => {
+  it("al volver a abrir el detalle enseña al momento lo ya visto", async () => {
+    api();
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    await screen.findByRole("table", { name: "Jugadores" });
+    unmount();
+
+    renderWithAuth(<EstadisticasPage />);
+
+    // Sin esperar a la red: sale de la caché y se refresca por detrás.
+    expect(screen.getByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Marcador")).toHaveTextContent("2 – 1");
+    expect(screen.getByRole("heading", { name: /Rival FS/ })).toBeInTheDocument();
+  });
+
+  it("refresca por detrás lo cacheado y enseña lo nuevo", async () => {
+    const server = api();
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    await screen.findByRole("table", { name: "Jugadores" });
+    unmount();
+    stats = { ...STATS, score: { goals_for: 4, goals_against: 1 } };
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByText("4 – 1")).toBeInTheDocument();
+    expect(server.count("GET", "/matches/m1/stats")).toBe(2);
+  });
+
+  it("tras corregir eventos de ese partido no enseña las estadísticas viejas", async () => {
+    api({ "POST /matches/m1/sync": { data: { accepted: ["e1"], duplicates: [], rejected: [] } } });
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    await screen.findByRole("table", { name: "Jugadores" });
+    unmount();
+
+    await syncMatch("m1", { events: [] });
+    stats = { ...STATS, score: { goals_for: 3, goals_against: 1 } };
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(screen.queryByText("2 – 1")).not.toBeInTheDocument();
+    expect(screen.getByText("Cargando estadísticas…")).toBeInTheDocument();
+    expect(await screen.findByText("3 – 1")).toBeInTheDocument();
+  });
+
+  it("un partido incoherente ya corregido no sigue saliendo como incoherente", async () => {
+    let incoherent = true;
+    api({
+      "GET /matches/m1/stats": () =>
+        incoherent
+          ? { status: 409, error: { code: "conflict", message: "No coherente" } }
+          : { data: stats },
+      "POST /matches/m1/sync": { data: { accepted: ["e1"], duplicates: [], rejected: [] } },
+    });
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    await screen.findByText("Los eventos de este partido no son coherentes");
+    unmount();
+
+    await syncMatch("m1", { events: [] });
+    incoherent = false;
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(screen.queryByText("Los eventos de este partido no son coherentes")).not.toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+  });
+
+  it("si falla el refresco conserva lo ya visto y permite reintentar", async () => {
+    let down = false;
+    api({
+      "GET /matches/m1/stats": () =>
+        down ? { status: 500, error: { code: "internal_error", message: "Fallo" } } : { data: stats },
+    });
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    await screen.findByRole("table", { name: "Jugadores" });
+    unmount();
+    down = true;
+
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar las estadísticas");
+    expect(screen.getByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+    down = false;
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("al cerrar la sesión olvida el detalle cacheado", async () => {
+    api();
+    const { unmount } = renderWithAuth(<EstadisticasPage />);
+    await screen.findByRole("table", { name: "Jugadores" });
+    unmount();
+
+    setAccessToken(null);
+    renderWithAuth(<EstadisticasPage />);
+
+    expect(screen.queryByRole("table", { name: "Jugadores" })).not.toBeInTheDocument();
+    expect(screen.getByText("Cargando estadísticas…")).toBeInTheDocument();
   });
 });

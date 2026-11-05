@@ -2,12 +2,13 @@
  * Lecturas de cada pestaña, con la clave de caché que comparten la pantalla y la precarga: así lo
  * que se precarga es exactamente lo que la pantalla busca al entrar.
  */
+import { ApiError } from "@/lib/api/client";
 import type { Match } from "@/lib/api/match-types";
 import { listMatches } from "@/lib/api/matches";
 import { listPlayers } from "@/lib/api/players";
 import { getCallup, listInfractions, listMovements, listSessions } from "@/lib/api/points";
-import { getSeasonStats } from "@/lib/api/stats";
-import type { SeasonStats } from "@/lib/api/stats-types";
+import { getMatchStats, getSeasonStats, matchStatsKey } from "@/lib/api/stats";
+import type { MatchStats, SeasonStats } from "@/lib/api/stats-types";
 import type { Callup, Infraction, Movement, Player, TeamSession } from "@/lib/api/types";
 
 export interface Query<T> {
@@ -46,4 +47,29 @@ export const sessionsQuery = (week: string): Query<TeamSession[]> => ({
 export const movementsQuery = (week: string): Query<Movement[]> => ({
   key: `movements:${week}`,
   fetch: () => listMovements(week),
+});
+
+const NOT_FOUND = 404;
+const CONFLICT = 409;
+
+/** Un partido inexistente o con eventos incoherentes es una respuesta, no un fallo que reintentar. */
+export type MatchStatsResult =
+  | { status: "ok"; stats: MatchStats }
+  | { status: "not_found" }
+  | { status: "incoherent" };
+
+async function fetchMatchStats(matchId: string): Promise<MatchStatsResult> {
+  try {
+    return { status: "ok", stats: await getMatchStats(matchId) };
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.status === NOT_FOUND) return { status: "not_found" };
+    if (failure instanceof ApiError && failure.status === CONFLICT) return { status: "incoherent" };
+    throw failure;
+  }
+}
+
+/** Se invalida al registrar o corregir eventos, alineación o tramos del partido (ver `invalidateMatchStats`). */
+export const matchStatsQuery = (matchId: string): Query<MatchStatsResult> => ({
+  key: matchStatsKey(matchId),
+  fetch: () => fetchMatchStats(matchId),
 });

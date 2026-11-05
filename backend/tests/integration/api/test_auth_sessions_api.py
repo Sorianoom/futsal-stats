@@ -1,15 +1,20 @@
 """Las sesiones de refresco desde la API: rotación del jti, gracia, revocación y adopción."""
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import jwt
+import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.tokens import TokenType, create_token
+from app.api.routes import auth as auth_routes
+from app.auth.tokens import CLOCK_SKEW_SECONDS, TokenType, create_token
 from app.db.models import RefreshSession
+from app.db.refresh_sessions_repo import EXPIRED_SESSION_RETENTION, create_session
 from app.domain.auth_sessions import RevokeReason
 from app.domain.roles import Role
 from tests.integration.api.conftest import PASSWORD, TEST_SETTINGS, Login, MakeUser
@@ -283,3 +288,108 @@ async def test_closing_the_sessions_of_an_unknown_user_is_not_found(
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+
+
+PURGEABLE = timedelta(days=TEST_SETTINGS.refresh_session_max_days) + EXPIRED_SESSION_RETENTION
+
+
+async def session_of(db: AsyncSession, user_id: uuid.UUID, started: datetime) -> RefreshSession:
+    return await create_session(db, user_id, started, TEST_SETTINGS.refresh_session_max_days)
+
+
+async def stored_ids(db: AsyncSession) -> set[uuid.UUID]:
+    return set((await db.execute(select(RefreshSession.id))).scalars())
+
+
+async def test_login_purges_the_expired_sessions_of_any_user(
+    client: AsyncClient, make_user: MakeUser, session: AsyncSession
+) -> None:
+    other = await make_user("otro@club.es", Role.ASSISTANT_COACH)
+    stale = await session_of(session, other.id, datetime.now(UTC) - PURGEABLE - timedelta(hours=1))
+
+    await login(client, make_user)
+
+    ids = await stored_ids(session)
+    assert stale.id not in ids
+    assert len(ids) == 1  # solo la sesión que acaba de abrirse
+
+
+async def test_login_keeps_open_sessions_and_revoked_ones_not_yet_expired(
+    client: AsyncClient, make_user: MakeUser, session: AsyncSession
+) -> None:
+    other = await make_user("otro@club.es", Role.ASSISTANT_COACH)
+    now = datetime.now(UTC)
+    open_one = await session_of(session, other.id, now - timedelta(days=1))
+    revoked = await session_of(session, other.id, now - timedelta(days=2))
+    revoked.revoked_at, revoked.revoke_reason = now, RevokeReason.REUSE
+    await session.flush()
+
+    await login(client, make_user)
+
+    assert {open_one.id, revoked.id} <= await stored_ids(session)
+
+
+async def test_reuse_is_still_detected_after_a_login_purges_sessions(
+    client: AsyncClient, make_user: MakeUser, session: AsyncSession
+) -> None:
+    first = cookie_of(await login(client, make_user))
+    rotated = await refresh_with(client, first)
+    row = await only_session(session)
+    row.rotated_at = datetime.now(UTC) - timedelta(seconds=GRACE + 60)
+    await session.flush()
+    await client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+
+    late = await refresh_with(client, first)
+
+    assert late.status_code == 401
+    assert row.revoke_reason is RevokeReason.REUSE
+    assert (await refresh_with(client, cookie_of(rotated))).status_code == 401
+
+
+async def test_a_cookie_of_a_purged_session_is_rejected(
+    client: AsyncClient, make_user: MakeUser, session: AsyncSession
+) -> None:
+    cookie = cookie_of(await login(client, make_user))
+    row = await only_session(session)
+    row.created_at = datetime.now(UTC) - PURGEABLE - timedelta(days=1)
+    row.absolute_expires_at = datetime.now(UTC) - EXPIRED_SESSION_RETENTION - timedelta(hours=1)
+    await session.flush()
+    await client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert row.id not in await stored_ids(session)
+
+    response = await refresh_with(client, cookie)
+
+    assert response.status_code == 401
+    assert len(await stored_ids(session)) == 1  # no resucita: solo la del segundo login
+
+
+async def test_an_adopted_legacy_token_expires_before_its_session_can_be_purged(
+    client: AsyncClient, make_user: MakeUser, session: AsyncSession
+) -> None:
+    user = await make_user(EMAIL)
+    legacy = create_token(user.id, user.role, TokenType.REFRESH, TEST_SETTINGS)
+
+    await refresh_with(client, legacy)
+
+    row = await only_session(session)
+    exp = jwt.decode(legacy, options={"verify_signature": False})["exp"]
+    last_accepted = datetime.fromtimestamp(exp + CLOCK_SKEW_SECONDS, UTC)
+    assert last_accepted < row.absolute_expires_at + EXPIRED_SESSION_RETENTION
+
+
+async def test_login_still_succeeds_and_logs_when_the_purge_fails(
+    client: AsyncClient,
+    make_user: MakeUser,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def broken(*_: object) -> int:
+        raise OperationalError("DELETE", {}, Exception("se cayó la conexión"))
+
+    monkeypatch.setattr(auth_routes, "delete_expired", broken)
+
+    response = await login(client, make_user)
+
+    assert response.status_code == 200
+    assert "refresh_token" in response.cookies
+    assert any(r.levelno == logging.ERROR and r.exc_info for r in caplog.records)

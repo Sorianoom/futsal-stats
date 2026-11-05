@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import refresh_sessions_repo as repo
@@ -208,3 +209,45 @@ async def test_revoking_all_of_a_user_without_sessions_returns_zero(
     user = await make_user(session)
 
     assert await repo.revoke_all_for_user(session, user.id, NOW) == 0
+
+
+async def remaining(db: AsyncSession) -> set[uuid.UUID]:
+    return set((await db.execute(select(RefreshSession.id))).scalars())
+
+
+async def test_deleting_expired_sessions_removes_only_those_past_the_limit_and_margin(
+    session: AsyncSession,
+) -> None:
+    long_gone = await start(session)
+    alive = await start(session)
+    revoked_alive = await start(session)
+    await repo.revoke(session, revoked_alive.current_jti, RevokeReason.REUSE, NOW)
+    just_expired = await start(session)
+    long_gone.absolute_expires_at = NOW - repo.EXPIRED_SESSION_RETENTION - timedelta(seconds=1)
+    just_expired.absolute_expires_at = NOW - repo.EXPIRED_SESSION_RETENTION + timedelta(seconds=1)
+    long_gone.created_at = just_expired.created_at = NOW - timedelta(days=MAX_DAYS * 2)
+    await session.flush()
+
+    deleted = await repo.delete_expired(session, NOW)
+
+    assert deleted == 1
+    assert await remaining(session) == {alive.id, revoked_alive.id, just_expired.id}
+
+
+async def test_deleting_expired_sessions_also_removes_revoked_ones_past_the_limit(
+    session: AsyncSession,
+) -> None:
+    created = await start(session)
+    await repo.revoke(session, created.current_jti, RevokeReason.LOGOUT, NOW)
+    later = NOW + timedelta(days=MAX_DAYS) + repo.EXPIRED_SESSION_RETENTION + timedelta(seconds=1)
+
+    assert await repo.delete_expired(session, later) == 1
+    assert await remaining(session) == set()
+
+
+async def test_deleting_expired_sessions_with_nothing_to_delete_returns_zero(
+    session: AsyncSession,
+) -> None:
+    await start(session)
+
+    assert await repo.delete_expired(session, NOW) == 0
