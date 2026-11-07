@@ -1,8 +1,15 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import TokenType, create_token
+from app.config import Settings, get_settings
+from app.db.session import get_session
 from app.domain.roles import Role
+from app.main import create_app
 from tests.integration.api.conftest import PASSWORD, TEST_SETTINGS, Login, MakeUser
 
 EMAIL = "coach@club.es"
@@ -283,3 +290,62 @@ async def test_old_password_hashes_are_upgraded_on_login(
     assert response.status_code == 200
     assert user.password_hash != stale
     assert (await do_login(client)).status_code == 200
+
+
+@asynccontextmanager
+async def instance(session: AsyncSession, settings: Settings) -> AsyncIterator[AsyncClient]:
+    """Otra instancia de la API (en Vercel, otra función) contra la misma BD."""
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_settings] = lambda: settings
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        yield http
+
+
+async def login_from(client: AsyncClient, ip: str, password: str = PASSWORD):  # type: ignore[no-untyped-def]
+    return await client.post(
+        "/auth/login", json={"email": EMAIL, "password": password}, headers={"x-real-ip": ip}
+    )
+
+
+async def test_failures_in_one_instance_block_the_login_in_another(
+    session: AsyncSession, make_user: MakeUser
+) -> None:
+    await make_user(EMAIL)
+    for _ in range(5):
+        async with instance(session, TEST_SETTINGS) as one_off:
+            await do_login(one_off, password="wrong-wrong-wrong")
+
+    async with instance(session, TEST_SETTINGS) as fresh:
+        response = await do_login(fresh)
+
+    assert response.status_code == 429
+
+
+async def test_behind_vercel_each_real_ip_has_its_own_pair_counter(
+    session: AsyncSession, make_user: MakeUser
+) -> None:
+    await make_user(EMAIL)
+    vercel = TEST_SETTINGS.model_copy(update={"vercel": True})
+    async with instance(session, vercel) as client:
+        for _ in range(5):
+            await login_from(client, "81.0.0.1", password="wrong-wrong-wrong")
+
+        blocked = await login_from(client, "81.0.0.1")
+        allowed = await login_from(client, "81.0.0.2")
+
+    assert blocked.status_code == 429
+    assert allowed.status_code == 200
+
+
+async def test_outside_vercel_the_ip_header_is_ignored(
+    session: AsyncSession, make_user: MakeUser
+) -> None:
+    await make_user(EMAIL)
+    async with instance(session, TEST_SETTINGS) as client:
+        for index in range(5):
+            await login_from(client, f"81.0.0.{index}", password="wrong-wrong-wrong")
+
+        response = await login_from(client, "81.0.0.99")
+
+    assert response.status_code == 429

@@ -56,7 +56,7 @@ Cada fase: TDD, cobertura ≥ 80 %, revisión con `code-reviewer`, commit conven
 - Reloj en segundo plano: calcular por diferencia de marcas de tiempo.
 - Divergencia TS/Python: fixtures compartidos.
 - Entorno local (Python 3.12, sin uv/pip/yarn en PATH).
-- Limitador de login en memoria por instancia: en Vercel Functions no bloquea de forma fiable. Aceptado hasta la fase 12; entonces pasa a la BD.
+- Limitador de login: resuelto en la fase 12 al pasar a la BD (tabla `login_failures`, migración 0005), compartido por todas las instancias de Vercel.
 - Arranque en frío de FastAPI en Vercel sin cifras para Python: medir en el despliegue de prueba.
 
 ## Alojamiento

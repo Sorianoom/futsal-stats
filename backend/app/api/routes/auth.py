@@ -24,10 +24,11 @@ from app.auth.passwords import (
     spend_verification_time_async,
     verify_password_async,
 )
-from app.auth.rate_limit import LoginGuard
+from app.auth.rate_limit import WINDOW, LoginKeys, client_ip, is_blocked, login_keys
 from app.auth.refresh_flow import rotate_refresh_token
 from app.auth.tokens import TokenError, TokenType, create_token, decode_token
 from app.config import Settings
+from app.db.login_failures_repo import clear_failures, count_failures_since, record_failures
 from app.db.models import User
 from app.db.refresh_sessions_repo import (
     Rotation,
@@ -47,13 +48,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
-def _guard(request: Request) -> LoginGuard:
-    guard: LoginGuard = request.app.state.login_guard
-    return guard
+def _login_keys(request: Request, email: str, settings: Settings) -> LoginKeys:
+    socket_host = request.client.host if request.client else None
+    ip = client_ip(socket_host, request.headers, behind_vercel=settings.vercel)
+    return login_keys(ip, email, settings.require_jwt_secret())
 
 
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+async def _is_blocked(session: SessionDep, keys: LoginKeys, now: datetime) -> bool:
+    counts = await count_failures_since(session, (keys.pair, keys.ip, keys.email), now - WINDOW)
+    return is_blocked(keys, counts)
+
+
+async def _failed_login(session: SessionDep, keys: LoginKeys, now: datetime) -> ApiError:
+    """Anota el fallo y lo confirma ya: el 401 que sigue no debe deshacerlo."""
+    await record_failures(
+        session, (keys.pair, keys.ip, keys.email), now, forget_before=now - WINDOW
+    )
+    await session.commit()
+    return _invalid_credentials()
 
 
 def _set_refresh_cookie(
@@ -127,27 +139,25 @@ async def login(
     session: SessionDep,
     settings: SettingsDep,
 ) -> Envelope[LoginData]:
-    guard, ip = _guard(request), _client_ip(request)
-    if guard.is_blocked(ip, payload.email):
+    keys, now = _login_keys(request, payload.email, settings), datetime.now(UTC)
+    if await _is_blocked(session, keys, now):
         raise ApiError(
             429,
             "too_many_attempts",
             "Demasiados intentos fallidos. Inténtalo más tarde",
-            {"Retry-After": str(int(guard.window_seconds))},
+            {"Retry-After": str(int(WINDOW.total_seconds()))},
         )
     user = await get_user_by_email(session, payload.email)
     if user is None:
         await spend_verification_time_async(payload.password)
-        guard.record_failure(ip, payload.email)
-        raise _invalid_credentials()
+        raise await _failed_login(session, keys, now)
     password_ok = await verify_password_async(payload.password, user.password_hash)
     if not password_ok or not user.is_active:
-        guard.record_failure(ip, payload.email)
-        raise _invalid_credentials()
-    guard.reset(ip, payload.email)
+        raise await _failed_login(session, keys, now)
+    # Un login correcto limpia el par y el email, pero no el contador de la IP.
+    await clear_failures(session, (keys.pair, keys.email))
     if needs_rehash(user.password_hash):
         user.password_hash = await hash_password_async(payload.password)
-    now = datetime.now(UTC)
     opened = await create_session(session, user.id, now, settings.refresh_session_max_days)
     await session.commit()
     _set_refresh_cookie(response, user, Rotation(opened, opened.current_jti), settings, now)

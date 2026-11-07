@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
@@ -330,3 +331,18 @@ class IdempotencyKeyRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+
+
+class LoginFailure(Base):
+    """Un intento de login fallido para una de sus tres claves (ver `app.auth.rate_limit`).
+
+    Solo guarda el HMAC de la clave, nunca la IP ni el email. Las filas viven lo que dura la
+    ventana del límite: cada fallo nuevo borra las que ya han salido de ella.
+    """
+
+    __tablename__ = "login_failures"
+    __table_args__ = (Index("ix_login_failures_key_hash_failed_at", "key_hash", "failed_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    key_hash: Mapped[str] = mapped_column(String(64))
+    failed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

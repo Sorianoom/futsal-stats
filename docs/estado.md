@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-05 (caché por clave e invalidación de la temporada).
+Última actualización: 2026-11-07 (limitador de login en la BD, en rama con migración 0005).
 
 ## Hecho y en producción
 
@@ -41,11 +41,29 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 - Ninguno de los despliegues de la nota, la caché del detalle y la limpieza se ha comprobado aún
   en producción.
 
+## En curso
+
+- **Limitador de login en la BD** (rama `feat/limitador-login-bd`, sin fusionar; fase 12). Tests en
+  verde. **Lleva la migración 0005**: va por PR y hay que aplicarla en Neon antes de fusionar.
+  - Tabla `login_failures` (`key_hash`, `failed_at`): un fallo por clave. Las claves son
+    HMAC-SHA256 con `JWT_SECRET` de IP+email, IP y email, así que no hay IPs ni emails en claro.
+    Rotar `JWT_SECRET` pone los contadores a cero.
+  - Mismos límites que antes, en 5 minutos: 5 por IP+email, 30 por IP, 20 por email. Acertar
+    limpia IP+email y email, no la IP. Cada fallo nuevo borra las filas que ya salieron de la
+    ventana.
+  - El fallo se confirma antes de responder 401. Peticiones simultáneas pueden pasar algún intento
+    de más (se cuenta y luego se anota, sin bloqueo); se acepta.
+  - IP del cliente: en Vercel (`VERCEL=1`, que Vercel define solo) se lee `x-real-ip`, que su proxy
+    sobrescribe; fuera de Vercel se ignora y se usa la del socket. Antes se usaba siempre la del
+    socket, que detrás del proxy podía ser compartida.
+  - Desaparece el limitador en memoria (`LoginRateLimiter`, `LoginGuard`, `app.state.login_guard`).
+
 ## Pendiente
 
 - Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
-- Fase 12, el Fantasy: empezar por el limitador de login en la BD (ahora en memoria; en Vercel no
-  bloquea de forma fiable), que no depende de nada más.
+- Comprobar en producción que `x-real-ip` llega con la IP real y que el bloqueo funciona.
+- Resto de la fase 12: cuentas para jugadores, separar datos internos de los públicos,
+  plantillas, jornadas y clasificación.
 - Decidir si se congelan las notas al cerrar un partido cuando exista el Fantasy.
 
 ## Decisiones tomadas

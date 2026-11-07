@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # nueva se pierde por un corte de red, el siguiente intento legítimo no cierra la sesión.
     refresh_reuse_grace_seconds: int = Field(default=7200, ge=0, le=86400)
     cookie_secure: bool = True
+    # Vercel define VERCEL=1 en sus funciones. Solo entonces se confía en la IP que pone su proxy
+    # (`x-real-ip`) para el límite de intentos de login; fuera de Vercel esa cabecera se falsifica.
+    vercel: bool = False
     # Vercel entrega al backend la ruta original (/api/...): vacío en local, "/api" en producción.
     api_prefix: str = ""
 

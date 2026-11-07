@@ -18,7 +18,6 @@ from app.api.routes import (
 )
 from app.api.security_headers import SecurityHeadersMiddleware
 from app.auth.passwords import warm_up
-from app.auth.rate_limit import LoginGuard
 from app.config import get_settings
 from app.db.session import dispose_engine
 
@@ -51,7 +50,6 @@ def create_app() -> FastAPI:
         allow_methods=ALLOWED_METHODS,
         allow_headers=ALLOWED_HEADERS,
     )
-    app.state.login_guard = LoginGuard()
     register_error_handlers(app)
     for router in (
         auth.router,
