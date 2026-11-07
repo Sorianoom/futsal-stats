@@ -48,7 +48,7 @@ Cada fase: TDD, cobertura ≥ 80 %, revisión con `code-reviewer`, commit conven
 9. **Offline-first**: IndexedDB, cola de sync, service worker, Wake Lock.
 10. **Estadísticas y edición post-partido**.
 11. **Despliegue y endurecimiento** (Vercel para frontend y backend + Neon; prueba en iPad real).
-12. **Fantasy del equipo**: puntuación por jugador y partido a partir de las estadísticas, plantillas de los participantes, jornadas y clasificación. Requiere cuentas para jugadores, limitador de login en BD y separar los datos internos (puntos disciplinarios, sanciones, lesiones) de los públicos.
+12. **Fantasy del equipo**: puntuación por jugador y partido a partir de las estadísticas, plantillas de los participantes, jornadas y clasificación. Requiere cuentas para jugadores, limitador de login en BD y separar los datos internos (puntos disciplinarios, sanciones, lesiones) de los públicos. Reglas y orden de construcción: `docs/fantasy.md`.
 
 ## Riesgos
 

@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter
 
-from app.api.deps import CurrentUser, HeadCoach, SessionDep
+from app.api.deps import AnyUser, CurrentUser, HeadCoach, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.api.idempotency import IdempotencyKey, run_idempotent
@@ -42,7 +42,7 @@ async def create_match(
 
 
 @router.get("/matches", response_model=Envelope[list[MatchOut]])
-async def list_matches(db: SessionDep, _: CurrentUser) -> Envelope[list[MatchOut]]:
+async def list_matches(db: SessionDep, _: AnyUser) -> Envelope[list[MatchOut]]:
     rows = await points_repo.list_matches(db)
     return ok([_match_out(m, held_on) for m, held_on in rows], Meta(total=len(rows)))
 

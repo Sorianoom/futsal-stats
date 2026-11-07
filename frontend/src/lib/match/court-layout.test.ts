@@ -5,7 +5,7 @@ import type { Player, Position } from "@/lib/api/types";
 import { COURT_SLOTS, courtSlots } from "./court-layout";
 
 function player(id: string, position: Position = "field"): Player {
-  return { id, name: id, dorsal: 1, position, status: "available", is_active: true };
+  return { id, name: id, dorsal: 1, position, status: "available", is_active: true, has_account: false };
 }
 
 const GOALKEEPER_SLOT = COURT_SLOTS[0];

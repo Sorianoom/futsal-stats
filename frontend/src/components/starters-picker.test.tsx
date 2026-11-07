@@ -7,7 +7,7 @@ import type { Player, Position } from "@/lib/api/types";
 import { StartersPicker } from "./starters-picker";
 
 function player(id: string, dorsal: number, position: Position = "field"): Player {
-  return { id, name: `Jugador ${id}`, dorsal, position, status: "available", is_active: true };
+  return { id, name: `Jugador ${id}`, dorsal, position, status: "available", is_active: true, has_account: false };
 }
 
 const ROSTER = [

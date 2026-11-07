@@ -1,5 +1,6 @@
 """Fixtures de API: app real con la sesión de pruebas (transacción revertida) inyectada."""
 
+import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
@@ -43,8 +44,9 @@ def make_user(session: AsyncSession) -> MakeUser:
         role: Role = Role.HEAD_COACH,
         active: bool = True,
         password: str = PASSWORD,
+        player_id: uuid.UUID | None = None,
     ) -> User:
-        user = await create_user(session, email, password, role)
+        user = await create_user(session, email, password, role, player_id=player_id)
         user.is_active = active
         await session.flush()
         return user
@@ -54,9 +56,13 @@ def make_user(session: AsyncSession) -> MakeUser:
 
 @pytest.fixture
 def login(client: AsyncClient, make_user: MakeUser) -> Login:
-    async def _login(role: Role = Role.HEAD_COACH, email: str | None = None) -> dict[str, str]:
+    async def _login(
+        role: Role = Role.HEAD_COACH,
+        email: str | None = None,
+        player_id: uuid.UUID | None = None,
+    ) -> dict[str, str]:
         address = email or f"{role.value}@club.es"
-        await make_user(email=address, role=role)
+        await make_user(email=address, role=role, player_id=player_id)
         response = await client.post("/auth/login", json={"email": address, "password": PASSWORD})
         token = response.json()["data"]["access_token"]
         return {"Authorization": f"Bearer {token}"}
@@ -85,3 +91,13 @@ def make_player(session: AsyncSession) -> MakePlayer:
 @pytest.fixture(autouse=True)
 async def seeded_catalog(session: AsyncSession) -> None:
     await seed_catalog(session)
+
+
+PLAYER_ACCOUNT_DORSAL = 99
+
+
+@pytest.fixture
+async def player_headers(login: Login, make_player: MakePlayer) -> dict[str, str]:
+    """Cabeceras de un usuario con rol `player` vinculado a un jugador (dorsal 99)."""
+    player = await make_player(PLAYER_ACCOUNT_DORSAL)
+    return await login(Role.PLAYER, player_id=player.id)

@@ -20,7 +20,7 @@ from app.db.calendar_repo import ImportResult, import_matches
 from app.db.engine import build_engine
 from app.db.users_repo import WeakPasswordError, create_user
 from app.domain.calendar_import import CalendarEntry, CalendarError, parse_calendar
-from app.domain.roles import Role
+from app.domain.roles import STAFF_ROLES, Role
 from app.schemas.points import MatchCreate
 
 
@@ -117,7 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create-user", help="Crea un usuario (pide la contraseña)")
     create.add_argument("email")
-    create.add_argument("--role", type=Role, choices=list(Role), required=True)
+    create.add_argument("--role", type=Role, choices=list(STAFF_ROLES), required=True)
     importer = commands.add_parser(
         "import-matches", help="Crea los partidos de un calendario (AAAA-MM-DD Rival por línea)"
     )

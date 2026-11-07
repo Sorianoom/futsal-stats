@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,3 +40,10 @@ class PlayerOut(BaseModel):
     position: Position
     status: PlayerStatus
     is_active: bool
+    # Hay un usuario activo vinculado al jugador.
+    has_account: bool
+
+
+class InvitationOut(BaseModel):
+    token: str
+    expires_at: datetime

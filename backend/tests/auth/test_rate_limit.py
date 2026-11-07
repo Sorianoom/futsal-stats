@@ -3,10 +3,13 @@
 import pytest
 
 from app.auth.rate_limit import (
+    INVITATION_MAX_FAILURES_PER_IP,
     PER_EMAIL_MAX_FAILURES,
     PER_IP_MAX_FAILURES,
     PER_PAIR_MAX_FAILURES,
     client_ip,
+    invitation_ip_key,
+    invitation_is_blocked,
     is_blocked,
     login_keys,
 )
@@ -96,3 +99,30 @@ def test_client_ip_falls_back_to_the_socket_when_the_header_is_missing(
 
 def test_client_ip_without_socket_or_header_is_unknown() -> None:
     assert client_ip(None, {}, behind_vercel=False) == "unknown"
+
+
+def test_the_invitation_key_is_a_digest_apart_from_the_login_ip_key() -> None:
+    key = invitation_ip_key("1.1.1.1", SECRET)
+
+    assert len(key) == 64 and "1.1.1.1" not in key
+    assert key != login_keys("1.1.1.1", "a@x.es", SECRET).ip
+    assert key == invitation_ip_key("1.1.1.1", SECRET)
+    assert key != invitation_ip_key("1.1.1.2", SECRET)
+
+
+@pytest.mark.parametrize(
+    ("failures", "blocked"),
+    [
+        (0, False),
+        (INVITATION_MAX_FAILURES_PER_IP - 1, False),
+        (INVITATION_MAX_FAILURES_PER_IP, True),
+    ],
+)
+def test_invitations_block_when_the_ip_reaches_its_limit(failures: int, blocked: bool) -> None:
+    key = invitation_ip_key("1.1.1.1", SECRET)
+
+    assert invitation_is_blocked(key, {key: failures}) is blocked
+
+
+def test_the_invitation_limit_is_ten() -> None:
+    assert INVITATION_MAX_FAILURES_PER_IP == 10

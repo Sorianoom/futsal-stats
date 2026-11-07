@@ -56,13 +56,33 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     socket, que detrás del proxy podía ser compartida.
   - Desaparece el limitador en memoria (`LoginRateLimiter`, `LoginGuard`, `app.state.login_guard`).
 
+## En curso
+
+- **Fantasy, paso 1: cuentas de jugador** (rama `feat/cuentas-jugador`, sin subir). Tests en verde
+  y revisión de seguridad sin hallazgos graves (sus arreglos menores ya están hechos). **Lleva la
+  migración 0006**: aplicarla en Neon antes de subir a `main`.
+  - Reglamento completo del Fantasy, acordado regla a regla: `docs/fantasy.md`.
+  - Rol `player` vinculado a un jugador (`users.player_id`, único; CHECK rol ↔ vínculo).
+  - `CurrentUser` = solo personal técnico; `AnyUser` (también jugadores) solo en `GET /auth/me`,
+    `GET /matches`, `GET /matches/{id}/stats` y `GET /stats/players`. Un test recorre todas las
+    rutas del esquema OpenAPI con un token de jugador: una ruta nueva queda cerrada por defecto.
+  - Al jugador se le vacían `quintets` y `warnings` en las estadísticas del partido; ve las notas.
+  - Invitación: `POST /players/{id}/invitation` (entrenador principal; 409 `already_has_account` o
+    `player_inactive`) y `POST /auth/invitations/accept` (sin sesión; 400 `invalid_invitation`, 409
+    `email_taken`, 422 `weak_password`, 429 tras 10 fallos por IP en 5 min). Token de 256 bits,
+    solo se guarda su sha256, un solo uso, 7 días. Enlace `/invitacion/#token=…`; la página lo
+    borra de la barra de direcciones.
+  - Dar de baja a un jugador desactiva su cuenta, revoca sus sesiones y borra sus invitaciones.
+    No hay forma de reactivar a un jugador ni su cuenta (tampoco había reactivación antes).
+  - Frontend: el jugador solo ve «Estadísticas»; las pantallas de entrenador le redirigen allí.
+
 ## Pendiente
 
 - Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
 - Comprobar en producción que `x-real-ip` llega con la IP real y que el bloqueo funciona.
-- Resto de la fase 12: cuentas para jugadores, separar datos internos de los públicos,
-  plantillas, jornadas y clasificación.
-- Decidir si se congelan las notas al cerrar un partido cuando exista el Fantasy.
+- Fantasy, pasos 2 a 4 de `docs/fantasy.md`: liga y alineaciones, mercado, cláusulas.
+- Un test del frontend falló una vez bajo carga y pasó en las tres repeticiones siguientes; no se
+  identificó cuál. Vigilar si vuelve a fallar.
 
 ## Decisiones tomadas
 

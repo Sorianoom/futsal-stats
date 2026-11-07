@@ -20,7 +20,7 @@ const PLAYERS: Player[] = ["Ana", "Bea", "Carla"].map((name, index) => ({
   dorsal: index + 2,
   position: "field",
   status: "available",
-  is_active: true,
+  is_active: true, has_account: false,
 }));
 const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" };
 

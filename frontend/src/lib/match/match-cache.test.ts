@@ -38,7 +38,7 @@ const PLAYER: Player = {
   dorsal: 7,
   position: "field",
   status: "available",
-  is_active: true,
+  is_active: true, has_account: false,
 };
 const DATA: Omit<MatchSnapshot, "savedAt"> = {
   match: MATCH,

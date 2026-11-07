@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { ScoreBanner } from "@/components/score-banner";
@@ -16,6 +17,45 @@ const BACK_LINK =
 
 function foulsText(stats: MatchStats): string {
   return stats.team_fouls.map((t) => `${t.fouls} en la ${t.part}ª parte`).join(", ");
+}
+
+function UnclosedNote({ children }: { children: ReactNode }) {
+  return <div className="space-y-2 rounded-xl border p-4">{children}</div>;
+}
+
+/** Al jugador no se le habla de quintetos: solo se le dice que faltan los minutos. */
+function PlayerUnclosedNote({ closed }: { closed: boolean }) {
+  if (closed) return null;
+  return (
+    <UnclosedNote>
+      <p>Partido sin cerrar: faltan los minutos hasta que se cierre.</p>
+    </UnclosedNote>
+  );
+}
+
+interface QuintetSectionProps {
+  matchId: string;
+  closed: boolean;
+  quintets: MatchStats["quintets"];
+  nameOf: (playerId: string) => string;
+}
+
+function QuintetSection({ matchId, closed, quintets, nameOf }: QuintetSectionProps) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Quintetos</h2>
+      {closed ? (
+        <QuintetStatsTable quintets={quintets} nameOf={nameOf} />
+      ) : (
+        <UnclosedNote>
+          <p>Partido sin cerrar: faltan los minutos y los quintetos hasta que se cierre.</p>
+          <Link href={`/partido?id=${matchId}`} className={BACK_LINK}>
+            Ir al partido
+          </Link>
+        </UnclosedNote>
+      )}
+    </section>
+  );
 }
 
 export function MatchStatsView({ matchId }: { matchId: string }) {
@@ -73,6 +113,8 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
   }
 
   const { stats } = result;
+  // Las valoraciones de quintetos y los avisos son del cuerpo técnico; al jugador no le llegan.
+  const isPlayer = user?.role === "player";
   const match = matches?.find((m) => m.id === matchId) ?? null;
   const names = new Map(stats.players.map((player) => [player.player_id, player.name]));
   const nameOf = (playerId: string) => names.get(playerId) ?? "Jugador desconocido";
@@ -101,30 +143,24 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
         </div>
       </div>
 
-      {stats.warnings.map((warning) => (
-        <p key={warning} className="rounded-lg border p-3 text-muted-foreground">
-          {warning}
-        </p>
-      ))}
+      {isPlayer
+        ? null
+        : stats.warnings.map((warning) => (
+            <p key={warning} className="rounded-lg border p-3 text-muted-foreground">
+              {warning}
+            </p>
+          ))}
 
       <section className="space-y-2">
         <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Jugadores</h2>
         <PlayerStatsTable players={stats.players} />
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Quintetos</h2>
-        {stats.closed ? (
-          <QuintetStatsTable quintets={stats.quintets} nameOf={nameOf} />
-        ) : (
-          <div className="space-y-2 rounded-xl border p-4">
-            <p>Partido sin cerrar: faltan los minutos y los quintetos hasta que se cierre.</p>
-            <Link href={`/partido?id=${matchId}`} className={BACK_LINK}>
-              Ir al partido
-            </Link>
-          </div>
-        )}
-      </section>
+      {isPlayer ? (
+        <PlayerUnclosedNote closed={stats.closed} />
+      ) : (
+        <QuintetSection matchId={matchId} closed={stats.closed} quintets={stats.quintets} nameOf={nameOf} />
+      )}
     </div>
   );
 }

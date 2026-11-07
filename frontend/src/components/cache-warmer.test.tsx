@@ -53,6 +53,20 @@ describe("CacheWarmer", () => {
     expect(api.count("GET", "/movements")).toBe(0);
   });
 
+  it("el jugador solo precarga partidos y estadísticas, que es lo que puede leer", async () => {
+    const api = mockApi(ROUTES);
+
+    renderWithAuth(<CacheWarmer />, { user: fakeUser("player") });
+
+    await waitFor(() => expect(queryCache.get("stats:season")).toBeDefined());
+    await waitFor(() => expect(queryCache.get("/matches")).toBeDefined());
+    expect(api.count("GET", "/players")).toBe(0);
+    expect(api.calls.map((call) => call.path.split("?")[0]).sort()).toEqual([
+      "/matches",
+      "/stats/players",
+    ]);
+  });
+
   it("no pide nada si no hay sesión", () => {
     const api = mockApi(ROUTES);
 

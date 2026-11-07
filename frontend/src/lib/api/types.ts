@@ -1,4 +1,4 @@
-export type Role = "head_coach" | "assistant_coach";
+export type Role = "head_coach" | "assistant_coach" | "player";
 export type Position = "field" | "goalkeeper";
 export type PlayerStatus = "available" | "injured";
 
@@ -6,6 +6,8 @@ export interface User {
   id: string;
   email: string;
   role: Role;
+  /** Ficha del jugador vinculada a la cuenta; null para los entrenadores. */
+  player_id: string | null;
 }
 
 export interface LoginData {
@@ -24,6 +26,20 @@ export interface Player {
   position: Position;
   status: PlayerStatus;
   is_active: boolean;
+  /** El jugador ya creó su cuenta con una invitación. */
+  has_account: boolean;
+}
+
+/** Enlace de un solo uso para que un jugador cree su cuenta. */
+export interface Invitation {
+  token: string;
+  expires_at: string;
+}
+
+export interface InvitationAcceptance {
+  token: string;
+  email: string;
+  password: string;
 }
 
 export interface NewPlayer {

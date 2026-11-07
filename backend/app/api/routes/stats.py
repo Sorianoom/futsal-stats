@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AnyUser, SessionDep
 from app.api.envelope import Envelope, ok
 from app.api.errors import ApiError
 from app.db import match_repo, points_repo
@@ -14,6 +14,7 @@ from app.db.models import MatchEvent as MatchEventRow
 from app.db.models import Player, StintRow
 from app.domain.points.callup import Position
 from app.domain.rating import RatingInput, player_rating
+from app.domain.roles import Role
 from app.domain.stints.events import (
     EventError,
     EventKind,
@@ -81,8 +82,10 @@ def _warning(uncovered: int) -> list[str]:
 
 @router.get("/{match_id}/stats", response_model=Envelope[MatchStatsOut])
 async def match_stats(
-    match_id: uuid.UUID, db: SessionDep, _: CurrentUser
+    match_id: uuid.UUID, db: SessionDep, user: AnyUser
 ) -> Envelope[MatchStatsOut]:
+    """Estadísticas del partido. Un jugador no ve los quintetos (llevan las valoraciones del
+    cuerpo técnico) ni los avisos internos; las notas por jugador sí."""
     if await points_repo.get_match(db, match_id) is None:
         raise ApiError(404, "not_found", "Partido no encontrado")
 
@@ -121,6 +124,9 @@ async def match_stats(
     quintets.sort(key=lambda q: -q.seconds)
 
     players = await _match_players(db, seconds, counts, segments, covered_goals)
+    warnings = _warning(uncovered) if stints else []
+    if user.role == Role.PLAYER:
+        quintets, warnings = [], []
 
     return ok(
         MatchStatsOut(
@@ -133,7 +139,7 @@ async def match_stats(
             team_fouls=[TeamFoulsOut(part=part, fouls=fouls.get(part, 0)) for part in VALID_PARTS],
             players=players,
             quintets=quintets,
-            warnings=_warning(uncovered) if stints else [],
+            warnings=warnings,
         )
     )
 
@@ -207,7 +213,7 @@ def _kind_totals(
 
 
 @season_router.get("/players", response_model=Envelope[SeasonStatsOut])
-async def season_players(db: SessionDep, _: CurrentUser) -> Envelope[SeasonStatsOut]:
+async def season_players(db: SessionDep, _: AnyUser) -> Envelope[SeasonStatsOut]:
     stints_by_match: dict[uuid.UUID, list[Stint]] = {}
     for row in (await db.execute(select(StintRow))).scalars().all():
         stints_by_match.setdefault(row.match_id, []).append(match_repo.stint_to_domain(row))

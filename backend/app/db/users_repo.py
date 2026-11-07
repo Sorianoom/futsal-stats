@@ -20,17 +20,40 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-async def create_user(session: AsyncSession, email: str, password: str, role: Role) -> User:
+def validate_password(password: str) -> None:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise WeakPasswordError(
             f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres"
         )
     if len(password) > MAX_PASSWORD_LENGTH:
         raise WeakPasswordError(f"La contraseña no puede superar {MAX_PASSWORD_LENGTH} caracteres")
-    user = User(email=normalize_email(email), password_hash=hash_password(password), role=role)
+
+
+async def add_user(
+    session: AsyncSession,
+    email: str,
+    password_hash: str,
+    role: Role,
+    player_id: uuid.UUID | None = None,
+) -> User:
+    """Guarda un usuario con la contraseña ya validada y hasheada (p. ej. en un hilo aparte)."""
+    user = User(
+        email=normalize_email(email), password_hash=password_hash, role=role, player_id=player_id
+    )
     session.add(user)
     await session.flush()
     return user
+
+
+async def create_user(
+    session: AsyncSession,
+    email: str,
+    password: str,
+    role: Role,
+    player_id: uuid.UUID | None = None,
+) -> User:
+    validate_password(password)
+    return await add_user(session, email, hash_password(password), role, player_id)
 
 
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:

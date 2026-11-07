@@ -1,4 +1,4 @@
-"""Límite de intentos de login fallidos: claves, decisión de bloqueo e IP del cliente.
+"""Límite de intentos fallidos (login y alta por invitación): claves, bloqueo e IP del cliente.
 
 Los fallos se guardan en la BD (`login_failures_repo`) para que los vean todas las instancias de
 la API: en Vercel cada petición puede caer en una función distinta y un contador en memoria no
@@ -15,6 +15,10 @@ WINDOW = timedelta(minutes=5)
 PER_PAIR_MAX_FAILURES = 5
 PER_IP_MAX_FAILURES = 30
 PER_EMAIL_MAX_FAILURES = 20
+# Tokens de invitación inválidos por IP en la misma ventana: frena que se prueben al azar.
+INVITATION_MAX_FAILURES_PER_IP = 10
+# Ámbito propio en el HMAC: los fallos de invitación no se mezclan con los del login.
+INVITATION_IP_SCOPE = "invite-ip"
 UNKNOWN_IP = "unknown"
 # Vercel sobrescribe esta cabecera con la IP pública del cliente: no se puede falsificar.
 # Fuera de Vercel la pone quien quiera, así que solo se lee detrás de su proxy.
@@ -56,6 +60,14 @@ def is_blocked(keys: LoginKeys, counts: Mapping[str, int]) -> bool:
         (keys.email, PER_EMAIL_MAX_FAILURES),
     )
     return any(counts.get(key, 0) >= limit for key, limit in limits)
+
+
+def invitation_ip_key(ip: str, secret: str) -> str:
+    return _digest(INVITATION_IP_SCOPE, ip, secret)
+
+
+def invitation_is_blocked(key: str, counts: Mapping[str, int]) -> bool:
+    return counts.get(key, 0) >= INVITATION_MAX_FAILURES_PER_IP
 
 
 def client_ip(socket_host: str | None, headers: Mapping[str, str], behind_vercel: bool) -> str:

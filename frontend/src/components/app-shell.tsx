@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ROLE_LABEL } from "@/lib/labels";
+import { canVisit, homeFor } from "@/lib/roles";
 
 const NAV_ITEMS = [
   { href: "/", label: "Inicio" },
@@ -31,8 +32,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
   const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.headCoachOnly || user?.role === "head_coach",
+    (item) =>
+      (!item.headCoachOnly || user?.role === "head_coach") &&
+      (!user || canVisit(user.role, item.href)),
   );
+  const home = user ? homeFor(user.role) : "/";
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -49,7 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 flex h-[72px] shrink-0 items-center gap-3 border-b bg-card px-4 lg:gap-6 lg:px-7">
         <Link
-          href="/"
+          href={home}
           aria-label="Futsal Stats"
           className="flex shrink-0 items-center gap-2.5 rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >

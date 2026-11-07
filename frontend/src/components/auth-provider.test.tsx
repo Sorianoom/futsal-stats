@@ -13,7 +13,7 @@ import { mockApi } from "@/test/mock-api";
 
 import { AuthProvider, useAuth } from "./auth-provider";
 
-const USER: User = { id: "u1", email: "coach@club.es", role: "head_coach" };
+const USER: User = { id: "u1", email: "coach@club.es", role: "head_coach", player_id: null };
 
 function Probe() {
   const { user, status, login, logout, retry } = useAuth();
@@ -355,7 +355,7 @@ describe("AuthProvider", () => {
           access_token: "nuevo",
           token_type: "bearer",
           expires_in: 900,
-          user: { id: "u2", email: "otra@club.es", role: "assistant_coach" },
+          user: { id: "u2", email: "otra@club.es", role: "assistant_coach", player_id: null },
         },
       },
     });
@@ -395,7 +395,7 @@ describe("AuthProvider", () => {
     await saveSnapshot("m1", COPY);
     mockApi({
       "POST /auth/refresh": { data: { access_token: "tok" } },
-      "GET /auth/me": { data: { id: "u2", email: "otra@club.es", role: "assistant_coach" } },
+      "GET /auth/me": { data: { id: "u2", email: "otra@club.es", role: "assistant_coach", player_id: null } },
     });
 
     renderProbe();

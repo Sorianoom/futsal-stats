@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { InvitationDialog } from "@/components/invitation-dialog";
 import { PlayerFormDialog } from "@/components/player-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export default function PlantillaPage() {
   const canEdit = user?.role === "head_coach";
   const { data: players, failed: loadFailed, reload } = useApiQuery(playersQuery.key, playersQuery.fetch);
   const [editing, setEditing] = useState<Player | "new" | null>(null);
+  const [inviting, setInviting] = useState<Player | null>(null);
   const [filter, setFilter] = useState<RosterFilter>("all");
 
   function handleSaved() {
@@ -125,13 +127,27 @@ export default function PlantillaPage() {
                 {STATUS_LABEL[player.status]}
               </Badge>
             </div>
-            <div className="flex items-end justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-lg font-extrabold">{player.name}</p>
-                {player.alias ? <p className="truncate text-base font-bold text-primary">{player.alias}</p> : null}
-                <p className="text-sm font-semibold text-muted-foreground">{POSITION_LABEL[player.position]}</p>
-              </div>
-              {canEdit ? (
+            <div className="min-w-0">
+              <p className="truncate text-lg font-extrabold">{player.name}</p>
+              {player.alias ? <p className="truncate text-base font-bold text-primary">{player.alias}</p> : null}
+              <p className="text-sm font-semibold text-muted-foreground">{POSITION_LABEL[player.position]}</p>
+            </div>
+            {canEdit ? (
+              <div className="flex items-center justify-between gap-2">
+                {player.has_account ? (
+                  <span className="text-sm font-bold text-muted-foreground">Tiene cuenta</span>
+                ) : !player.is_active ? (
+                  <span className="text-sm font-bold text-muted-foreground">De baja</span>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="shrink-0 rounded-xl"
+                    aria-label={`Invitar a ${player.name}`}
+                    onClick={() => setInviting(player)}
+                  >
+                    Invitar
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="shrink-0 rounded-xl"
@@ -140,8 +156,8 @@ export default function PlantillaPage() {
                 >
                   Editar
                 </Button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -152,6 +168,7 @@ export default function PlantillaPage() {
         onClose={() => setEditing(null)}
         onSaved={handleSaved}
       />
+      <InvitationDialog player={inviting} onClose={() => setInviting(null)} onRosterStale={reload} />
     </div>
   );
 }

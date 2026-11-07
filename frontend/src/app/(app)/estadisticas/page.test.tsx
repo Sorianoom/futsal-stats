@@ -422,6 +422,53 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     expect(screen.queryByRole("table", { name: "Quintetos" })).not.toBeInTheDocument();
   });
 
+  it("al jugador no le enlaza al partido sin cerrar, que es una pantalla de entrenador", async () => {
+    stats = { ...STATS, closed: false, quintets: [] };
+    api();
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    expect(await screen.findByText(/Partido sin cerrar/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ir al partido" })).not.toBeInTheDocument();
+  });
+
+  it("al jugador no le enseña la sección de quintetos aunque el partido esté cerrado", async () => {
+    stats = { ...STATS, quintets: [], warnings: [] };
+    api();
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    expect(await screen.findByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Quintetos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Quintetos" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/quinteto/i)).not.toBeInTheDocument();
+  });
+
+  it("al jugador con el partido sin cerrar no le habla de quintetos", async () => {
+    stats = { ...STATS, closed: false, quintets: [], warnings: [] };
+    api();
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    expect(await screen.findByText(/Partido sin cerrar/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Quintetos" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/quinteto/i)).not.toBeInTheDocument();
+  });
+
+  it("al jugador no le enseña avisos aunque llegaran", async () => {
+    stats = { ...STATS, quintets: [], warnings: ["1 evento fuera de los tramos no cuenta para los quintetos"] };
+    api();
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    expect(await screen.findByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+    expect(screen.queryByText(/fuera de los tramos/)).not.toBeInTheDocument();
+  });
+
+  it("al jugador sí le enseña la nota de cada jugador", async () => {
+    api();
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    const table = await screen.findByRole("table", { name: "Jugadores" });
+    expect(within(table).getByRole("columnheader", { name: "Nota" })).toBeInTheDocument();
+  });
+
   it("muestra los avisos del servidor", async () => {
     stats = { ...STATS, warnings: ["1 evento fuera de los tramos no cuenta para los quintetos"] };
     api();

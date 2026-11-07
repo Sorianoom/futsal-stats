@@ -9,7 +9,7 @@ import { LivePanel } from "./live-panel";
 type PanelProps = React.ComponentProps<typeof LivePanel>;
 
 function player(id: string, dorsal: number, position: Position = "field"): Player {
-  return { id, name: `Jugador ${id}`, dorsal, position, status: "available", is_active: true };
+  return { id, name: `Jugador ${id}`, dorsal, position, status: "available", is_active: true, has_account: false };
 }
 
 function renderPanel(overrides: Partial<PanelProps> = {}) {

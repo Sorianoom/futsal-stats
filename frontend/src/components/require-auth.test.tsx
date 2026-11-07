@@ -2,15 +2,20 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { renderWithAuth } from "@/test/render-with-auth";
+import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
 
 import { RequireAuth } from "./require-auth";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const navigation = vi.hoisted(() => ({ pathname: "/" }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => navigation.pathname,
+}));
 
 beforeEach(() => {
   router.replace.mockClear();
+  navigation.pathname = "/";
 });
 
 describe("RequireAuth", () => {
@@ -61,5 +66,50 @@ describe("RequireAuth", () => {
     expect(router.replace).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(value.retry).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["/", "/partido", "/puntos", "/convocatoria", "/plantilla", "/entrenos", "/corregir"])(
+    "un jugador que entra en %s va a las estadísticas sin ver la pantalla",
+    (pathname) => {
+      navigation.pathname = pathname;
+
+      renderWithAuth(
+        <RequireAuth>
+          <p>secreto</p>
+        </RequireAuth>,
+        { user: fakeUser("player") },
+      );
+
+      expect(screen.queryByText("secreto")).not.toBeInTheDocument();
+      expect(router.replace).toHaveBeenCalledWith("/estadisticas");
+    },
+  );
+
+  it("un jugador ve las estadísticas y el detalle de un partido", () => {
+    navigation.pathname = "/estadisticas/";
+
+    renderWithAuth(
+      <RequireAuth>
+        <p>tabla</p>
+      </RequireAuth>,
+      { user: fakeUser("player") },
+    );
+
+    expect(screen.getByText("tabla")).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("el segundo entrenador puede entrar en el partido", () => {
+    navigation.pathname = "/partido";
+
+    renderWithAuth(
+      <RequireAuth>
+        <p>partido</p>
+      </RequireAuth>,
+      { user: fakeUser("assistant_coach") },
+    );
+
+    expect(screen.getByText("partido")).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,9 @@
-"""Dependencias de autenticación y autorización. El rol se lee de la BD, no del token."""
+"""Dependencias de autenticación y autorización. El rol se lee de la BD, no del token.
+
+`CurrentUser` es el personal técnico (entrenador principal o segundo): los jugadores quedan
+fuera por defecto. `AnyUser` admite también a los jugadores y solo se usa en las rutas que
+pueden ver (su cuenta, la lista de partidos y las estadísticas).
+"""
 
 from collections.abc import Awaitable, Callable
 from typing import Annotated
@@ -12,7 +17,7 @@ from app.config import Settings, get_settings
 from app.db.models import User
 from app.db.session import get_session
 from app.db.users_repo import get_user
-from app.domain.roles import Role
+from app.domain.roles import STAFF_ROLES, Role
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -44,7 +49,7 @@ def _bearer_token(request: Request) -> str:
     return token.strip()
 
 
-async def get_current_user(request: Request, settings: SettingsDep, session: SessionDep) -> User:
+async def get_any_user(request: Request, settings: SettingsDep, session: SessionDep) -> User:
     try:
         claims = decode_token(_bearer_token(request), TokenType.ACCESS, settings)
     except TokenError as error:
@@ -55,11 +60,11 @@ async def get_current_user(request: Request, settings: SettingsDep, session: Ses
     return user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+AnyUser = Annotated[User, Depends(get_any_user)]
 
 
 def require_roles(*roles: Role) -> Callable[[User], Awaitable[User]]:
-    async def checker(user: CurrentUser) -> User:
+    async def checker(user: AnyUser) -> User:
         if user.role not in roles:
             raise ApiError(403, "forbidden", "No tienes permisos para esta acción")
         return user
@@ -67,4 +72,5 @@ def require_roles(*roles: Role) -> Callable[[User], Awaitable[User]]:
     return checker
 
 
+CurrentUser = Annotated[User, Depends(require_roles(*STAFF_ROLES))]
 HeadCoach = Annotated[User, Depends(require_roles(Role.HEAD_COACH))]

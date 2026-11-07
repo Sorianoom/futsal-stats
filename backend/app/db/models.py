@@ -65,17 +65,6 @@ def _created_at() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    email: Mapped[str] = mapped_column(String(254), unique=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[Role] = mapped_column(_enum(Role))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
-    created_at: Mapped[datetime] = _created_at()
-
-
 class Player(Base):
     __tablename__ = "players"
 
@@ -89,6 +78,48 @@ class Player(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_at: Mapped[datetime] = _created_at()
+
+
+class User(Base):
+    """Usuario. Los de rol `player` van vinculados a un jugador (uno como mucho por jugador)."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            f"(role = '{Role.PLAYER.value}') = (player_id IS NOT NULL)",
+            name="player_link_matches_role",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    email: Mapped[str] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[Role] = mapped_column(_enum(Role))
+    player_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("players.id"), unique=True, nullable=True, default=None
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    created_at: Mapped[datetime] = _created_at()
+
+
+class PlayerInvitation(Base):
+    """Invitación de un solo uso para que un jugador cree su cuenta.
+
+    Solo se guarda el sha256 del token: quien lea la BD no puede usar una invitación pendiente.
+    """
+
+    __tablename__ = "player_invitations"
+    __table_args__ = (CheckConstraint("expires_at > created_at", name="expires_after_creation"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    player_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("players.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class InfractionRow(Base):

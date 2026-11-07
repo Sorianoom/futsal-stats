@@ -9,8 +9,8 @@ import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
 import EntrenosPage from "./page";
 
 const PLAYERS: Player[] = [
-  { id: "p1", name: "Ana Ruiz", dorsal: 9, position: "field", status: "available", is_active: true },
-  { id: "p2", name: "Bea Soto", dorsal: 7, position: "field", status: "available", is_active: true },
+  { id: "p1", name: "Ana Ruiz", dorsal: 9, position: "field", status: "available", is_active: true, has_account: false },
+  { id: "p2", name: "Bea Soto", dorsal: 7, position: "field", status: "available", is_active: true, has_account: false },
 ];
 const SESSION: TeamSession = { id: "s1", kind: "training", held_on: "2026-10-20", notes: "Táctica" };
 

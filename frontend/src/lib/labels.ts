@@ -14,6 +14,7 @@ import type { EventKind, MatchEvent } from "@/lib/match/events";
 export const ROLE_LABEL: Record<Role, string> = {
   head_coach: "Entrenador",
   assistant_coach: "Segundo entrenador",
+  player: "Jugador",
 };
 
 export const POSITION_LABEL: Record<Position, string> = {

@@ -1,4 +1,4 @@
-"""Login, refresco, cierre de sesión y usuario actual."""
+"""Login, refresco, cierre de sesión, usuario actual y alta de jugadores por invitación."""
 
 import logging
 import uuid
@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.api.deps import (
-    CurrentUser,
+    AnyUser,
     HeadCoach,
     SessionDep,
     SettingsDep,
@@ -18,16 +18,26 @@ from app.api.deps import (
 )
 from app.api.envelope import Envelope, ok
 from app.api.errors import ApiError
+from app.auth.invitations import hash_invitation_token
 from app.auth.passwords import (
     hash_password_async,
     needs_rehash,
     spend_verification_time_async,
     verify_password_async,
 )
-from app.auth.rate_limit import WINDOW, LoginKeys, client_ip, is_blocked, login_keys
+from app.auth.rate_limit import (
+    WINDOW,
+    LoginKeys,
+    client_ip,
+    invitation_ip_key,
+    invitation_is_blocked,
+    is_blocked,
+    login_keys,
+)
 from app.auth.refresh_flow import rotate_refresh_token
 from app.auth.tokens import TokenError, TokenType, create_token, decode_token
 from app.config import Settings
+from app.db.invitations_repo import claim_invitation, player_has_user
 from app.db.login_failures_repo import clear_failures, count_failures_since, record_failures
 from app.db.models import User
 from app.db.refresh_sessions_repo import (
@@ -37,9 +47,23 @@ from app.db.refresh_sessions_repo import (
     revoke,
     revoke_all_for_user,
 )
-from app.db.users_repo import get_user, get_user_by_email
+from app.db.users_repo import (
+    WeakPasswordError,
+    add_user,
+    get_user,
+    get_user_by_email,
+    validate_password,
+)
 from app.domain.auth_sessions import RevokeReason
-from app.schemas.auth import LoginData, LoginRequest, SessionsRevoked, TokenData, UserOut
+from app.domain.roles import Role
+from app.schemas.auth import (
+    InvitationAccept,
+    LoginData,
+    LoginRequest,
+    SessionsRevoked,
+    TokenData,
+    UserOut,
+)
 
 REFRESH_COOKIE = "refresh_token"
 SECONDS_PER_DAY = 86400
@@ -48,10 +72,22 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
-def _login_keys(request: Request, email: str, settings: Settings) -> LoginKeys:
+def _request_ip(request: Request, settings: Settings) -> str:
     socket_host = request.client.host if request.client else None
-    ip = client_ip(socket_host, request.headers, behind_vercel=settings.vercel)
-    return login_keys(ip, email, settings.require_jwt_secret())
+    return client_ip(socket_host, request.headers, behind_vercel=settings.vercel)
+
+
+def _login_keys(request: Request, email: str, settings: Settings) -> LoginKeys:
+    return login_keys(_request_ip(request, settings), email, settings.require_jwt_secret())
+
+
+def _too_many_attempts() -> ApiError:
+    return ApiError(
+        429,
+        "too_many_attempts",
+        "Demasiados intentos fallidos. Inténtalo más tarde",
+        {"Retry-After": str(int(WINDOW.total_seconds()))},
+    )
 
 
 async def _is_blocked(session: SessionDep, keys: LoginKeys, now: datetime) -> bool:
@@ -141,12 +177,7 @@ async def login(
 ) -> Envelope[LoginData]:
     keys, now = _login_keys(request, payload.email, settings), datetime.now(UTC)
     if await _is_blocked(session, keys, now):
-        raise ApiError(
-            429,
-            "too_many_attempts",
-            "Demasiados intentos fallidos. Inténtalo más tarde",
-            {"Retry-After": str(int(WINDOW.total_seconds()))},
-        )
+        raise _too_many_attempts()
     user = await get_user_by_email(session, payload.email)
     if user is None:
         await spend_verification_time_async(payload.password)
@@ -221,8 +252,71 @@ async def logout(
     return ok(None)
 
 
+def _invalid_invitation() -> ApiError:
+    # Mismo mensaje para un token desconocido, usado o caducado: no se revela cuál de ellos es.
+    return ApiError(400, "invalid_invitation", "La invitación no es válida o ha caducado")
+
+
+def _email_taken() -> ApiError:
+    return ApiError(409, "email_taken", "Ya existe una cuenta con ese email")
+
+
+async def _failed_invitation(session: SessionDep, key: str, now: datetime) -> ApiError:
+    """Anota el token inválido de esta IP y lo confirma ya: el 400 que sigue no debe deshacerlo."""
+    await record_failures(session, (key,), now, forget_before=now - WINDOW)
+    await session.commit()
+    return _invalid_invitation()
+
+
+@router.post(
+    "/invitations/accept",
+    response_model=Envelope[UserOut],
+    status_code=201,
+    dependencies=[Depends(require_trusted_origin)],
+)
+async def accept_invitation(
+    payload: InvitationAccept, request: Request, session: SessionDep, settings: SettingsDep
+) -> Envelope[UserOut]:
+    """Crea la cuenta de jugador de una invitación vigente y la gasta en la misma transacción.
+
+    Los tokens inválidos cuentan por IP: superado el límite se responde 429 sin mirar el token.
+    El token se comprueba antes que el email: sin una invitación válida no se puede averiguar
+    qué emails tienen cuenta. Si algo falla después, el rollback deja la invitación sin usar.
+    """
+    key = invitation_ip_key(_request_ip(request, settings), settings.require_jwt_secret())
+    now = datetime.now(UTC)
+    counts = await count_failures_since(session, (key,), now - WINDOW)
+    if invitation_is_blocked(key, counts):
+        raise _too_many_attempts()
+    try:
+        validate_password(payload.password)
+    except WeakPasswordError as error:
+        raise ApiError(422, "weak_password", str(error)) from error
+    # Argon2 antes de reclamar: el bloqueo de fila de la invitación no espera al hash.
+    password_hash = await hash_password_async(payload.password)
+    invitation = await claim_invitation(session, hash_invitation_token(payload.token), now)
+    if invitation is None:
+        raise await _failed_invitation(session, key, now)
+    if await get_user_by_email(session, payload.email) is not None:
+        await session.rollback()
+        raise _email_taken()
+    if await player_has_user(session, invitation.player_id):
+        await session.rollback()
+        raise _invalid_invitation()
+    try:
+        user = await add_user(
+            session, payload.email, password_hash, Role.PLAYER, invitation.player_id
+        )
+    except IntegrityError as error:
+        # Carrera con otra alta del mismo email (o del mismo jugador) que se confirmó antes.
+        await session.rollback()
+        raise _email_taken() from error
+    await session.commit()
+    return ok(UserOut.model_validate(user))
+
+
 @router.get("/me", response_model=Envelope[UserOut])
-async def me(user: CurrentUser) -> Envelope[UserOut]:
+async def me(user: AnyUser) -> Envelope[UserOut]:
     return ok(UserOut.model_validate(user))
 
 
@@ -230,9 +324,12 @@ async def me(user: CurrentUser) -> Envelope[UserOut]:
 async def revoke_user_sessions(
     user_id: uuid.UUID, _: HeadCoach, session: SessionDep
 ) -> Envelope[SessionsRevoked]:
-    """Cierra todas las sesiones de un usuario (iPad perdido, baja). Solo el entrenador principal.
+    """Cierra todas las sesiones de refresco de un usuario (iPad perdido). Solo el entrenador
+    principal.
 
-    Los tokens de acceso ya emitidos siguen valiendo hasta que caducan (minutos); el refresco no.
+    Los tokens de acceso ya emitidos siguen valiendo hasta que caducan (minutos), salvo que el
+    usuario esté desactivado: `is_active` se relee en cada petición y entonces dejan de valer ya.
+    Dar de baja a un jugador (`DELETE /players/{id}`) desactiva su cuenta y cierra sus sesiones.
     """
     if await get_user(session, user_id) is None:
         raise ApiError(404, "not_found", "Usuario no encontrado")

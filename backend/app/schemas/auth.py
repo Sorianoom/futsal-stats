@@ -2,6 +2,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.auth.invitations import MAX_TOKEN_LENGTH
 from app.auth.passwords import MAX_PASSWORD_LENGTH
 from app.domain.roles import Role
 
@@ -19,6 +20,16 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: EmailStr
     role: Role
+    player_id: uuid.UUID | None
+
+
+class InvitationAccept(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=MAX_TOKEN_LENGTH)
+    email: EmailStr
+    # Sin mínimo aquí: la longitud mínima la comprueba `validate_password` (422 `weak_password`).
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
 
 
 class TokenData(BaseModel):

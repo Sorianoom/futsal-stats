@@ -265,3 +265,8 @@ async def _run_main(argv: list[str]) -> int:
     import asyncio
 
     return await asyncio.to_thread(cli.main, argv)
+
+
+def test_create_user_command_does_not_offer_the_player_role() -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["create-user", "jugador@club.es", "--role", "player"])

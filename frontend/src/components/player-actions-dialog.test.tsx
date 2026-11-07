@@ -7,7 +7,7 @@ import type { Player } from "@/lib/api/types";
 import { PlayerActionsDialog } from "./player-actions-dialog";
 
 function player(id: string, dorsal: number): Player {
-  return { id, name: `Jugador ${id}`, dorsal, position: "field", status: "available", is_active: true };
+  return { id, name: `Jugador ${id}`, dorsal, position: "field", status: "available", is_active: true, has_account: false };
 }
 
 function setup(bench: Player[], current: Player = player("a", 7)) {

@@ -15,7 +15,7 @@ function match(id: string, heldOn: string, opponent: string): Match {
 }
 
 function player(id: string, status: Player["status"]): Player {
-  return { id, name: `Jugador ${id}`, dorsal: 1, position: "field", status, is_active: true };
+  return { id, name: `Jugador ${id}`, dorsal: 1, position: "field", status, is_active: true, has_account: false };
 }
 
 function api(matches: Match[] = [], players: Player[] = []) {

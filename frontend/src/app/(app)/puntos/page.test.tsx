@@ -9,9 +9,9 @@ import { fakeUser, renderWithAuth } from "@/test/render-with-auth";
 import PuntosPage from "./page";
 
 const PLAYERS: Player[] = [
-  { id: "p1", name: "Ana Ruiz", dorsal: 9, position: "field", status: "available", is_active: true },
-  { id: "p2", name: "Bea Soto", dorsal: 7, position: "field", status: "available", is_active: true },
-  { id: "p9", name: "Zoe Baja", dorsal: 30, position: "field", status: "available", is_active: false },
+  { id: "p1", name: "Ana Ruiz", dorsal: 9, position: "field", status: "available", is_active: true, has_account: false },
+  { id: "p2", name: "Bea Soto", dorsal: 7, position: "field", status: "available", is_active: true, has_account: false },
+  { id: "p9", name: "Zoe Baja", dorsal: 30, position: "field", status: "available", is_active: false, has_account: false },
 ];
 
 const CATALOG: Infraction[] = [

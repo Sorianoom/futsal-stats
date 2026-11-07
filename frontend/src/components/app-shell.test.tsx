@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,20 @@ describe("AppShell", () => {
     expect(screen.queryByRole("link", { name: "Convocatoria" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Puntos" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Plantilla" })).toBeInTheDocument();
+  });
+
+  it("el jugador solo ve la pestaña de estadísticas y el logotipo le lleva a ellas", () => {
+    navigation.pathname = "/estadisticas";
+
+    renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("player") });
+
+    const nav = screen.getByRole("navigation", { name: "Principal" });
+    const links = within(nav).getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveTextContent("Estadísticas");
+    expect(links[0]).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Futsal Stats" })).toHaveAttribute("href", "/estadisticas");
+    expect(screen.getByText(/Jugador/)).toBeInTheDocument();
   });
 
   it("el logotipo lleva al inicio sin contarse como sección activa", () => {

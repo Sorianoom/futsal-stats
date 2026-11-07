@@ -82,7 +82,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-1">
             <h1 className="text-3xl font-extrabold tracking-tight">Entrar</h1>
-            <p className="text-muted-foreground">Accede con tu cuenta de entrenador.</p>
+            <p className="text-muted-foreground">Accede con tu cuenta del equipo.</p>
           </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">

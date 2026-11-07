@@ -37,6 +37,11 @@ export function CacheWarmer() {
   useEffect(() => {
     if (status !== "authenticated" || !userId) return;
     const week = currentWeekStart();
+    // El jugador solo puede leer partidos y estadísticas: pedir más le daría 403.
+    if (role === "player") {
+      [matchesQuery, seasonStatsQuery].forEach(warm);
+      return;
+    }
     const queries: Query<unknown>[] = [playersQuery, matchesQuery, seasonStatsQuery];
     if (role === "head_coach") {
       queries.push(

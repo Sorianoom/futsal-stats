@@ -4,7 +4,8 @@ import type { User } from "@/lib/api/types";
 
 import { clearSavedUser, loadSavedUser, saveUser } from "./saved-user";
 
-const USER: User = { id: "u1", email: "coach@club.es", role: "head_coach" };
+const USER: User = { id: "u1", email: "coach@club.es", role: "head_coach", player_id: null };
+const PLAYER: User = { id: "u2", email: "ana@club.es", role: "player", player_id: "p1" };
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -29,12 +30,27 @@ describe("saved-user", () => {
     expect(loadSavedUser()).toEqual(USER);
   });
 
-  it("guarda solo id, correo y rol: nada más, y menos aún tokens", () => {
+  it("guarda solo id, correo, rol y ficha: nada más, y menos aún tokens", () => {
     saveUser({ ...USER, access_token: "secreto", password: "x" } as User);
 
     const raw = window.localStorage.getItem(storedKey());
     expect(raw).not.toContain("secreto");
     expect(raw).not.toContain("password");
+    expect(loadSavedUser()).toEqual(USER);
+  });
+
+  it("recupera un jugador con su ficha vinculada", () => {
+    saveUser(PLAYER);
+
+    expect(loadSavedUser()).toEqual(PLAYER);
+  });
+
+  it("un usuario guardado antes de existir la ficha vinculada se recupera sin ella", () => {
+    window.localStorage.setItem(
+      "futsal-stats:user",
+      JSON.stringify({ id: "u1", email: "coach@club.es", role: "head_coach" }),
+    );
+
     expect(loadSavedUser()).toEqual(USER);
   });
 

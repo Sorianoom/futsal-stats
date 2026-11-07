@@ -1,5 +1,5 @@
 import { ApiError, apiData, refreshAccessToken, setAccessToken } from "./client";
-import type { LoginData, User } from "./types";
+import type { InvitationAcceptance, LoginData, User } from "./types";
 
 export async function login(email: string, password: string): Promise<User> {
   const data = await apiData<LoginData>("/auth/login", {
@@ -29,4 +29,13 @@ export async function logout(): Promise<void> {
 export async function restoreSession(): Promise<User | null> {
   if (!(await refreshAccessToken())) return null;
   return apiData<User>("/auth/me");
+}
+
+/** Crea la cuenta del jugador con su invitación. No abre sesión: después hay que hacer login. */
+export function acceptInvitation(acceptance: InvitationAcceptance): Promise<User> {
+  return apiData<User>("/auth/invitations/accept", {
+    method: "POST",
+    body: acceptance,
+    auth: false,
+  });
 }

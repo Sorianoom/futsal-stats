@@ -362,3 +362,40 @@ async def test_goals_outside_the_stints_do_not_count_on_court_for_the_rating(
     )
     assert stats["score"]["goals_against"] == 2
     assert by_player(stats)[str(p[4].id)]["rating"] == pytest.approx(expected)
+
+
+async def stats_with_a_warning(client, login, make_player):  # type: ignore[no-untyped-def]
+    """Partido cerrado con quintetos, notas y un aviso (un gol fuera de los tramos)."""
+    headers = await login()
+    match_id, p = await played_match(client, headers, make_player)
+    late_goal = event(13, "goal", 2, 1500, p[1])
+    await sync(client, headers, match_id, events=[late_goal])
+    return match_id, headers
+
+
+async def test_a_player_sees_ratings_but_not_quintets_or_warnings(
+    client: AsyncClient, login: Login, make_player: MakePlayer, player_headers: dict[str, str]
+) -> None:
+    match_id, staff = await stats_with_a_warning(client, login, make_player)
+
+    seen_by_player = (
+        await client.get(f"/matches/{match_id}/stats", headers=player_headers)
+    ).json()["data"]
+    seen_by_staff = (await client.get(f"/matches/{match_id}/stats", headers=staff)).json()["data"]
+
+    assert (seen_by_player["quintets"], seen_by_player["warnings"]) == ([], [])
+    assert seen_by_staff["quintets"] and seen_by_staff["warnings"]
+    assert seen_by_player["players"] == seen_by_staff["players"]
+    assert any(row["rating"] is not None for row in seen_by_player["players"])
+    assert seen_by_player["score"] == seen_by_staff["score"]
+
+
+async def test_the_assistant_coach_sees_quintets_and_warnings(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    match_id, _ = await stats_with_a_warning(client, login, make_player)
+    assistant = await login(Role.ASSISTANT_COACH)
+
+    stats = (await client.get(f"/matches/{match_id}/stats", headers=assistant)).json()["data"]
+
+    assert stats["quintets"] and stats["warnings"]

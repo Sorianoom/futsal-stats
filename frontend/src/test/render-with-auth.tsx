@@ -6,7 +6,7 @@ import { AuthContext, type AuthContextValue } from "@/components/auth-provider";
 import type { Role, User } from "@/lib/api/types";
 
 export function fakeUser(role: Role = "head_coach"): User {
-  return { id: "u1", email: `${role}@club.es`, role };
+  return { id: "u1", email: `${role}@club.es`, role, player_id: role === "player" ? "p1" : null };
 }
 
 export function renderWithAuth(ui: ReactElement, overrides: Partial<AuthContextValue> = {}) {

@@ -1,6 +1,6 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Player } from "@/lib/api/types";
 import { mockApi } from "@/test/mock-api";
@@ -15,6 +15,7 @@ const LUIS: Player = {
   position: "goalkeeper",
   status: "available",
   is_active: true,
+  has_account: false,
 };
 const PEDRO: Player = {
   id: "p2",
@@ -23,6 +24,7 @@ const PEDRO: Player = {
   position: "field",
   status: "injured",
   is_active: true,
+  has_account: true,
 };
 
 let roster: Player[];
@@ -30,6 +32,12 @@ let roster: Player[];
 beforeEach(() => {
   roster = [LUIS, PEDRO];
 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const INVITATION = { token: "tok-123", expires_at: "2026-11-14T18:30:00Z" };
 
 function api(extra: Parameters<typeof mockApi>[0] = {}) {
   return mockApi({ "GET /players": () => ({ data: roster }), ...extra });
@@ -310,5 +318,134 @@ describe("PlantillaPage", () => {
     const name = screen.getByLabelText("Nombre");
     expect(name).toHaveAttribute("aria-invalid", "true");
     expect(name).toHaveAccessibleDescription("Escribe el nombre");
+  });
+
+  describe("invitaciones", () => {
+    it("el entrenador invita a un jugador sin cuenta y ve el enlace con su caducidad", async () => {
+      const server = api({ "POST /players/p1/invitation": { status: 201, data: INVITATION } });
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Luis Prado");
+
+      await userEvent.click(screen.getByRole("button", { name: "Invitar a Luis Prado" }));
+      const dialog = screen.getByRole("dialog");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Crear enlace" }));
+
+      const link = await within(dialog).findByLabelText("Enlace de invitación");
+      expect(link).toHaveValue(`${window.location.origin}/invitacion/#token=tok-123`);
+      expect(within(dialog).getByText(/Caduca el/)).toBeInTheDocument();
+      expect(server.count("POST", "/players/p1/invitation")).toBe(1);
+    });
+
+    it("copia el enlace al portapapeles", async () => {
+      api({ "POST /players/p1/invitation": { status: 201, data: INVITATION } });
+      const user = userEvent.setup();
+      const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Luis Prado");
+
+      await user.click(screen.getByRole("button", { name: "Invitar a Luis Prado" }));
+      await user.click(screen.getByRole("button", { name: "Crear enlace" }));
+      await user.click(await screen.findByRole("button", { name: "Copiar enlace" }));
+
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/invitacion/#token=tok-123`);
+      expect(await screen.findByRole("button", { name: "Copiado" })).toBeInTheDocument();
+    });
+
+    it("un jugador con cuenta muestra «Tiene cuenta» y no ofrece invitar", async () => {
+      api();
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Pedro Gómez");
+
+      expect(screen.getByText("Tiene cuenta")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Invitar a Pedro Gómez" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Invitar a Luis Prado" })).toBeInTheDocument();
+    });
+
+    it("si el jugador ya tiene cuenta (409) lo dice claro y no muestra enlace", async () => {
+      api({
+        "POST /players/p1/invitation": () => {
+          roster = roster.map((p) => (p.id === "p1" ? { ...p, has_account: true } : p));
+          return {
+            status: 409,
+            error: { code: "already_has_account", message: "El jugador ya tiene cuenta" },
+          };
+        },
+      });
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Luis Prado");
+
+      await userEvent.click(screen.getByRole("button", { name: "Invitar a Luis Prado" }));
+      await userEvent.click(screen.getByRole("button", { name: "Crear enlace" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Luis Prado ya tiene cuenta: no hace falta invitarle.",
+      );
+      expect(screen.queryByLabelText("Enlace de invitación")).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+      await waitFor(() => expect(screen.getAllByText("Tiene cuenta")).toHaveLength(2));
+    });
+
+    it("el token va en el fragmento del enlace, codificado, para que no llegue al servidor", async () => {
+      api({ "POST /players/p1/invitation": { status: 201, data: { ...INVITATION, token: "a/b+c=" } } });
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Luis Prado");
+
+      await userEvent.click(screen.getByRole("button", { name: "Invitar a Luis Prado" }));
+      await userEvent.click(screen.getByRole("button", { name: "Crear enlace" }));
+
+      expect(await screen.findByLabelText("Enlace de invitación")).toHaveValue(
+        `${window.location.origin}/invitacion/#token=a%2Fb%2Bc%3D`,
+      );
+    });
+
+    it("si el jugador está dado de baja (409) lo dice claro y no muestra enlace", async () => {
+      api({
+        "POST /players/p1/invitation": {
+          status: 409,
+          error: { code: "player_inactive", message: "El jugador está dado de baja" },
+        },
+      });
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Luis Prado");
+
+      await userEvent.click(screen.getByRole("button", { name: "Invitar a Luis Prado" }));
+      await userEvent.click(screen.getByRole("button", { name: "Crear enlace" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Luis Prado está dado de baja: no se le puede invitar.",
+      );
+      expect(screen.queryByLabelText("Enlace de invitación")).not.toBeInTheDocument();
+    });
+
+    it("no ofrece invitar a un jugador dado de baja", async () => {
+      roster = [LUIS, { ...PEDRO, has_account: false, is_active: false }];
+      api();
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Pedro Gómez");
+
+      expect(screen.queryByRole("button", { name: "Invitar a Pedro Gómez" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Invitar a Luis Prado" })).toBeInTheDocument();
+    });
+
+    it("avisa si no se pudo crear la invitación", async () => {
+      api({
+        "POST /players/p1/invitation": { status: 500, error: { code: "internal_error", message: "Error" } },
+      });
+      renderWithAuth(<PlantillaPage />);
+      await screen.findByText("Luis Prado");
+
+      await userEvent.click(screen.getByRole("button", { name: "Invitar a Luis Prado" }));
+      await userEvent.click(screen.getByRole("button", { name: "Crear enlace" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo crear la invitación");
+    });
+
+    it("el segundo entrenador no ve la acción de invitar", async () => {
+      api();
+      renderWithAuth(<PlantillaPage />, { user: fakeUser("assistant_coach") });
+      await screen.findByText("Luis Prado");
+
+      expect(screen.queryByRole("button", { name: /Invitar/ })).not.toBeInTheDocument();
+    });
   });
 });
