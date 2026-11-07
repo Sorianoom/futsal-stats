@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-07 (limitador de login en la BD, en rama con migración 0005).
+Última actualización: 2026-11-07 (limitador de login en la BD, en `main` con la migración 0005).
 
 ## Hecho y en producción
 
@@ -41,10 +41,8 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 - Ninguno de los despliegues de la nota, la caché del detalle y la limpieza se ha comprobado aún
   en producción.
 
-## En curso
-
-- **Limitador de login en la BD** (rama `feat/limitador-login-bd`, sin fusionar; fase 12). Tests en
-  verde. **Lleva la migración 0005**: va por PR y hay que aplicarla en Neon antes de fusionar.
+- **Limitador de login en la BD** (push directo a `main`, sin PR; fase 12). Tests en verde.
+  Migración 0005 aplicada en Neon a mano antes del push (según el usuario; no verificado desde aquí).
   - Tabla `login_failures` (`key_hash`, `failed_at`): un fallo por clave. Las claves son
     HMAC-SHA256 con `JWT_SECRET` de IP+email, IP y email, así que no hay IPs ni emails en claro.
     Rotar `JWT_SECRET` pone los contadores a cero.
@@ -68,8 +66,8 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## Decisiones tomadas
 
-- Los cambios con migración van por PR, no por push directo a `main`: así un despliegue automático
-  no ocurre antes de aplicar la migración. Sin migración se puede subir directo a `main`.
+- Se sube directo a `main`, sin PR. Si hay migración nueva, se aplica en Neon antes del push: el
+  push despliega solo y el código nuevo fallaría sin la tabla.
 - Antes de desplegar código con migración nueva: `alembic upgrade head` contra Neon con la
   conexión directa (host sin `-pooler`).
 - El token de acceso ya emitido sigue valiendo hasta caducar (15 min) tras revocar sesiones.
