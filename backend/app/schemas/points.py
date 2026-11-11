@@ -162,6 +162,11 @@ class InfractionOut(BaseModel):
 class MatchCreate(StrictModel):
     held_on: PlausibleDate
     opponent: str = Field(min_length=1, max_length=MAX_OPPONENT_LENGTH)
+    is_official: bool = True
+
+
+class MatchUpdate(StrictModel):
+    is_official: bool
 
 
 class MatchOut(BaseModel):
@@ -169,6 +174,8 @@ class MatchOut(BaseModel):
     session_id: uuid.UUID
     held_on: date
     opponent: str
+    # Con valor por defecto para repetir respuestas idempotentes guardadas antes de existir.
+    is_official: bool = True
 
 
 class ExclusionCreate(StrictModel):

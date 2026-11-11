@@ -41,7 +41,7 @@ function renderProbe() {
 }
 
 const COPY = {
-  match: { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" },
+  match: { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS", is_official: true },
   lineup: [],
   events: [],
   stints: [],

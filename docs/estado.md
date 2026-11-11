@@ -58,9 +58,20 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
-- **Fantasy, paso 1: cuentas de jugador** (rama `feat/cuentas-jugador`, sin subir). Tests en verde
-  y revisión de seguridad sin hallazgos graves (sus arreglos menores ya están hechos). **Lleva la
-  migración 0006**: aplicarla en Neon antes de subir a `main`.
+- **Fantasy, paso 2: liga, alineaciones, puntos y clasificación** (rama `feat/fantasy-liga`, sin
+  subir). Tests en verde y probado contra la API local. **Lleva la migración 0007**: aplicarla en
+  Neon antes de subir a `main`.
+  - Partidos con `is_official` (por defecto sí; `PATCH /matches/{id}`); solo los oficiales son
+    jornadas. Casilla «Amistoso» al crear y botón en el detalle de estadísticas.
+  - Rutas `/fantasy/*` para todos los roles salvo `POST /fantasy/league` (entrenador principal).
+    Dominio puro en `backend/app/domain/fantasy/`, orquestación en `backend/app/services/`.
+  - Dinero en enteros de miles (1000 = 1 M). Valor fijo de 4 M hasta el paso 3.
+  - Puntos y clasificación se calculan en cada consulta, sin guardarse (como la nota).
+  - Alta tardía y copias de jugadores nuevos se ponen al día en cualquier petición del Fantasy.
+  - Pendiente para el paso 3: regla de saldo negativo al bloquear, valores por jornada, propiedad
+    de la copia en el momento del bloqueo, plantilla máxima de 7.
+- **Fantasy, paso 1: cuentas de jugador** (push directo a `main`, `dfafb11`; migración 0006
+  aplicada en Neon antes). Revisión de seguridad sin hallazgos graves (arreglos menores hechos).
   - Reglamento completo del Fantasy, acordado regla a regla: `docs/fantasy.md`.
   - Rol `player` vinculado a un jugador (`users.player_id`, único; CHECK rol ↔ vínculo).
   - `CurrentUser` = solo personal técnico; `AnyUser` (también jugadores) solo en `GET /auth/me`,
@@ -80,7 +91,9 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 - Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
 - Comprobar en producción que `x-real-ip` llega con la IP real y que el bloqueo funciona.
-- Fantasy, pasos 2 a 4 de `docs/fantasy.md`: liga y alineaciones, mercado, cláusulas.
+- Fantasy, pasos 3 y 4 de `docs/fantasy.md`: mercado y cláusulas.
+- Cambiar la contraseña de `neondb_owner` en Neon: se escribió en claro en un comando (historial
+  de zsh). Para migrar, poner `DIRECT_DATABASE_URL` en `backend/.env` en vez de en el comando.
 - Un test del frontend falló una vez bajo carga y pasó en las tres repeticiones siguientes; no se
   identificó cuál. Vigilar si vuelve a fallar.
 

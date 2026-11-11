@@ -49,18 +49,26 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Plantilla" })).toBeInTheDocument();
   });
 
-  it("el jugador solo ve la pestaña de estadísticas y el logotipo le lleva a ellas", () => {
+  it("el jugador solo ve Estadísticas y Fantasy, y el logotipo le lleva a las estadísticas", () => {
     navigation.pathname = "/estadisticas";
 
     renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("player") });
 
     const nav = screen.getByRole("navigation", { name: "Principal" });
     const links = within(nav).getAllByRole("link");
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveTextContent("Estadísticas");
+    expect(links.map((link) => link.textContent)).toEqual(["Estadísticas", "Fantasy"]);
     expect(links[0]).toHaveAttribute("aria-current", "page");
+    expect(links[1]).toHaveAttribute("href", "/fantasy");
     expect(screen.getByRole("link", { name: "Futsal Stats" })).toHaveAttribute("href", "/estadisticas");
     expect(screen.getByText(/Jugador/)).toBeInTheDocument();
+  });
+
+  it.each(["head_coach", "assistant_coach"] as const)("%s también ve la pestaña Fantasy", (role) => {
+    navigation.pathname = "/fantasy";
+
+    renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser(role) });
+
+    expect(screen.getByRole("link", { name: "Fantasy" })).toHaveAttribute("aria-current", "page");
   });
 
   it("el logotipo lleva al inicio sin contarse como sección activa", () => {

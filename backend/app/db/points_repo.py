@@ -147,9 +147,11 @@ async def delete_row(db: AsyncSession, row: object) -> None:
     await db.flush()
 
 
-async def create_match(db: AsyncSession, held_on: date, opponent: str) -> Match:
+async def create_match(
+    db: AsyncSession, held_on: date, opponent: str, *, is_official: bool = True
+) -> Match:
     team_session = await create_session(db, SessionKind.MATCH, held_on, None)
-    match = Match(session_id=team_session.id, opponent=opponent)
+    match = Match(session_id=team_session.id, opponent=opponent, is_official=is_official)
     db.add(match)
     await db.flush()
     return match

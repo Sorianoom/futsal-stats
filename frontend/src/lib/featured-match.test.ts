@@ -5,7 +5,7 @@ import type { Match } from "@/lib/api/match-types";
 import { pickFeaturedMatch } from "./featured-match";
 
 function match(id: string, heldOn: string): Match {
-  return { id, session_id: `s-${id}`, held_on: heldOn, opponent: `Rival ${id}` };
+  return { id, session_id: `s-${id}`, held_on: heldOn, opponent: `Rival ${id}`, is_official: true };
 }
 
 describe("pickFeaturedMatch", () => {

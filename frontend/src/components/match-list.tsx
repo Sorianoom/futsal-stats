@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { NewMatchDialog } from "@/components/new-match-dialog";
+import { FriendlyBadge } from "@/components/friendly-badge";
 import { Button } from "@/components/ui/button";
 import { matchesQuery } from "@/lib/queries";
 import { sortMatchesByDate } from "@/lib/sort-matches";
@@ -52,6 +53,7 @@ export function MatchList() {
                   {formatShortDay(match.held_on)}
                 </span>
                 <span className="flex-1 text-xl font-extrabold">{match.opponent}</span>
+                <FriendlyBadge match={match} />
                 <span aria-hidden="true" className="text-2xl font-bold text-muted-foreground">
                   ›
                 </span>

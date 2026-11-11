@@ -10,7 +10,7 @@ from app.api.errors import ApiError
 from app.api.idempotency import IdempotencyKey, run_idempotent
 from app.db import points_repo
 from app.db.models import Match
-from app.schemas.points import ExclusionCreate, ExclusionOut, MatchCreate, MatchOut
+from app.schemas.points import ExclusionCreate, ExclusionOut, MatchCreate, MatchOut, MatchUpdate
 
 router = APIRouter(tags=["matches"])
 
@@ -26,6 +26,7 @@ def _match_out(match: Match, held_on: object) -> MatchOut:
             "session_id": match.session_id,
             "held_on": held_on,
             "opponent": match.opponent,
+            "is_official": match.is_official,
         }
     )
 
@@ -35,7 +36,9 @@ async def create_match(
     payload: MatchCreate, db: SessionDep, user: CurrentUser, key: IdempotencyKey
 ) -> Envelope[MatchOut]:
     async def action() -> MatchOut:
-        match = await points_repo.create_match(db, payload.held_on, payload.opponent)
+        match = await points_repo.create_match(
+            db, payload.held_on, payload.opponent, is_official=payload.is_official
+        )
         return _match_out(match, payload.held_on)
 
     return await run_idempotent(db, key, user, "POST /matches", payload, MatchOut, action)
@@ -45,6 +48,21 @@ async def create_match(
 async def list_matches(db: SessionDep, _: AnyUser) -> Envelope[list[MatchOut]]:
     rows = await points_repo.list_matches(db)
     return ok([_match_out(m, held_on) for m, held_on in rows], Meta(total=len(rows)))
+
+
+@router.patch("/matches/{match_id}", response_model=Envelope[MatchOut])
+async def update_match(
+    match_id: uuid.UUID, payload: MatchUpdate, db: SessionDep, _: CurrentUser
+) -> Envelope[MatchOut]:
+    """Marca un partido como oficial (jornada del Fantasy) o amistoso."""
+    match = await points_repo.get_match(db, match_id)
+    if match is None:
+        raise _not_found("Partido")
+    match.is_official = payload.is_official
+    await db.flush()
+    held_on = await points_repo.match_date(db, match)
+    await db.commit()
+    return ok(_match_out(match, held_on))
 
 
 @router.post("/exclusions", response_model=Envelope[ExclusionOut], status_code=201)

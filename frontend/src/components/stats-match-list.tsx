@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { SeasonStatsTable } from "@/components/stats-tables";
+import { FriendlyBadge } from "@/components/friendly-badge";
 import { Button } from "@/components/ui/button";
 import type { SeasonPlayerStats } from "@/lib/api/stats-types";
 import { formatClock } from "@/lib/match/clock";
@@ -115,6 +116,7 @@ export function StatsMatchList() {
                   {formatShortDay(match.held_on)}
                 </span>
                 <span className="flex-1 text-xl font-extrabold">{match.opponent}</span>
+                <FriendlyBadge match={match} />
                 <span aria-hidden="true" className="text-2xl font-bold text-muted-foreground">
                   ›
                 </span>

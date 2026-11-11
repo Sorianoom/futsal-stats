@@ -5,7 +5,9 @@ fuera por defecto. `AnyUser` admite también a los jugadores y solo se usa en la
 pueden ver (su cuenta, la lista de partidos y las estadísticas).
 """
 
+import random
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -21,6 +23,20 @@ from app.domain.roles import STAFF_ROLES, Role
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def get_now() -> datetime:
+    """Hora actual (UTC). Es una dependencia para que los tests fijen el reloj."""
+    return datetime.now(UTC)
+
+
+def get_rng() -> random.Random:
+    """Azar del Fantasy (reparto de copias). Los tests lo sustituyen por uno con semilla."""
+    return random.SystemRandom()
+
+
+NowDep = Annotated[datetime, Depends(get_now)]
+RngDep = Annotated[random.Random, Depends(get_rng)]
 
 
 def unauthorized() -> ApiError:

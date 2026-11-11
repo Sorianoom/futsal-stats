@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.auth_sessions import RevokeReason
+from app.domain.fantasy.rules import LINEUP_FIELD_SLOTS
 from app.domain.points.attendance import AttendanceStatus, SessionKind
 from app.domain.points.callup import PlayerStatus, Position
 from app.domain.points.catalog import Deferral, SanctionKind, Severity
@@ -41,6 +42,7 @@ NAMING_CONVENTION = {
 
 PARTS = (1, 2)
 MAX_STARS = 5
+GOALKEEPER_SLOT = 0
 
 
 class Base(DeclarativeBase):
@@ -175,6 +177,8 @@ class Match(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), unique=True)
     opponent: Mapped[str] = mapped_column(String(100))
+    # Solo los partidos oficiales son jornadas del Fantasy (los amistosos no puntúan).
+    is_official: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_at: Mapped[datetime] = _created_at()
 
 
@@ -377,3 +381,103 @@ class LoginFailure(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     key_hash: Mapped[str] = mapped_column(String(64))
     failed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class FantasyLeague(Base):
+    """Liga del Fantasy. Solo puede haber una activa (índice único parcial)."""
+
+    __tablename__ = "fantasy_leagues"
+    __table_args__ = (
+        Index(
+            "ux_fantasy_leagues_one_active",
+            "is_active",
+            unique=True,
+            postgresql_where=text("is_active"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    # Fecha de Madrid del alta: las jornadas son los partidos oficiales desde ese día.
+    starts_on: Mapped[date] = mapped_column(Date)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FantasyParticipant(Base):
+    """Usuario inscrito en una liga. El saldo va en miles (1000 = 1 M) y puede quedar negativo."""
+
+    __tablename__ = "fantasy_participants"
+    __table_args__ = (UniqueConstraint("league_id", "user_id"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    league_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_leagues.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    balance: Mapped[int] = mapped_column(Integer)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FantasyCopy(Base):
+    """Copia de un jugador real en una liga. Sin dueño está en la banca.
+
+    Un participante no puede tener dos copias del mismo jugador: el UNIQUE (owner_id, player_id)
+    no se aplica a la banca porque en Postgres los NULL no chocan entre sí.
+    """
+
+    __tablename__ = "fantasy_copies"
+    __table_args__ = (
+        UniqueConstraint("league_id", "player_id", "copy_number"),
+        UniqueConstraint("owner_id", "player_id"),
+        CheckConstraint("copy_number >= 1", name="copy_number_positive"),
+        CheckConstraint("(owner_id IS NULL) = (acquired_at IS NULL)", name="acquired_iff_owned"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    league_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_leagues.id", ondelete="CASCADE")
+    )
+    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id"))
+    copy_number: Mapped[int] = mapped_column(Integer)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("fantasy_participants.id"), nullable=True, default=None
+    )
+    acquired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+
+class FantasyLineup(Base):
+    """Una versión guardada de la alineación de un participante (historial, no se edita)."""
+
+    __tablename__ = "fantasy_lineups"
+    __table_args__ = (
+        Index("ix_fantasy_lineups_participant_id_saved_at", "participant_id", "saved_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    participant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_participants.id", ondelete="CASCADE")
+    )
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FantasyLineupSlot(Base):
+    """Hueco de una alineación: 0 es el portero y 1-4 los de campo. Sin copia = hueco vacío."""
+
+    __tablename__ = "fantasy_lineup_slots"
+    __table_args__ = (
+        CheckConstraint(
+            f"slot BETWEEN {GOALKEEPER_SLOT} AND {LINEUP_FIELD_SLOTS}", name="slot_valid"
+        ),
+        UniqueConstraint("lineup_id", "copy_id"),
+    )
+
+    lineup_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_lineups.id", ondelete="CASCADE"), primary_key=True
+    )
+    slot: Mapped[int] = mapped_column(Integer, primary_key=True)
+    copy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("fantasy_copies.id", ondelete="SET NULL"), nullable=True, index=True
+    )

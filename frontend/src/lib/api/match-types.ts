@@ -6,11 +6,15 @@ export interface Match {
   session_id: string;
   held_on: string;
   opponent: string;
+  /** False en un amistoso: no es jornada del Fantasy. */
+  is_official: boolean;
 }
 
 export interface NewMatch {
   held_on: string;
   opponent: string;
+  /** Por defecto, true. */
+  is_official?: boolean;
 }
 
 /** Evento de alineación tal y como lo guarda y lo devuelve la API. */

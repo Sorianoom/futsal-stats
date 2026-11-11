@@ -6,6 +6,8 @@ import { useAuth } from "@/components/auth-provider";
 import { queryCache } from "@/lib/query-cache";
 import {
   callupQuery,
+  fantasyMeQuery,
+  fantasyStandingsQuery,
   matchesQuery,
   movementsQuery,
   playersQuery,
@@ -37,12 +39,14 @@ export function CacheWarmer() {
   useEffect(() => {
     if (status !== "authenticated" || !userId) return;
     const week = currentWeekStart();
-    // El jugador solo puede leer partidos y estadísticas: pedir más le daría 403.
+    // Todos los roles leen el Fantasy: son dos lecturas pequeñas.
+    const fantasy: Query<unknown>[] = [fantasyMeQuery, fantasyStandingsQuery];
+    // El jugador solo puede leer partidos, estadísticas y Fantasy: pedir más le daría 403.
     if (role === "player") {
-      [matchesQuery, seasonStatsQuery].forEach(warm);
+      [matchesQuery, seasonStatsQuery, ...fantasy].forEach(warm);
       return;
     }
-    const queries: Query<unknown>[] = [playersQuery, matchesQuery, seasonStatsQuery];
+    const queries: Query<unknown>[] = [playersQuery, matchesQuery, seasonStatsQuery, ...fantasy];
     if (role === "head_coach") {
       queries.push(
         pointsReferenceQuery,

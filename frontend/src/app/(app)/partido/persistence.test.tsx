@@ -26,7 +26,7 @@ const PLAYERS: Player[] = ["Ana", "Bea", "Carla", "Dani", "Elena", "Fran", "Gema
     is_active: true, has_account: false,
   }),
 );
-const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" };
+const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS", is_official: true };
 const STARTED: LineupEventRecord = {
   id: "l1",
   seq: 1,

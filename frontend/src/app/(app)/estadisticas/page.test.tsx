@@ -16,8 +16,8 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigation.search),
 }));
 
-const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" };
-const OLDER: Match = { id: "m0", session_id: "s0", held_on: "2026-10-13", opponent: "Cádiz" };
+const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS", is_official: true };
+const OLDER: Match = { id: "m0", session_id: "s0", held_on: "2026-10-13", opponent: "Cádiz", is_official: true };
 
 const STATS: MatchStats = {
   match_id: "m1",
@@ -155,6 +155,16 @@ describe("EstadisticasPage: lista de partidos", () => {
     expect(link).toHaveAttribute("href", "/estadisticas?id=m1");
     expect(link).toHaveTextContent("20 oct");
     expect(screen.getByRole("link", { name: /Cádiz/ })).toHaveAttribute("href", "/estadisticas?id=m0");
+  });
+
+  it("marca los amistosos", async () => {
+    matches = [MATCH, { ...OLDER, is_official: false }];
+    api();
+
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    expect(await screen.findByRole("link", { name: /Cádiz/ })).toHaveTextContent("Amistoso");
+    expect(screen.getByRole("link", { name: /Rival FS/ })).not.toHaveTextContent("Amistoso");
   });
 
   it("los ordena por fecha, de 2026 a 2027, aunque el servidor los mande al revés", async () => {
@@ -539,6 +549,54 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     renderWithAuth(<EstadisticasPage />, { user: fakeUser("assistant_coach") });
 
     expect(await screen.findByRole("table", { name: "Jugadores" })).toBeInTheDocument();
+  });
+
+  it.each(["head_coach", "assistant_coach"] as const)(
+    "%s marca un partido como amistoso y luego otra vez como oficial",
+    async (role) => {
+      const server = api({
+        "PATCH /matches/m1": (request) => {
+          const { is_official } = request.body as { is_official: boolean };
+          matches = matches.map((m) => (m.id === "m1" ? { ...m, is_official } : m));
+          return { data: { ...MATCH, is_official } };
+        },
+      });
+      renderWithAuth(<EstadisticasPage />, { user: fakeUser(role) });
+      expect(await screen.findByText("Oficial · cuenta para el Fantasy")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "Marcar como amistoso" }));
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toHaveTextContent("Fantasy");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Marcar como amistoso" }));
+
+      expect(await screen.findByText("Amistoso · no cuenta para el Fantasy")).toBeInTheDocument();
+      expect(server.calls.find((c) => c.method === "PATCH")?.body).toEqual({ is_official: false });
+
+      await userEvent.click(screen.getByRole("button", { name: "Marcar como oficial" }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Marcar como oficial" }));
+
+      expect(await screen.findByText("Oficial · cuenta para el Fantasy")).toBeInTheDocument();
+    },
+  );
+
+  it("avisa si no se pudo cambiar si el partido es oficial", async () => {
+    api({ "PATCH /matches/m1": { status: 500, error: { code: "internal_error", message: "x" } } });
+    renderWithAuth(<EstadisticasPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Marcar como amistoso" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Marcar como amistoso" }));
+
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("No se pudo cambiar");
+  });
+
+  it("el jugador ve si es amistoso pero no puede cambiarlo", async () => {
+    matches = [{ ...MATCH, is_official: false }, OLDER];
+    api();
+
+    renderWithAuth(<EstadisticasPage />, { user: fakeUser("player") });
+
+    expect(await screen.findByText("Amistoso · no cuenta para el Fantasy")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Marcar como/ })).not.toBeInTheDocument();
   });
 
   it("enlaza a la lista de partidos para volver", async () => {

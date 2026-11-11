@@ -1,3 +1,5 @@
+import { queryCache } from "@/lib/query-cache";
+
 import { apiData } from "./client";
 import type {
   FinalizeResult,
@@ -9,7 +11,11 @@ import type {
   SyncBatch,
   SyncResult,
 } from "./match-types";
+import { invalidateFantasy } from "./fantasy";
 import { invalidateMatchStats } from "./stats";
+
+/** Clave de caché de la lista de partidos (la usa `matchesQuery`). */
+export const MATCHES_KEY = "/matches";
 
 export function listMatches(): Promise<Match[]> {
   return apiData<Match[]>("/matches");
@@ -17,6 +23,20 @@ export function listMatches(): Promise<Match[]> {
 
 export function createMatch(match: NewMatch, idempotencyKey?: string): Promise<Match> {
   return apiData<Match>("/matches", { method: "POST", body: match, idempotencyKey });
+}
+
+/**
+ * Marca un partido como oficial o amistoso (personal técnico). Cambia qué jornadas tiene el
+ * Fantasy, así que haya ido bien o no se olvidan la lista de partidos y lo cacheado del Fantasy.
+ */
+export function setMatchOfficial(matchId: string, isOfficial: boolean): Promise<Match> {
+  return apiData<Match>(`/matches/${encodeURIComponent(matchId)}`, {
+    method: "PATCH",
+    body: { is_official: isOfficial },
+  }).finally(() => {
+    queryCache.invalidate(MATCHES_KEY);
+    invalidateFantasy();
+  });
 }
 
 export function listMatchEvents(matchId: string): Promise<LoggedEvent[]> {

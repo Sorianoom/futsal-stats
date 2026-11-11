@@ -11,7 +11,7 @@ import HomePage from "./page";
 const TODAY = "2026-10-20T10:00:00Z";
 
 function match(id: string, heldOn: string, opponent: string): Match {
-  return { id, session_id: `s-${id}`, held_on: heldOn, opponent };
+  return { id, session_id: `s-${id}`, held_on: heldOn, opponent, is_official: true };
 }
 
 function player(id: string, status: Player["status"]): Player {

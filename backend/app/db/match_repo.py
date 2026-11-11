@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import LineupEventRow, MatchEvent, QuintetRatingRow, StintRow
 from app.domain.stints.events import EventKind
+from app.domain.stints.events import MatchEvent as DomainEvent
 from app.domain.stints.models import Stint
 
 type SyncModel = type[MatchEvent] | type[LineupEventRow] | type[QuintetRatingRow]
@@ -139,3 +140,46 @@ async def get_stint(db: AsyncSession, stint_id: uuid.UUID) -> StintRow | None:
 
 def stint_to_domain(row: StintRow) -> Stint:
     return Stint(str(row.player_id), row.part, row.start_s, row.end_s)
+
+
+def event_to_domain(row: MatchEvent) -> DomainEvent:
+    return DomainEvent(
+        id=str(row.id),
+        kind=row.kind,
+        part=row.part,
+        t=row.t,
+        player_id=str(row.player_id) if row.player_id else None,
+        voids=str(row.voids_event_id) if row.voids_event_id else None,
+    )
+
+
+async def stints_by_match(
+    db: AsyncSession, match_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, list[Stint]]:
+    """Tramos de varios partidos. Un partido sin tramos no está cerrado y no aparece."""
+    wanted = list(set(match_ids))
+    if not wanted:
+        return {}
+    grouped: dict[uuid.UUID, list[Stint]] = {}
+    query = select(StintRow).where(StintRow.match_id.in_(wanted))
+    for row in (await db.execute(query)).scalars().all():
+        grouped.setdefault(row.match_id, []).append(stint_to_domain(row))
+    return grouped
+
+
+async def events_by_match(
+    db: AsyncSession, match_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, list[DomainEvent]]:
+    """Eventos de varios partidos, en el orden en que se registraron."""
+    wanted = list(set(match_ids))
+    if not wanted:
+        return {}
+    grouped: dict[uuid.UUID, list[DomainEvent]] = {}
+    query = (
+        select(MatchEvent)
+        .where(MatchEvent.match_id.in_(wanted))
+        .order_by(MatchEvent.match_id, MatchEvent.seq)
+    )
+    for row in (await db.execute(query)).scalars().all():
+        grouped.setdefault(row.match_id, []).append(event_to_domain(row))
+    return grouped

@@ -16,7 +16,7 @@ import {
 import { EMPTY_OUTBOX, type Outbox } from "./outbox";
 import { loadOutbox, saveOutbox } from "./outbox-store";
 
-const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-24", opponent: "Rival" };
+const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-24", opponent: "Rival", is_official: true };
 const STARTED: LineupEventRecord = {
   id: "l1",
   seq: 1,

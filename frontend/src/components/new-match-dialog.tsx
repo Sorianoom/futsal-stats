@@ -33,6 +33,7 @@ interface FormProps {
 function NewMatchForm({ busy, setBusy, onClose, onCreated }: FormProps) {
   const [opponent, setOpponent] = useState("");
   const [date, setDate] = useState(() => todayInMadrid());
+  const [friendly, setFriendly] = useState(false);
   const [opponentError, setOpponentError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -50,7 +51,10 @@ function NewMatchForm({ busy, setBusy, onClose, onCreated }: FormProps) {
     setBusy(true);
     let created: Match;
     try {
-      created = await createMatch({ held_on: date, opponent: name }, keyFor(`${date}|${name}`));
+      created = await createMatch(
+        { held_on: date, opponent: name, is_official: !friendly },
+        keyFor(`${date}|${name}|${friendly}`),
+      );
     } catch (failure) {
       setServerError(failureMessage(failure));
       setBusy(false);
@@ -98,6 +102,16 @@ function NewMatchForm({ busy, setBusy, onClose, onCreated }: FormProps) {
           </p>
         ) : null}
       </div>
+      <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-2 text-base font-semibold">
+        <input
+          type="checkbox"
+          checked={friendly}
+          disabled={busy}
+          onChange={(e) => setFriendly(e.target.checked)}
+          className="size-5 shrink-0 accent-primary"
+        />
+        Amistoso (no cuenta para el Fantasy)
+      </label>
       {serverError ? (
         <p role="alert" className="text-base text-destructive">
           {serverError}

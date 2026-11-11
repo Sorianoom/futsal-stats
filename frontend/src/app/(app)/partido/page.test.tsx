@@ -24,7 +24,7 @@ const PLAYERS: Player[] = NAMES.map((name, index) => ({
   status: "available",
   is_active: true, has_account: false,
 }));
-const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" };
+const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS", is_official: true };
 
 let matches: Match[];
 let lineup: LineupEventRecord[];
@@ -131,13 +131,43 @@ describe("PartidoPage: lista de partidos", () => {
     expect(server.calls.find((c) => c.method === "POST")?.body).toEqual({
       held_on: "2026-10-21",
       opponent: "Betis",
+      is_official: true,
     });
+  });
+
+  it("crea un amistoso, que no cuenta para el Fantasy", async () => {
+    const server = api({
+      "POST /matches": () => ({ data: { ...MATCH, id: "m9", opponent: "Betis", is_official: false } }),
+    });
+    renderWithAuth(<PartidoPage />);
+    await screen.findByRole("link", { name: /Rival FS/ });
+    await userEvent.click(screen.getByRole("button", { name: "Nuevo partido" }));
+    const dialog = screen.getByRole("dialog");
+    const friendly = within(dialog).getByRole("checkbox", { name: "Amistoso (no cuenta para el Fantasy)" });
+    expect(friendly).not.toBeChecked();
+
+    await userEvent.type(within(dialog).getByLabelText("Rival"), "Betis");
+    await userEvent.click(friendly);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/partido?id=m9"));
+    expect(server.calls.find((c) => c.method === "POST")?.body).toMatchObject({ is_official: false });
+  });
+
+  it("marca los amistosos en la lista", async () => {
+    matches = [MATCH, { ...MATCH, id: "m2", opponent: "Santa Fe", is_official: false }];
+    api();
+
+    renderWithAuth(<PartidoPage />);
+
+    expect(await screen.findByRole("link", { name: /Santa Fe/ })).toHaveTextContent("Amistoso");
+    expect(screen.getByRole("link", { name: /Rival FS/ })).not.toHaveTextContent("Amistoso");
   });
 
   it("reintenta la creación del partido con la misma clave de idempotencia", async () => {
     const keys: (string | null)[] = [];
-    const original = globalThis.fetch;
     api({ "POST /matches": () => ({ data: { ...MATCH, id: "m9", opponent: "Betis" } }) });
+    const original = globalThis.fetch;
     renderWithAuth(<PartidoPage />);
     await screen.findByRole("link", { name: /Rival FS/ });
     await userEvent.click(screen.getByRole("button", { name: "Nuevo partido" }));

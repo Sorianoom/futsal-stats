@@ -17,6 +17,8 @@ const ROUTES = {
   "GET /callup": { data: { week: WEEK } },
   "GET /sessions": { data: [] },
   "GET /movements": { data: [] },
+  "GET /fantasy/me": { data: { league: null } },
+  "GET /fantasy/standings": { data: { rounds: [], rows: [] } },
 };
 
 beforeEach(() => {
@@ -37,6 +39,8 @@ describe("CacheWarmer", () => {
       `callup:${WEEK}`,
       `sessions:${WEEK}`,
       `movements:${WEEK}`,
+      "fantasy:me",
+      "fantasy:standings",
     ]) {
       await waitFor(() => expect(queryCache.get(key)).toBeDefined());
     }
@@ -53,7 +57,7 @@ describe("CacheWarmer", () => {
     expect(api.count("GET", "/movements")).toBe(0);
   });
 
-  it("el jugador solo precarga partidos y estadísticas, que es lo que puede leer", async () => {
+  it("el jugador solo precarga partidos, estadísticas y Fantasy, que es lo que puede leer", async () => {
     const api = mockApi(ROUTES);
 
     renderWithAuth(<CacheWarmer />, { user: fakeUser("player") });
@@ -61,7 +65,11 @@ describe("CacheWarmer", () => {
     await waitFor(() => expect(queryCache.get("stats:season")).toBeDefined());
     await waitFor(() => expect(queryCache.get("/matches")).toBeDefined());
     expect(api.count("GET", "/players")).toBe(0);
+    await waitFor(() => expect(queryCache.get("fantasy:me")).toBeDefined());
+    await waitFor(() => expect(queryCache.get("fantasy:standings")).toBeDefined());
     expect(api.calls.map((call) => call.path.split("?")[0]).sort()).toEqual([
+      "/fantasy/me",
+      "/fantasy/standings",
       "/matches",
       "/stats/players",
     ]);
@@ -111,9 +119,10 @@ describe("CacheWarmer", () => {
     renderWithAuth(<CacheWarmer />);
     await waitFor(() => expect(queryCache.get("puntos:reference")).toBeDefined());
     await waitFor(() => expect(queryCache.get(`movements:${WEEK}`)).toBeDefined());
+    await waitFor(() => expect(queryCache.get("fantasy:standings")).toBeDefined());
 
     // plantilla, partidos, temporada, plantilla completa y catálogo (puntos), convocatoria,
-    // entrenos y movimientos
-    expect(api.calls).toHaveLength(8);
+    // entrenos, movimientos, mi Fantasy y clasificación
+    expect(api.calls).toHaveLength(10);
   });
 });

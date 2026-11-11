@@ -8,6 +8,7 @@ from app.api.errors import register_error_handlers
 from app.api.routes import (
     auth,
     callup,
+    fantasy,
     matches,
     movements,
     players,
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
         callup.router,
         sync.router,
         stints.router,
+        fantasy.router,
     ):
         app.include_router(router, prefix=settings.api_prefix)
 

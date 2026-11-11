@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/plantilla", label: "Plantilla" },
   { href: "/partido", label: "Partido" },
   { href: "/estadisticas", label: "Estadísticas" },
+  { href: "/fantasy", label: "Fantasy" },
   { href: "/convocatoria", label: "Convocatoria", headCoachOnly: true },
   { href: "/puntos", label: "Puntos", headCoachOnly: true },
   { href: "/entrenos", label: "Entrenos", headCoachOnly: true },

@@ -1,7 +1,7 @@
 import type { Role } from "@/lib/api/types";
 
-/** Pantallas que puede abrir un jugador (con sus subrutas): solo lee estadísticas. */
-const PLAYER_SECTIONS = ["/estadisticas"];
+/** Pantallas que puede abrir un jugador (con sus subrutas): estadísticas y su Fantasy. */
+const PLAYER_SECTIONS = ["/estadisticas", "/fantasy"];
 const PLAYER_HOME = "/estadisticas";
 const STAFF_HOME = "/";
 

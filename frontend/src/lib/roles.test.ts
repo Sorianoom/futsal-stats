@@ -9,11 +9,11 @@ describe("roles", () => {
     expect(homeFor("assistant_coach")).toBe("/");
   });
 
-  it.each(["/estadisticas", "/estadisticas/"])("el jugador puede ver %s", (pathname) => {
+  it.each(["/estadisticas", "/estadisticas/", "/fantasy", "/fantasy/"])("el jugador puede ver %s", (pathname) => {
     expect(canVisit("player", pathname)).toBe(true);
   });
 
-  it.each(["/", "/partido", "/partido/", "/puntos", "/convocatoria", "/plantilla", "/entrenos", "/corregir", "/estadisticasX"])(
+  it.each(["/", "/partido", "/partido/", "/puntos", "/convocatoria", "/plantilla", "/entrenos", "/corregir", "/estadisticasX", "/fantasyX"])(
     "el jugador no puede ver %s",
     (pathname) => {
       expect(canVisit("player", pathname)).toBe(false);

@@ -24,9 +24,9 @@ const PLAYERS: Player[] = NAMES.map((name, index) => ({
   status: "available",
   is_active: true, has_account: false,
 }));
-const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS" };
-const NEXT_MATCH: Match = { id: "m2", session_id: "s2", held_on: "2026-10-27", opponent: "Betis" };
-const OLD_MATCH: Match = { id: "m0", session_id: "s0", held_on: "2026-10-13", opponent: "Cádiz" };
+const MATCH: Match = { id: "m1", session_id: "s1", held_on: "2026-10-20", opponent: "Rival FS", is_official: true };
+const NEXT_MATCH: Match = { id: "m2", session_id: "s2", held_on: "2026-10-27", opponent: "Betis", is_official: true };
+const OLD_MATCH: Match = { id: "m0", session_id: "s0", held_on: "2026-10-13", opponent: "Cádiz", is_official: true };
 
 const STARTERS = ["p1", "p2", "p3", "p4", "p5"];
 const FINISHED: LineupEventRecord["payload"][] = [

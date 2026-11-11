@@ -99,6 +99,20 @@ describe("RequireAuth", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
+  it("un jugador puede entrar en el Fantasy", () => {
+    navigation.pathname = "/fantasy/";
+
+    renderWithAuth(
+      <RequireAuth>
+        <p>fantasy</p>
+      </RequireAuth>,
+      { user: fakeUser("player") },
+    );
+
+    expect(screen.getByText("fantasy")).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it("el segundo entrenador puede entrar en el partido", () => {
     navigation.pathname = "/partido";
 

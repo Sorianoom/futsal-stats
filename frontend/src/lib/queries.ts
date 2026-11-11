@@ -4,7 +4,16 @@
  */
 import { ApiError } from "@/lib/api/client";
 import type { Match } from "@/lib/api/match-types";
-import { listMatches } from "@/lib/api/matches";
+import {
+  FANTASY_ME_KEY,
+  FANTASY_STANDINGS_KEY,
+  fantasyRoundKey,
+  getFantasyMe,
+  getMyRound,
+  getStandings,
+} from "@/lib/api/fantasy";
+import type { FantasyMe, FantasyRound, FantasyStandings } from "@/lib/api/fantasy-types";
+import { MATCHES_KEY, listMatches } from "@/lib/api/matches";
 import { listPlayers } from "@/lib/api/players";
 import { getCallup, listInfractions, listMovements, listSessions } from "@/lib/api/points";
 import { SEASON_STATS_KEY, getMatchStats, getSeasonStats, matchStatsKey } from "@/lib/api/stats";
@@ -22,7 +31,8 @@ export interface PointsReference {
 }
 
 export const playersQuery: Query<Player[]> = { key: "/players", fetch: () => listPlayers() };
-export const matchesQuery: Query<Match[]> = { key: "/matches", fetch: listMatches };
+/** Se invalida al marcar un partido como oficial o amistoso (ver `setMatchOfficial`). */
+export const matchesQuery: Query<Match[]> = { key: MATCHES_KEY, fetch: listMatches };
 /** Se invalida junto con el detalle de cualquier partido (ver `invalidateMatchStats`). */
 export const seasonStatsQuery: Query<SeasonStats> = {
   key: SEASON_STATS_KEY,
@@ -73,4 +83,15 @@ async function fetchMatchStats(matchId: string): Promise<MatchStatsResult> {
 export const matchStatsQuery = (matchId: string): Query<MatchStatsResult> => ({
   key: matchStatsKey(matchId),
   fetch: () => fetchMatchStats(matchId),
+});
+
+/** Se invalida al crear la liga, guardar la alineación o cambiar qué partidos son oficiales. */
+export const fantasyMeQuery: Query<FantasyMe> = { key: FANTASY_ME_KEY, fetch: getFantasyMe };
+export const fantasyStandingsQuery: Query<FantasyStandings> = {
+  key: FANTASY_STANDINGS_KEY,
+  fetch: getStandings,
+};
+export const fantasyRoundQuery = (matchId: string): Query<FantasyRound> => ({
+  key: fantasyRoundKey(matchId),
+  fetch: () => getMyRound(matchId),
 });

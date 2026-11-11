@@ -26,6 +26,11 @@ PLAYER_ROUTES = {
     ("GET", "/matches"),
     ("GET", "/matches/{match_id}/stats"),
     ("GET", "/stats/players"),
+    # Fantasy: todo menos crear la liga (entrenador principal).
+    ("GET", "/fantasy/me"),
+    ("PUT", "/fantasy/lineup"),
+    ("GET", "/fantasy/standings"),
+    ("GET", "/fantasy/rounds/{match_id}/me"),
 }
 # Rutas sin autenticación por token: no miran el rol, así que tampoco dan 403.
 PUBLIC_ROUTES = {
@@ -51,6 +56,7 @@ EVERY_ROUTE = _every_route()
 def test_the_sweep_sees_the_routes_open_to_players() -> None:
     assert NOT_FORBIDDEN <= set(EVERY_ROUTE)
     assert ("POST", f"{PREFIX}/players/{{player_id}}/invitation") in EVERY_ROUTE
+    assert ("POST", f"{PREFIX}/fantasy/league") in EVERY_ROUTE
 
 
 @pytest.mark.parametrize(("method", "path"), EVERY_ROUTE)

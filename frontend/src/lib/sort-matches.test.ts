@@ -5,7 +5,7 @@ import type { Match } from "@/lib/api/match-types";
 import { sortMatchesByDate } from "./sort-matches";
 
 function match(id: string, held_on: string, opponent = `Rival ${id}`): Match {
-  return { id, session_id: `s-${id}`, held_on, opponent };
+  return { id, session_id: `s-${id}`, held_on, opponent, is_official: true };
 }
 
 describe("sortMatchesByDate", () => {

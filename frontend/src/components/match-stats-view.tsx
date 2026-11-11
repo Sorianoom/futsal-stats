@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { MatchOfficialToggle } from "@/components/match-official-toggle";
 import { ScoreBanner } from "@/components/score-banner";
 import { PlayerStatsTable, QuintetStatsTable } from "@/components/stats-tables";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,11 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
   const statsRequest = matchStatsQuery(matchId);
   const { data: result, failed, reload } = useApiQuery(statsRequest.key, statsRequest.fetch);
   // El rival y la fecha salen de la lista de partidos; si no llega, se enseña el detalle sin ellos.
-  const { data: matches, failed: matchesFailed } = useApiQuery(matchesQuery.key, matchesQuery.fetch);
+  const {
+    data: matches,
+    failed: matchesFailed,
+    reload: reloadMatches,
+  } = useApiQuery(matchesQuery.key, matchesQuery.fetch);
 
   const alert = failed ? (
     <div role="alert" className="flex items-center justify-between rounded-lg border p-4">
@@ -142,6 +147,15 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
           </Link>
         </div>
       </div>
+
+      {match ? (
+        <MatchOfficialToggle
+          matchId={matchId}
+          isOfficial={match.is_official !== false}
+          canChange={!isPlayer}
+          onChanged={reloadMatches}
+        />
+      ) : null}
 
       {isPlayer
         ? null

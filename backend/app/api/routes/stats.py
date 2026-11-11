@@ -1,7 +1,6 @@
 """Estadísticas de un partido: minutos, acciones por jugador, quintetos y resumen de equipo."""
 
 import uuid
-from collections.abc import Iterable
 
 from fastapi import APIRouter
 from sqlalchemy import select
@@ -10,15 +9,14 @@ from app.api.deps import AnyUser, SessionDep
 from app.api.envelope import Envelope, ok
 from app.api.errors import ApiError
 from app.db import match_repo, points_repo
-from app.db.models import MatchEvent as MatchEventRow
 from app.db.models import Player, StintRow
 from app.domain.points.callup import Position
-from app.domain.rating import RatingInput, player_rating
+from app.domain.rating import player_rating
+from app.domain.rating.match import goal_events, rating_input
 from app.domain.roles import Role
 from app.domain.stints.events import (
     EventError,
     EventKind,
-    MatchEvent,
     counts_by_player,
     effective_events,
     team_fouls_by_part,
@@ -49,25 +47,6 @@ router = APIRouter(prefix="/matches", tags=["stats"])
 season_router = APIRouter(prefix="/stats", tags=["stats"])
 
 
-def _domain_event(row: MatchEventRow) -> MatchEvent:
-    return MatchEvent(
-        id=str(row.id),
-        kind=row.kind,
-        part=row.part,
-        t=row.t,
-        player_id=str(row.player_id) if row.player_id else None,
-        voids=str(row.voids_event_id) if row.voids_event_id else None,
-    )
-
-
-def _goals(events: Iterable[MatchEvent]) -> list[GoalEvent]:
-    return [
-        GoalEvent(e.part, e.t, for_team=e.kind is EventKind.GOAL)
-        for e in events
-        if e.kind in (EventKind.GOAL, EventKind.RIVAL_GOAL)
-    ]
-
-
 async def _player_rows(db: SessionDep, ids: set[str]) -> dict[str, Player]:
     query = select(Player).where(Player.id.in_([uuid.UUID(i) for i in ids]))
     return {str(p.id): p for p in (await db.execute(query)).scalars().all()}
@@ -92,7 +71,7 @@ async def match_stats(
     stints: list[Stint] = [
         match_repo.stint_to_domain(r) for r in await match_repo.list_stints(db, match_id)
     ]
-    raw_events = [_domain_event(r) for r in await match_repo.list_events(db, match_id)]
+    raw_events = [match_repo.event_to_domain(r) for r in await match_repo.list_events(db, match_id)]
     try:
         events = effective_events(raw_events)
         counts = counts_by_player(raw_events)
@@ -101,7 +80,7 @@ async def match_stats(
         raise ApiError(409, "conflict", "El registro de eventos no es coherente") from error
 
     seconds = seconds_by_player(stints)
-    goals = _goals(events)
+    goals = goal_events(events)
     ratings = [
         QuintetRating(r.part, r.t, r.stars) for r in await match_repo.list_ratings(db, match_id)
     ]
@@ -156,31 +135,26 @@ async def _match_players(
     on_court = on_court_goals_by_player(segments, covered_goals)
     players = []
     for pid, player in rows.items():
-        base = _player_stats(player, seconds.get(pid, 0), counts.get(pid, {}))
-        rating = _rating(player, base, on_court.get(pid, (0, 0))) if segments else None
+        player_seconds, player_counts = seconds.get(pid, 0), counts.get(pid, {})
+        base = _player_stats(player, player_seconds, player_counts)
+        on_court_goals = on_court.get(pid, (0, 0))
+        rating = (
+            _rating(player, player_counts, player_seconds, on_court_goals) if segments else None
+        )
         players.append(MatchPlayerStatsOut(**base.model_dump(), rating=rating))
     players.sort(key=lambda p: (-p.seconds, p.dorsal))
     return players
 
 
-def _rating(player: Player, stats: PlayerStatsOut, on_court: tuple[int, int]) -> float | None:
-    """Nota del jugador. `shots` ya son tiros sin gol: el gol no genera un evento de tiro."""
-    goals_for, goals_against = on_court
+def _rating(
+    player: Player, counts: dict[EventKind, int], seconds: int, on_court: tuple[int, int]
+) -> float | None:
     return player_rating(
-        RatingInput(
+        rating_input(
             is_goalkeeper=player.position is Position.GOALKEEPER,
-            seconds=stats.seconds,
-            goals=stats.goals,
-            assists=stats.assists,
-            shots=stats.shots,
-            steals=stats.steals,
-            turnovers=stats.turnovers,
-            fouls=stats.fouls,
-            yellows=stats.yellows,
-            reds=stats.reds,
-            saves=stats.saves,
-            goals_for_on_court=goals_for,
-            goals_against_on_court=goals_against,
+            seconds=seconds,
+            counts=counts,
+            on_court=on_court,
         )
     )
 
@@ -218,11 +192,7 @@ async def season_players(db: SessionDep, _: AnyUser) -> Envelope[SeasonStatsOut]
     for row in (await db.execute(select(StintRow))).scalars().all():
         stints_by_match.setdefault(row.match_id, []).append(match_repo.stint_to_domain(row))
 
-    events_by_match: dict[uuid.UUID, list[MatchEvent]] = {}
-    if stints_by_match:
-        query = select(MatchEventRow).where(MatchEventRow.match_id.in_(list(stints_by_match)))
-        for event_row in (await db.execute(query)).scalars().all():
-            events_by_match.setdefault(event_row.match_id, []).append(_domain_event(event_row))
+    events_by_match = await match_repo.events_by_match(db, stints_by_match)
 
     seconds: dict[str, int] = {}
     played: dict[str, int] = {}
