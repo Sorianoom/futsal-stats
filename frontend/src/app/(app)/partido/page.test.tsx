@@ -349,6 +349,42 @@ describe("PartidoPage: pantalla de un partido", () => {
     await userEvent.click(screen.getByRole("button", { name: "Recargar partido" }));
     await waitFor(() => expect(server.count("GET", "/matches/m1/lineup-events")).toBe(2));
   });
+  it("si el servidor rechaza el inicio de la parte lo avisa en la pantalla de titulares, también tras recargar", async () => {
+    api({
+      "POST /matches/m1/sync": (request) => ({
+        data: {
+          accepted: [],
+          duplicates: [],
+          rejected: [
+            {
+              id: (request.body as { lineup_events: { id: string }[] }).lineup_events[0].id,
+              reason: "unknown_player",
+            },
+          ],
+        },
+      }),
+    });
+    const first = renderWithAuth(<PartidoPage />);
+    await screen.findByLabelText("Ana Ruiz");
+    await pick(["Ana", "Bea", "Carla", "Dani", "Elena"]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Empezar 1ª parte" }));
+
+    expect(await screen.findByText("Inicio de la 1ª parte: jugador desconocido")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Empezar 1ª parte" })).toBeInTheDocument();
+    first.unmount();
+
+    const reloaded = renderWithAuth(<PartidoPage />);
+    expect(await screen.findByText("Inicio de la 1ª parte: jugador desconocido")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Entendido" }));
+    expect(screen.queryByText(/jugador desconocido/)).not.toBeInTheDocument();
+    reloaded.unmount();
+
+    renderWithAuth(<PartidoPage />);
+    await screen.findByLabelText("Ana Ruiz");
+    expect(screen.queryByText(/jugador desconocido/)).not.toBeInTheDocument();
+  });
+
   it("si se corta la red al empezar la parte sigue adelante y avisa de lo pendiente", async () => {
     api();
     renderWithAuth(<PartidoPage />);

@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 
+const NO_CONTENT = 204;
+
 export interface MockRequest {
   method: string;
   path: string;
@@ -62,6 +64,7 @@ export function mockApi(routes: Record<string, MockHandler>): MockApi {
           : handler
         : { status: 404, error: { code: "not_found", message: "Ruta no simulada" } };
       const status = reply.status ?? (reply.error ? 400 : 200);
+      if (status === NO_CONTENT) return new Response(null, { status });
       return new Response(JSON.stringify(envelope(reply)), {
         status,
         headers: { "Content-Type": "application/json" },

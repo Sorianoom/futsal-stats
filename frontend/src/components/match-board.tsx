@@ -10,35 +10,40 @@ import { RatingDialog } from "@/components/rating-dialog";
 import { StartersPicker } from "@/components/starters-picker";
 import { SyncStatus } from "@/components/sync-status";
 import { SubstitutionDialog, type SubstitutionAnchor } from "@/components/substitution-dialog";
-import { QuickTimeDialog } from "@/components/quick-time-dialog";
+import { ClockAdjustDialog } from "@/components/clock-adjust-dialog";
 import { Button } from "@/components/ui/button";
 import { UndoDialog } from "@/components/undo-dialog";
+import { EndPartDialog } from "@/components/end-part-dialog";
+import {
+  MultiSubstitutionDialog,
+  type MultiSubstitutionStart,
+} from "@/components/multi-substitution-dialog";
+import { RejectionNotice } from "@/components/sync-status";
 import type { LineupEventRecord, LoggedEvent, Match, StintRecord } from "@/lib/api/match-types";
 import type { Player } from "@/lib/api/types";
-import { describeEvent } from "@/lib/labels";
-import {
-  elapsedToDisplay,
-  formatClock,
-  loadClockSettings,
-  suggestElapsed,
-  saveClockSettings,
-  type ClockSettings,
-} from "@/lib/match/clock";
+import { formatClock } from "@/lib/match/clock";
+import { describeRejection } from "@/lib/match/rejections";
+import { describeUndo, undoTargetId } from "@/lib/match/undo";
+import { actionTime } from "@/lib/match/stopwatch";
+import { useMatchStopwatch } from "@/lib/match/use-match-stopwatch";
 import {
   EventError,
   effectiveEvents,
   score,
   teamFoulsByPart,
-  undoTarget,
   type EventKind,
 } from "@/lib/match/events";
 import {
   LineupError,
   applyEvent,
+  applySubstitutions,
+  effectiveLineup,
   onCourt,
   replay,
+  replayRecords,
   type LineupEvent,
   type LineupState,
+  type SubstitutionPair,
 } from "@/lib/match/lineup";
 import type { ConfirmedLog, Outbox } from "@/lib/match/outbox";
 import { useMatchLog } from "@/lib/match/use-match-log";
@@ -62,37 +67,15 @@ export interface BoardData {
 
 type Replayed = { state: LineupState } | { error: string };
 
-/** Hora real en ms. Solo se llama desde manejadores de eventos, nunca al pintar. */
-function realNow(): number {
-  return Date.now();
-}
-
 function replayLineup(lineup: readonly LineupEventRecord[]): Replayed {
   try {
-    return { state: replay(lineup.map((event) => event.payload)) };
+    // Lo deshecho (cambios, rojas, inicios y fines de parte) no cuenta.
+    return { state: replayRecords(lineup) };
   } catch (failure) {
     if (failure instanceof LineupError) return { error: "La alineación guardada no es válida" };
     throw failure;
   }
 }
-
-/** Lo que se espera del marcador antes de anotar, según la acción en curso. */
-type Pending =
-  | { type: "goal"; playerId: string }
-  | { type: "red"; playerId: string }
-  | { type: "rival_goal" }
-  | { type: "sub"; out: string; in: string }
-  | { type: "end" }
-  | { type: "clock" };
-
-const TITLES: Record<Pending["type"], string> = {
-  goal: "Gol",
-  red: "Roja",
-  rival_goal: "Gol rival",
-  sub: "Cambio",
-  end: "Fin de la parte",
-  clock: "Tiempo del marcador",
-};
 
 export interface BoardActivity {
   /** Sin nada a medias ni sin enviar: es seguro sustituir el tablero por datos del servidor. */
@@ -114,6 +97,7 @@ interface MatchBoardProps {
 }
 
 const BLOCKED = "Recarga el partido antes de seguir";
+const UNDO_CHANGED = "Lo último anotado ha cambiado: no se ha deshecho nada. Vuelve a pulsar Deshacer";
 
 export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onConfirmed }: MatchBoardProps) {
   const log = useMatchLog({
@@ -124,35 +108,40 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     storageFailed: data.storageFailed,
     onConfirmed,
   });
-  const [settings, setSettings] = useState<ClockSettings>(() => loadClockSettings());
-  // Último tiempo anotado en la parte en juego: se reutiliza en lo que se anota con un toque.
-  // `at` es la hora real (Date.now) de ese tiempo: con ella se estima por dónde va el marcador.
-  const [memo, setMemo] = useState<{ part: number; t: number; at: number | null }>({
-    part: 0,
-    t: 0,
-    at: null,
-  });
-  const [suggested, setSuggested] = useState(0);
   const [sheetPlayer, setSheetPlayer] = useState<Player | null>(null);
   const [anchor, setAnchor] = useState<SubstitutionAnchor | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
+  const [adjustingClock, setAdjustingClock] = useState(false);
   const [rating, setRating] = useState(false);
-  const [undoing, setUndoing] = useState(false);
+  // Lo que se va a deshacer, fijado al abrir la confirmación (id y texto que se ve).
+  const [undoing, setUndoing] = useState<{ id: string; text: string } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // Fin de parte pendiente de confirmar: el tiempo se fija al pulsar el botón.
+  const [ending, setEnding] = useState<{ part: number; t: number } | null>(null);
+  // Varios cambios a la vez: el tiempo común se fija al abrir la pantalla.
+  const [multi, setMulti] = useState<{ t: number; initial: MultiSubstitutionStart | null } | null>(null);
 
   const replayed = useMemo(() => replayLineup(log.lineup), [log.lineup]);
   const state = "state" in replayed ? replayed.state : null;
   const part = state?.currentPart ?? null;
-  const lastEventT = useMemo(
-    () =>
-      log.events
-        .filter((event) => event.part === part && event.kind !== "undo")
-        .reduce((latest, event) => Math.max(latest, event.t), 0),
-    [log.events, part],
-  );
+  const lastEventT = useMemo(() => lastPlayT(log.events, part), [log.events, part]);
+  // Último movimiento de la alineación: el dominio no deja anotar nada antes.
   const clock = state?.clock ?? 0;
-  // Tras recargar no hay "último tecleado": se parte del último evento o cambio guardado.
-  const now = memo.part === part ? Math.max(memo.t, clock) : Math.max(clock, lastEventT);
+  // Lo último anotado de la parte (movimiento o evento vigente): nada nuevo va antes. Así el orden
+  // por tiempo coincide con el de anotación y deshacer elige lo mismo tras recargar (`chooseUndo`).
+  const floor = Math.max(clock, lastEventT);
+  // Sin reloj guardado en este dispositivo, se parte de lo último anotado en la parte.
+  const stopwatch = useMatchStopwatch({ matchId, part, seed: floor });
+  // Si el reloj se ajustó hacia atrás y va por detrás de lo último anotado, se avisa (no se bloquea).
+  const clockBehind = actionTime(stopwatch.elapsed, floor).behind;
+
+  /**
+   * Tiempo (segundos jugados) con el que se anota una acción AHORA: el del reloj en este instante,
+   * nunca antes de lo último anotado en la parte (ver `actionTime`). Es la única fuente de
+   * tiempo para anotar; los diálogos que permitan editarlo deben partir de este valor.
+   */
+  function currentElapsed(): number {
+    return actionTime(stopwatch.read(), floor).t;
+  }
 
   const names = new Map(data.players.map((player) => [player.id, player]));
   const nameOf = (playerId: string) => names.get(playerId)?.name ?? "Jugador desconocido";
@@ -164,16 +153,23 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
       return failure instanceof EventError ? failure.message : "error";
     }
   }, [log.events]);
-  const target = useMemo(() => (eventsProblem ? null : undoTarget(log.events)), [log.events, eventsProblem]);
+  /** El tiempo de un movimiento tal y como se ve en el marcador (cuenta atrás). */
+  const timeText = (t: number) => formatClock(Math.max(0, stopwatch.partSeconds - t));
+  const undoable = log.undoable;
+  const canUndo = undoable !== null && undoable.kind !== "blocked";
+  const undoText = undoable ? describeUndo(undoable, nameOf, timeText) : null;
+  const rejected = log.rejections.map((item) => describeRejection(item, nameOf, timeText));
 
   const idle =
     log.pending === 0 &&
     log.status !== "conflict" &&
-    pending === null &&
+    ending === null &&
+    multi === null &&
+    !adjustingClock &&
     sheetPlayer === null &&
     anchor === null &&
     !rating &&
-    !undoing;
+    undoing === null;
 
   useEffect(() => {
     onActivity({ idle, revision: log.revision, pending: log.pending });
@@ -223,55 +219,13 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     return true;
   }
 
-  /** Abre el diálogo de tiempo proponiendo el tiempo estimado del marcador. */
-  function ask(action: Pending) {
-    setSuggested(
-      suggestElapsed({
-        lastElapsed: now,
-        lastAt: memo.part === part ? memo.at : null,
-        nowMs: realNow(),
-        maxElapsed: settings.partSeconds,
-      }),
-    );
-    setPending(action);
-  }
+  // Todo se anota con un toque, con el tiempo del reloj en ese instante (`currentElapsed`).
 
-  function confirmTime(elapsed: number) {
-    if (!pending || part === null) return;
-    if (blockedByConflict()) {
-      setPending(null);
-      return;
-    }
-    const accepted = commit(pending, part, elapsed);
-    if (accepted) setMemo({ part, t: elapsed, at: realNow() });
-    setPending(null);
-  }
-
-  function commit(action: Pending, currentPart: number, t: number): boolean {
-    switch (action.type) {
-      case "goal":
-        log.recordEvent({ kind: "goal", part: currentPart, t, player_id: action.playerId });
-        return true;
-      case "rival_goal":
-        log.recordEvent({ kind: "rival_goal", part: currentPart, t });
-        return true;
-      case "red":
-        if (!tryLineup({ type: "sent_off", t, player_id: action.playerId })) return false;
-        log.recordEvent({ kind: "red", part: currentPart, t, player_id: action.playerId });
-        return true;
-      case "sub":
-        return tryLineup({ type: "substituted", t, player_out: action.out, player_in: action.in });
-      case "end":
-        return tryLineup({ type: "part_ended", t });
-      case "clock":
-        return true;
-    }
-  }
-
-  /** Se anota con un toque, con el último tiempo del marcador. */
-  function recordQuick(kind: EventKind, player: Player) {
+  /** Se anota con un toque un evento de un jugador (o del rival, sin jugador). */
+  function recordQuick(kind: EventKind, player: Player | null) {
     if (part === null || blockedByConflict()) return;
-    log.recordEvent({ kind, part, t: now, player_id: player.id });
+    const t = currentElapsed();
+    log.recordEvent(player ? { kind, part, t, player_id: player.id } : { kind, part, t });
   }
 
   function quick(kind: EventKind) {
@@ -279,13 +233,64 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     setSheetPlayer(null);
   }
 
-  function toggleDirection() {
-    const next: ClockSettings = {
-      ...settings,
-      direction: settings.direction === "down" ? "up" : "down",
-    };
-    setSettings(next);
-    saveClockSettings(next);
+  function sendOff(player: Player) {
+    if (part === null) return;
+    const t = currentElapsed();
+    if (!tryLineup({ type: "sent_off", t, player_id: player.id })) return;
+    log.recordEvent({ kind: "red", part, t, player_id: player.id });
+  }
+
+  /** Cambio de un jugador por otro; `t` se puede corregir a mano, si no es el del reloj. */
+  function substitute(out: string, entering: string, t: number = currentElapsed()) {
+    void tryLineup({ type: "substituted", t, player_out: out, player_in: entering });
+  }
+
+  /** Fin de la parte con el tiempo del reloj (si llegó a 0:00, la parte entera), tras confirmarlo. */
+  function endPart() {
+    if (part === null || blockedByConflict()) return;
+    setEnding({ part, t: currentElapsed() });
+  }
+
+  function confirmEndPart() {
+    if (ending && tryLineup({ type: "part_ended", t: ending.t })) stopwatch.pause();
+    setEnding(null);
+  }
+
+  /** Abre la pantalla de varios cambios, con el tiempo del reloj en este instante. */
+  function openMulti(initial: MultiSubstitutionStart | null) {
+    if (blockedByConflict()) return;
+    setMulti({ t: currentElapsed(), initial });
+  }
+
+  /** Todos los cambios con el mismo tiempo; se validan juntos antes de anotar ninguno. */
+  function substituteMany(pairs: readonly SubstitutionPair[], t: number) {
+    if (!state || blockedByConflict()) return;
+    try {
+      applySubstitutions(state, t, pairs);
+    } catch (failure) {
+      if (!(failure instanceof LineupError)) throw failure;
+      setProblem(failure.message);
+      return;
+    }
+    setProblem(null);
+    for (const pair of pairs) {
+      log.recordLineup({ type: "substituted", t, player_out: pair.out, player_in: pair.in });
+    }
+    setMulti(null);
+  }
+
+  /** Abre la confirmación fijando qué se deshace: si cambia antes de confirmar, no se deshace. */
+  function askUndo() {
+    if (!undoable || undoable.kind === "blocked" || !undoText) return;
+    setUndoing({ id: undoTargetId(undoable), text: undoText });
+  }
+
+  function confirmUndo() {
+    if (undoing && !blockedByConflict()) {
+      if (log.undoLast(undoing.id)) setProblem(null);
+      else setProblem(UNDO_CHANGED);
+    }
+    setUndoing(null);
   }
 
   function pickCandidate(candidate: Player) {
@@ -293,7 +298,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     const [out, entering] =
       anchor.side === "court" ? [anchor.player, candidate] : [candidate, anchor.player];
     setAnchor(null);
-    ask({ type: "sub", out: out.id, in: entering.id });
+    substitute(out.id, entering.id);
   }
 
   if (!state) {
@@ -307,8 +312,17 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     );
   }
 
+  const undoDialog = (
+    <UndoDialog
+      description={undoing?.text ?? null}
+      onConfirm={confirmUndo}
+      onClose={() => setUndoing(null)}
+    />
+  );
+
   const alerts = (
     <>
+      <RejectionNotice items={rejected} onDismiss={log.dismissRejections} />
       {problem ? (
         <p role="alert" className="mb-4 rounded-lg border p-3 text-destructive">
           {problem}
@@ -327,16 +341,20 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
 
   const inSetup = state.currentPart === null && state.lastEndedPart === 0;
   if (inSetup) {
+    // Un rechazo del inicio de parte devuelve aquí: el aviso tiene que verse también en esta pantalla.
     return (
-      <StartersPicker
-        part={1}
-        players={data.players}
-        capacity={5}
-        proposed={data.proposed}
-        busy={false}
-        error={problem}
-        onStart={(starters) => void tryLineup({ type: "part_started", part: 1, starters })}
-      />
+      <>
+        <RejectionNotice items={rejected} onDismiss={log.dismissRejections} />
+        <StartersPicker
+          part={1}
+          players={data.players}
+          capacity={5}
+          proposed={data.proposed}
+          busy={false}
+          error={problem}
+          onStart={(starters) => void tryLineup({ type: "part_started", part: 1, starters })}
+        />
+      </>
     );
   }
 
@@ -358,6 +376,13 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
           onRetry={() => void log.flush()}
           onReload={onReload}
         />
+        {/* Un fin de parte pulsado por error se deshace desde aquí (reabre la parte). */}
+        {canUndo && data.stints.length === 0 ? (
+          <Button variant="outline" size="lg" className="h-14 text-lg" onClick={askUndo}>
+            {undoText}
+          </Button>
+        ) : null}
+        {undoDialog}
         {inBreak ? (
           <PartBreak
             part={lastPart + 1}
@@ -397,8 +422,6 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   const keeper = keepers.length === 1 ? keepers[0] : null;
   const live = safeSummary(log.events, part);
   const title = part !== null ? `Parte ${part} en juego` : `Parte ${state.lastEndedPart} terminada`;
-  // Anotar algo anterior al último cambio lo atribuiría al quinteto equivocado.
-  const minElapsed = pending !== null && pending.type !== "clock" ? state.clock : undefined;
   const candidates = anchor?.side === "court" ? bench : court.filter((p) => p.id !== anchor?.player.id);
 
   return (
@@ -408,26 +431,33 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         title={title}
         score={live.score}
         teamFouls={live.fouls}
-        clockText={formatClock(elapsedToDisplay(now, settings))}
-        direction={settings.direction}
+        clockText={formatClock(stopwatch.partSeconds - stopwatch.elapsed)}
+        clockRunning={stopwatch.running}
+        clockFinished={stopwatch.elapsed >= stopwatch.partSeconds}
+        clockNote={
+          clockBehind
+            ? `El reloj va por detrás de lo último anotado (${formatClock(stopwatch.partSeconds - floor)}): lo que anotes irá a ese tiempo`
+            : null
+        }
         court={court}
         bench={bench}
         keeper={keeper}
-        canUndo={target !== null && target.kind !== "red"}
-        undoNote={target?.kind === "red" ? "La roja no se puede deshacer desde aquí" : null}
+        canUndo={canUndo}
+        undoLabel={canUndo ? undoText : null}
+        undoNote={undoable?.kind === "blocked" ? "La roja no se puede deshacer desde aquí" : null}
         status={log.status}
         pending={log.pending}
         syncProblem={log.problem}
         onCourtPlayer={setSheetPlayer}
         onBenchPlayer={(player) => setAnchor({ player, side: "bench" })}
-        onClock={() => ask({ type: "clock" })}
-        onToggleDirection={toggleDirection}
-        onRivalGoal={() => ask({ type: "rival_goal" })}
+        onToggleClock={stopwatch.toggle}
+        onAdjustClock={() => setAdjustingClock(true)}
+        onRivalGoal={() => recordQuick("rival_goal", null)}
         onSave={() => {
           if (keeper) recordQuick("save", keeper);
         }}
-        onEndPart={() => ask({ type: "end" })}
-        onUndo={() => setUndoing(true)}
+        onEndPart={endPart}
+        onUndo={askUndo}
         onRate={() => setRating(true)}
         onRetry={() => void log.flush()}
         onReload={onReload}
@@ -437,17 +467,17 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         player={sheetPlayer}
         bench={bench}
         onSubstituteWith={(candidate) => {
-          if (sheetPlayer) ask({ type: "sub", out: sheetPlayer.id, in: candidate.id });
+          if (sheetPlayer) substitute(sheetPlayer.id, candidate.id);
           setSheetPlayer(null);
         }}
         onClose={() => setSheetPlayer(null)}
         onQuick={quick}
         onGoal={() => {
-          if (sheetPlayer) ask({ type: "goal", playerId: sheetPlayer.id });
+          if (sheetPlayer) recordQuick("goal", sheetPlayer);
           setSheetPlayer(null);
         }}
         onRed={() => {
-          if (sheetPlayer) ask({ type: "red", playerId: sheetPlayer.id });
+          if (sheetPlayer) sendOff(sheetPlayer);
           setSheetPlayer(null);
         }}
         onSubstitute={() => {
@@ -460,43 +490,72 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         candidates={candidates}
         onPick={pickCandidate}
         onClose={() => setAnchor(null)}
+        onMany={() => {
+          if (anchor) openMulti({ side: anchor.side, playerId: anchor.player.id });
+          setAnchor(null);
+        }}
       />
-      <QuickTimeDialog
-        open={pending !== null}
-        title={pending ? TITLES[pending.type] : "Tiempo"}
-        settings={settings}
-        suggested={suggested}
-        endOfPart={pending?.type === "end"}
-        minElapsed={minElapsed}
-        onConfirm={confirmTime}
-        onCancel={() => setPending(null)}
+      <ClockAdjustDialog
+        open={adjustingClock}
+        elapsed={stopwatch.elapsed}
+        partSeconds={stopwatch.partSeconds}
+        onShift={stopwatch.shift}
+        onSet={stopwatch.set}
+        onPartSeconds={stopwatch.setPartSeconds}
+        onClose={() => setAdjustingClock(false)}
       />
       <RatingDialog
         open={rating}
         onPick={(stars) => {
-          if (part !== null && !blockedByConflict()) log.recordRating(part, now, stars);
+          if (part !== null && !blockedByConflict()) log.recordRating(part, currentElapsed(), stars);
           setRating(false);
         }}
         onClose={() => setRating(false)}
       />
-      <UndoDialog
-        description={undoing && target ? describeEvent(target, nameOf) : null}
-        onConfirm={() => {
-          if (!blockedByConflict()) log.undoLast();
-          setUndoing(false);
-        }}
-        onClose={() => setUndoing(false)}
+      {undoDialog}
+      <EndPartDialog
+        open={ending !== null}
+        part={ending?.part ?? 1}
+        timeText={ending ? timeText(ending.t) : ""}
+        onConfirm={confirmEndPart}
+        onCancel={() => setEnding(null)}
+      />
+      <MultiSubstitutionDialog
+        open={multi !== null}
+        state={state}
+        t={multi?.t ?? 0}
+        minT={floor}
+        maxT={Math.max(floor, stopwatch.partSeconds)}
+        formatTime={timeText}
+        court={court}
+        bench={bench}
+        initial={multi?.initial ?? null}
+        onConfirm={substituteMany}
+        onClose={() => setMulti(null)}
       />
     </>
   );
 }
 
+/** Tiempo del último evento de juego vigente (sin deshechos) de la parte; 0 si no hay o no cuadra. */
+function lastPlayT(events: readonly LoggedEvent[], part: number | null): number {
+  try {
+    return effectiveEvents(events)
+      .filter((event) => event.part === part)
+      .reduce((latest, event) => Math.max(latest, event.t), 0);
+  } catch {
+    return 0;
+  }
+}
+
 /** Quiénes estaban en pista justo antes del último fin de parte (también los que entraron al final). */
 function courtAtEndOfLastPart(lineup: readonly LineupEventRecord[]): string[] {
-  const payloads = lineup.map((event) => event.payload);
-  const lastEnd = payloads.map((payload) => payload.type).lastIndexOf("part_ended");
-  if (lastEnd < 0) return [];
   try {
+    const payloads = effectiveLineup(lineup).flatMap(({ payload }) =>
+      payload.type === "undo" ? [] : [payload],
+    );
+    const lastEnd = payloads.map((payload) => payload.type).lastIndexOf("part_ended");
+    if (lastEnd < 0) return [];
     return [...onCourt(replay(payloads.slice(0, lastEnd)))];
   } catch {
     return [];

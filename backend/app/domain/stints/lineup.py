@@ -1,7 +1,8 @@
 """Transiciones puras del quinteto en pista. Cada función devuelve un estado nuevo."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from typing import Any
 
 from app.domain.stints.models import VALID_PARTS, OpenStint, Stint
 
@@ -159,3 +160,88 @@ def replay(events: Iterable[LineupEvent]) -> LineupState:
     for event in events:
         state = apply_event(state, event)
     return state
+
+
+@dataclass(frozen=True, slots=True)
+class LineupUndo:
+    """Evento compensatorio: anula el movimiento `voids` (que debe ser el último vigente)."""
+
+    voids: str
+
+
+@dataclass(frozen=True, slots=True)
+class LineupRecord:
+    """Movimiento de alineación tal y como se guarda: con su id y en orden de `seq`."""
+
+    id: str
+    event: LineupEvent | LineupUndo
+
+
+def parse_lineup_payload(data: Mapping[str, Any]) -> LineupEvent | LineupUndo:
+    match data.get("type"):
+        case "part_started":
+            return PartStarted(data["part"], tuple(data["starters"]))
+        case "substituted":
+            return Substituted(data["t"], data["player_out"], data["player_in"])
+        case "sent_off":
+            return SentOff(data["t"], data["player_id"])
+        case "part_ended":
+            return PartEnded(data["t"])
+        case "undo":
+            return LineupUndo(str(data["voids_event_id"]))
+    raise LineupError(f"Evento de alineación desconocido: {data.get('type')}")
+
+
+def lineup_undo_problem(stack: list[str], seen: Mapping[str, bool], voids: str) -> str | None:
+    """Por qué no se puede deshacer `voids` (None si se puede). `seen`: id → es un deshacer."""
+    if voids not in seen:
+        return "void_target_missing"
+    if seen[voids]:
+        return "void_of_undo"
+    if not stack or stack[-1] != voids:
+        return "void_not_last"
+    return None
+
+
+_UNDO_MESSAGES = {
+    "void_target_missing": "Se deshace un movimiento desconocido",
+    "void_of_undo": "No se puede deshacer un deshacer",
+    "void_not_last": "Solo se puede deshacer el último movimiento de alineación",
+}
+
+
+def effective_lineup(records: Iterable[LineupRecord]) -> tuple[LineupRecord, ...]:
+    """Movimientos que cuentan, en orden: sin los deshechos ni los propios deshacer.
+
+    Deshacer funciona como una pila: solo se anula el último movimiento vigente, así que
+    encadenar deshaceres va hacia atrás uno a uno y la alineación nunca queda incoherente.
+    """
+    stack: list[LineupRecord] = []
+    seen: dict[str, bool] = {}
+    for record in records:
+        if record.id in seen:
+            raise LineupError(f"Id de movimiento duplicado: {record.id}")
+        if isinstance(record.event, LineupUndo):
+            problem = lineup_undo_problem([r.id for r in stack], seen, record.event.voids)
+            if problem is not None:
+                raise LineupError(f"{_UNDO_MESSAGES[problem]}: {record.event.voids}")
+            stack.pop()
+        else:
+            stack.append(record)
+        seen[record.id] = isinstance(record.event, LineupUndo)
+    return tuple(stack)
+
+
+def lineup_undo_target(records: Iterable[LineupRecord]) -> LineupRecord | None:
+    """El último movimiento vigente: el único que se puede deshacer."""
+    effective = effective_lineup(records)
+    return effective[-1] if effective else None
+
+
+def replay_records(records: Iterable[LineupRecord]) -> LineupState:
+    """Reproduce la alineación sin lo deshecho."""
+    events: list[LineupEvent] = []
+    for record in effective_lineup(records):
+        if not isinstance(record.event, LineupUndo):
+            events.append(record.event)
+    return replay(events)

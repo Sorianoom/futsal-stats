@@ -237,24 +237,6 @@ describe("useMatchLog", () => {
     expect(sent[1].voids_event_id).toBe(goalId);
   });
 
-  it("un error del servidor que no es de red o 5xx marca conflicto y no se reintenta", async () => {
-    const { result, server } = setup({}, () => ({
-      status: 422,
-      error: { code: "validation_error", message: "Dato inválido" },
-    }));
-
-    act(() => {
-      result.current.recordEvent({ kind: "goal", part: 1, t: 10, player_id: "p1" });
-    });
-
-    await waitFor(() => expect(result.current.status).toBe("conflict"));
-    expect(result.current.problem).toMatch(/Dato inválido/);
-    await act(async () => {
-      await result.current.flush();
-    });
-    expect(posts(server)).toHaveLength(1);
-  });
-
   it("un 500 del servidor se reintenta como un corte de red", async () => {
     let fail = true;
     const { result } = setup({}, (request) =>

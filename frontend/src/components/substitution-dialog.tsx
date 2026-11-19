@@ -21,9 +21,11 @@ interface SubstitutionDialogProps {
   candidates: readonly Player[];
   onPick: (player: Player) => void;
   onClose: () => void;
+  /** Abre la pantalla de varios cambios a la vez, partiendo de este jugador. */
+  onMany?: () => void;
 }
 
-export function SubstitutionDialog({ anchor, candidates, onPick, onClose }: SubstitutionDialogProps) {
+export function SubstitutionDialog({ anchor, candidates, onPick, onClose, onMany }: SubstitutionDialogProps) {
   const title = anchor
     ? anchor.side === "court"
       ? `¿Quién entra por ${anchor.player.name}?`
@@ -35,7 +37,7 @@ export function SubstitutionDialog({ anchor, candidates, onPick, onClose }: Subs
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Después se pide el tiempo del marcador</DialogDescription>
+          <DialogDescription>Se anota con el tiempo del reloj</DialogDescription>
         </DialogHeader>
         {candidates.length === 0 ? (
           <p className="text-muted-foreground">No hay jugadores disponibles</p>
@@ -48,6 +50,11 @@ export function SubstitutionDialog({ anchor, candidates, onPick, onClose }: Subs
             ))}
           </div>
         )}
+        {onMany ? (
+          <Button variant="secondary" size="lg" className="h-14 w-full text-lg" onClick={onMany}>
+            Varios cambios a la vez
+          </Button>
+        ) : null}
         <Button variant="ghost" className="w-full" onClick={onClose}>
           Cancelar
         </Button>

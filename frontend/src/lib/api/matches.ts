@@ -56,10 +56,15 @@ export function listStints(matchId: string): Promise<StintRecord[]> {
  * Haya ido bien o no, se olvidan las estadísticas cacheadas: un corte de red puede llegar después
  * de que el servidor haya aplicado el lote.
  */
-export function syncMatch(matchId: string, batch: SyncBatch): Promise<SyncResult> {
+export function syncMatch(
+  matchId: string,
+  batch: SyncBatch,
+  options: { signal?: AbortSignal } = {},
+): Promise<SyncResult> {
   return apiData<SyncResult>(`/matches/${encodeURIComponent(matchId)}/sync`, {
     method: "POST",
     body: batch,
+    signal: options.signal,
   }).finally(() => invalidateMatchStats(matchId));
 }
 

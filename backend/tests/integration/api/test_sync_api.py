@@ -358,3 +358,49 @@ async def test_lineup_events_need_credentials_and_an_existing_match(
 
     assert unknown.status_code == 404
     assert anonymous.status_code == 401
+
+
+def lineup_item(seq: int, payload: dict[str, Any]) -> dict[str, Any]:
+    return {"id": str(uuid.uuid4()), "seq": seq, "payload": payload}
+
+
+async def test_only_the_last_lineup_movement_can_be_undone(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login(Role.ASSISTANT_COACH)
+    match_id = await new_match(client, headers)
+    players = [str((await make_player(n)).id) for n in range(1, 8)]
+    started = lineup_item(1, {"type": "part_started", "part": 1, "starters": players[:5]})
+    sub = lineup_item(
+        2, {"type": "substituted", "t": 60, "player_out": players[0], "player_in": players[5]}
+    )
+    await sync(client, headers, match_id, lineup_events=[started, sub])
+    undo_old = lineup_item(3, {"type": "undo", "voids_event_id": started["id"]})
+    undo_last = lineup_item(4, {"type": "undo", "voids_event_id": sub["id"]})
+    undo_again = lineup_item(5, {"type": "undo", "voids_event_id": undo_last["id"]})
+
+    response = await sync(
+        client, headers, match_id, lineup_events=[undo_old, undo_last, undo_again]
+    )
+
+    data = response.json()["data"]
+    assert data["accepted"] == [undo_last["id"]]
+    assert {r["id"]: r["reason"] for r in data["rejected"]} == {
+        undo_old["id"]: "void_not_last",
+        undo_again["id"]: "void_of_undo",
+    }
+    listed = await client.get(f"/matches/{match_id}/lineup-events", headers=headers)
+    assert listed.json()["data"][-1]["payload"] == {
+        "type": "undo",
+        "voids_event_id": sub["id"],
+    }
+
+
+async def test_a_lineup_undo_needs_what_it_voids(client: AsyncClient, login: Login) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    bad = lineup_item(1, {"type": "undo"})
+
+    response = await sync(client, headers, match_id, lineup_events=[bad])
+
+    assert response.status_code == 422

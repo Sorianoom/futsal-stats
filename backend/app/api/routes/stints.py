@@ -1,7 +1,6 @@
 """Cierre del partido (tramos desde la alineación) y edición manual de tramos."""
 
 import uuid
-from typing import Any
 
 from fastapi import APIRouter
 from sqlalchemy.exc import IntegrityError
@@ -14,12 +13,9 @@ from app.db.models import LineupEventRow, StintRow
 from app.domain.roles import Role
 from app.domain.stints.lineup import (
     LineupError,
-    LineupEvent,
-    PartEnded,
-    PartStarted,
-    SentOff,
-    Substituted,
-    replay,
+    LineupRecord,
+    parse_lineup_payload,
+    replay_records,
 )
 from app.domain.stints.models import Stint
 from app.domain.stints.stats import seconds_by_player
@@ -42,18 +38,8 @@ def _invalid(message: str) -> ApiError:
     return ApiError(422, "validation_error", message)
 
 
-def _to_lineup_event(row: LineupEventRow) -> LineupEvent:
-    data: dict[str, Any] = row.payload
-    match row.kind:
-        case "part_started":
-            return PartStarted(data["part"], tuple(data["starters"]))
-        case "substituted":
-            return Substituted(data["t"], data["player_out"], data["player_in"])
-        case "sent_off":
-            return SentOff(data["t"], data["player_id"])
-        case "part_ended":
-            return PartEnded(data["t"])
-    raise ValueError(f"Evento de alineación desconocido: {row.kind}")
+def _to_lineup_record(row: LineupEventRow) -> LineupRecord:
+    return LineupRecord(str(row.id), parse_lineup_payload(row.payload))
 
 
 def _check_set(stints: list[Stint]) -> None:
@@ -88,7 +74,8 @@ async def finalize_match(
     if not lineup_rows:
         raise ApiError(409, "conflict", "El partido no tiene eventos de alineación")
     try:
-        state = replay(_to_lineup_event(row) for row in lineup_rows)
+        # Lo deshecho (cambios, rojas, fines o inicios de parte) no cuenta.
+        state = replay_records(_to_lineup_record(row) for row in lineup_rows)
     except LineupError as error:
         raise _invalid(f"Alineación imposible: {error}") from error
     if state.current_part is not None:

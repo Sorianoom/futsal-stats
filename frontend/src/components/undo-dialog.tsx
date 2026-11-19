@@ -22,7 +22,7 @@ export function UndoDialog({ description, onConfirm, onClose }: UndoDialogProps)
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Deshacer</DialogTitle>
-          <DialogDescription>Se deshace el último evento anotado</DialogDescription>
+          <DialogDescription>Se deshace lo último anotado</DialogDescription>
         </DialogHeader>
         <p className="text-xl font-medium">{description}</p>
         <div className="grid grid-cols-2 gap-3">

@@ -2,9 +2,11 @@ from app.domain.stints.events import EventKind
 from app.domain.sync import (
     Decision,
     IncomingEvent,
+    LineupItem,
     SyncItem,
     Verdict,
     decide,
+    decide_lineup_voids,
     decide_voids,
 )
 
@@ -141,3 +143,61 @@ def test_undo_of_an_event_voided_in_a_previous_batch_is_rejected() -> None:
 
 def test_non_undo_events_are_never_checked() -> None:
     assert decide_voids([event("e1"), event("e2", EventKind.FOUL)], known={}, voided=set()) == {}
+
+
+def lineup_item(id_: str, seq: int, voids: str | None = None, new: bool = True) -> LineupItem:
+    return LineupItem(id_, seq, voids, new)
+
+
+def test_a_lineup_undo_of_the_last_movement_is_valid() -> None:
+    items = [lineup_item("l1", 1, new=False), lineup_item("l2", 2), lineup_item("u1", 3, "l2")]
+
+    assert decide_lineup_voids(items) == {}
+
+
+def test_a_lineup_undo_of_an_older_movement_is_rejected() -> None:
+    items = [
+        lineup_item("l1", 1, new=False),
+        lineup_item("l2", 2, new=False),
+        lineup_item("u1", 3, "l1"),
+    ]
+
+    assert decide_lineup_voids(items) == {"u1": "void_not_last"}
+
+
+def test_lineup_undos_are_checked_in_seq_order_and_chain_backwards() -> None:
+    items = [
+        lineup_item("u2", 4, "l1"),
+        lineup_item("u1", 3, "l2"),
+        lineup_item("l2", 2, new=False),
+        lineup_item("l1", 1, new=False),
+    ]
+
+    assert decide_lineup_voids(items) == {}
+
+
+def test_bad_lineup_undos_are_rejected_with_their_reason() -> None:
+    items = [
+        lineup_item("l1", 1, new=False),
+        lineup_item("u1", 2, "l1", new=False),
+        lineup_item("u2", 3, "u1"),
+        lineup_item("u3", 4, "l1"),
+        lineup_item("u4", 5, "zz"),
+    ]
+
+    assert decide_lineup_voids(items) == {
+        "u2": "void_of_undo",
+        "u3": "void_not_last",
+        "u4": "void_target_missing",
+    }
+
+
+def test_a_rejected_lineup_undo_does_not_change_what_comes_next() -> None:
+    items = [
+        lineup_item("l1", 1, new=False),
+        lineup_item("l2", 2, new=False),
+        lineup_item("u1", 3, "l1"),
+        lineup_item("u2", 4, "l2"),
+    ]
+
+    assert decide_lineup_voids(items) == {"u1": "void_not_last"}

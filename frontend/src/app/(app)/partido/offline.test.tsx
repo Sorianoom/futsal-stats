@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -94,12 +94,6 @@ describe("partido: copia local de los datos", () => {
     await screen.findByRole("list", { name: "En pista" });
 
     await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
-    const keypad = screen.getByRole("dialog");
-    await userEvent.click(within(keypad).getByRole("button", { name: "Teclear el tiempo" }));
-    for (const digit of "1700") {
-      await userEvent.click(within(keypad).getByRole("button", { name: digit }));
-    }
-    await userEvent.click(within(keypad).getByRole("button", { name: "Aceptar" }));
 
     await waitFor(async () => {
       const copy = await loadSnapshot("m1");

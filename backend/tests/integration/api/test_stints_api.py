@@ -272,3 +272,40 @@ async def test_assistant_coach_cannot_edit_stints(
     ]
 
     assert [r.status_code for r in responses] == [403, 403, 403]
+
+
+async def test_finalize_ignores_undone_lineup_movements(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    """Un fin de parte pulsado por error y un cambio con el tiempo mal, deshechos, no cuentan."""
+    headers = await login(Role.ASSISTANT_COACH)
+    match_id = await new_match(client, headers)
+    p = [await make_player(n) for n in range(1, 7)]
+    ids = [str(x.id) for x in p]
+    started = lineup(1, {"type": "part_started", "part": 1, "starters": ids[:5]})
+    early_end = lineup(2, {"type": "part_ended", "t": 0})
+    undo_end = lineup(3, {"type": "undo", "voids_event_id": early_end["id"]})
+    wrong_sub = lineup(
+        4, {"type": "substituted", "t": 900, "player_out": ids[0], "player_in": ids[5]}
+    )
+    undo_sub = lineup(5, {"type": "undo", "voids_event_id": wrong_sub["id"]})
+    rest = [
+        lineup(6, {"type": "substituted", "t": 300, "player_out": ids[0], "player_in": ids[5]}),
+        lineup(7, {"type": "part_ended", "t": 1200}),
+        lineup(8, {"type": "part_started", "part": 2, "starters": ids[1:6]}),
+        lineup(9, {"type": "part_ended", "t": 1200}),
+    ]
+    body = {
+        "events": [],
+        "lineup_events": [started, early_end, undo_end, wrong_sub, undo_sub, *rest],
+        "ratings": [],
+    }
+    sent = await client.post(f"/matches/{match_id}/sync", json=body, headers=headers)
+    assert sent.json()["data"]["rejected"] == []
+
+    response = await client.post(f"/matches/{match_id}/finalize", headers=headers)
+
+    seconds = response.json()["data"]["seconds_by_player"]
+    assert response.status_code == 200
+    assert seconds[ids[0]] == 300
+    assert seconds[ids[5]] == 900 + 1200

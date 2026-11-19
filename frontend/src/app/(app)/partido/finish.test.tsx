@@ -72,28 +72,35 @@ function api(extra: Record<string, MockHandler> = {}) {
 const posts = (server: ReturnType<typeof mockApi>) =>
   server.calls.filter((c) => c.method === "POST" && c.path.endsWith("/sync")).map((c) => c.body as SyncBody);
 
-async function typeTime(digits: string) {
-  const keypad = screen.getByRole("dialog");
-  await userEvent.click(within(keypad).getByRole("button", { name: "Teclear el tiempo" }));
+/** Cuadra el reloj con la mesa tecleando lo que marca (p. ej. "0" es 00:00). */
+async function setClock(digits: string) {
+  await userEvent.click(await screen.findByRole("button", { name: "Ajustar el reloj" }));
+  const dialog = screen.getByRole("dialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Teclear el tiempo" }));
   for (const digit of digits) {
-    await userEvent.click(within(keypad).getByRole("button", { name: digit }));
+    await userEvent.click(within(dialog).getByRole("button", { name: digit }));
   }
-  await userEvent.click(within(keypad).getByRole("button", { name: "Aceptar" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Aceptar" }));
 }
 
+/** Pulsa «Fin de la parte» y lo confirma en el diálogo. */
+async function confirmEnd() {
+  await userEvent.click(screen.getByRole("button", { name: "Fin de la parte" }));
+  await userEvent.click(screen.getByRole("button", { name: "Terminar la parte" }));
+}
+
+/** Termina la parte con el reloj en 00:00 (la parte entera). */
 async function endPart() {
-  await userEvent.click(await screen.findByRole("button", { name: "Fin de la parte" }));
-  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Terminó en/ }));
+  await setClock("0");
+  await confirmEnd();
 }
 
 describe("fin de parte y parte 2", () => {
-  it("el fin de la parte se confirma con un toque en lo que marcaría el final y pasa al descanso", async () => {
+  it("con el reloj en 00:00, el fin de la parte anota la parte entera y pasa al descanso", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Fin de la parte" }));
-    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Aceptar" })).not.toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Terminó en 00:00" }));
+    await endPart();
 
     expect(await screen.findByText("Parte 1 terminada")).toBeInTheDocument();
     await waitFor(() => expect(posts(server)).toHaveLength(1));
@@ -126,7 +133,49 @@ describe("fin de parte y parte 2", () => {
     expect(screen.getByText("5 de 5 elegidos")).toBeInTheDocument();
   });
 
-  it("no deja terminar la parte con un tiempo anterior al último cambio", async () => {
+  it("el fin de la parte pide confirmación y cancelar no anota nada", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+
+    await setClock("130");
+    await userEvent.click(screen.getByRole("button", { name: "Fin de la parte" }));
+    expect(screen.getByText("¿Terminar la 1ª parte en 01:30?")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Seguir jugando" }));
+
+    expect(screen.getByText("Parte 1 en juego")).toBeInTheDocument();
+    expect(posts(server)).toHaveLength(0);
+  });
+
+  it("un fin de parte por error se deshace desde el descanso y reabre la parte", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await endPart();
+    await screen.findByText("Parte 1 terminada");
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+
+    await userEvent.click(screen.getByRole("button", { name: "Deshacer fin de la 1ª parte (00:00)" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText("Parte 1 en juego")).toBeInTheDocument();
+    await waitFor(() => expect(posts(server)).toHaveLength(2));
+    expect(posts(server)[1].lineup_events[0].payload).toEqual({
+      type: "undo",
+      voids_event_id: posts(server)[0].lineup_events[0].id,
+    });
+  });
+
+  it("el fin de la parte usa el tiempo del reloj", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+
+    await setClock("130");
+    await confirmEnd();
+
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].lineup_events[0].payload).toEqual({ type: "part_ended", t: 1110 });
+  });
+
+  it("con el reloj por detrás del último cambio, termina la parte en el último cambio sin bloquear", async () => {
     lineup = lineupOf(
       { type: "part_started", part: 1, starters: STARTERS },
       { type: "substituted", t: 600, player_out: "p1", player_in: "p6" },
@@ -134,12 +183,30 @@ describe("fin de parte y parte 2", () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Fin de la parte" }));
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Otro tiempo" }));
-    await typeTime("1500");
+    await setClock("1500");
+    await confirmEnd();
 
-    expect(screen.getByRole("alert")).toHaveTextContent("anterior al último movimiento (10:00)");
-    expect(posts(server)).toHaveLength(0);
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].lineup_events[0].payload).toEqual({ type: "part_ended", t: 600 });
+  });
+
+  it("al empezar la 2ª parte el reloj guardado de la 1ª vuelve a la duración de la parte, parado", async () => {
+    lineup = lineupOf(
+      { type: "part_started", part: 1, starters: STARTERS },
+      { type: "part_ended", t: 1200 },
+    );
+    window.localStorage.setItem(
+      "futsal:stopwatch:m1",
+      JSON.stringify({ part: 1, partSeconds: 1200, watch: { running: true, elapsedAtStart: 900, startedAtMs: 0 } }),
+    );
+    api();
+    renderWithAuth(<PartidoPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Empezar 2ª parte" }));
+
+    expect(await screen.findByText("Parte 2 en juego")).toBeInTheDocument();
+    expect(screen.getByRole("timer", { name: "Reloj" })).toHaveTextContent("20:00");
+    expect(screen.getByRole("button", { name: "Arrancar el reloj" })).toBeInTheDocument();
   });
 
   it("empieza la 2ª parte y el reloj parte de cero, no del último tiempo de la 1ª", async () => {
@@ -153,7 +220,8 @@ describe("fin de parte y parte 2", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Empezar 2ª parte" }));
 
     expect(await screen.findByText("Parte 2 en juego")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Marcador a 20:00/ })).toBeInTheDocument();
+    expect(screen.getByRole("timer", { name: "Reloj" })).toHaveTextContent("20:00");
+    expect(screen.getByRole("button", { name: "Arrancar el reloj" })).toBeInTheDocument();
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     expect(posts(server)[0].lineup_events[0]).toMatchObject({
       seq: 3,

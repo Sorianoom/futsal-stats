@@ -91,14 +91,18 @@ async function tapCourt(name: string) {
   return screen.getByRole("dialog");
 }
 
-async function typeTime(digits: string) {
-  const keypad = screen.getByRole("dialog");
-  await userEvent.click(within(keypad).getByRole("button", { name: "Teclear el tiempo" }));
+/** Cuadra el reloj con la mesa tecleando lo que marca (p. ej. "1500" es 15:00). */
+async function setClock(digits: string) {
+  await userEvent.click(screen.getByRole("button", { name: "Ajustar el reloj" }));
+  const dialog = screen.getByRole("dialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Teclear el tiempo" }));
   for (const digit of digits) {
-    await userEvent.click(within(keypad).getByRole("button", { name: digit }));
+    await userEvent.click(within(dialog).getByRole("button", { name: digit }));
   }
-  await userEvent.click(within(keypad).getByRole("button", { name: "Aceptar" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Aceptar" }));
 }
+
+const clockShows = (text: string) => expect(screen.getByRole("timer", { name: "Reloj" })).toHaveTextContent(text);
 
 describe("panel en vivo", () => {
   it("muestra el marcador, la parte, las faltas de equipo y el reloj del marcador", async () => {
@@ -109,18 +113,131 @@ describe("panel en vivo", () => {
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 0");
     expect(screen.getByText("Parte 1 en juego")).toBeInTheDocument();
     expect(screen.getByText("Faltas de equipo: 0")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Marcador a 20:00/ })).toBeInTheDocument();
+    clockShows("20:00");
+    expect(screen.getByRole("button", { name: "Arrancar el reloj" })).toBeInTheDocument();
   });
 
-  it("anota un gol con el tiempo del marcador y sube el marcador al instante", async () => {
-    const server = api();
+  it("el marcador siempre va hacia atrás: no hay interruptor de sentido", async () => {
+    api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
 
+    expect(screen.queryByRole("button", { name: /Marcador hacia/ })).not.toBeInTheDocument();
+  });
+
+  describe("cronómetro", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-24T18:00:00Z"));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("cuenta atrás por diferencia de horas y se para con el botón", async () => {
+      api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+
+      await userEvent.click(screen.getByRole("button", { name: "Arrancar el reloj" }));
+      vi.setSystemTime(new Date("2026-10-24T18:01:05Z"));
+      await waitFor(() => clockShows("18:55"));
+      await userEvent.click(screen.getByRole("button", { name: "Parar el reloj" }));
+      vi.setSystemTime(new Date("2026-10-24T18:05:00Z"));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      clockShows("18:55");
+      expect(screen.getByRole("button", { name: "Arrancar el reloj" })).toBeInTheDocument();
+    });
+
+    it("se para solo al llegar a 0:00", async () => {
+      api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+      await setClock("5");
+
+      await userEvent.click(screen.getByRole("button", { name: "Arrancar el reloj" }));
+      vi.setSystemTime(new Date("2026-10-24T18:10:00Z"));
+
+      await waitFor(() => clockShows("00:00"));
+      expect(screen.getByRole("button", { name: "Arrancar el reloj" })).toBeDisabled();
+    });
+
+    it("una falta se anota con el tiempo del reloj en marcha en ese instante", async () => {
+      const server = api();
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+
+      await userEvent.click(screen.getByRole("button", { name: "Arrancar el reloj" }));
+      vi.setSystemTime(new Date("2026-10-24T18:02:30Z"));
+      const sheet = await tapCourt("Bea Ruiz");
+      await userEvent.click(within(sheet).getByRole("button", { name: "Falta" }));
+
+      await waitFor(() => expect(posts(server)).toHaveLength(1));
+      expect(posts(server)[0].events[0]).toMatchObject({ kind: "foul", player_id: "p2", t: 150 });
+    });
+
+    it("se recupera tras recargar la página, sin perder lo que corrió entretanto", async () => {
+      api();
+      const { unmount } = renderWithAuth(<PartidoPage />);
+      await openBoard();
+      await userEvent.click(screen.getByRole("button", { name: "Arrancar el reloj" }));
+      unmount();
+
+      vi.setSystemTime(new Date("2026-10-24T18:03:00Z"));
+      renderWithAuth(<PartidoPage />);
+      await openBoard();
+
+      clockShows("17:00");
+      expect(screen.getByRole("button", { name: "Parar el reloj" })).toBeInTheDocument();
+    });
+  });
+
+  it("ajusta el reloj con la mesa hacia delante y hacia atrás, de 1 en 1 y de 10 en 10 s", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+    await setClock("1500");
+
+    await userEvent.click(screen.getByRole("button", { name: "Ajustar el reloj" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "−10 s" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "−1 s" }));
+    expect(within(dialog).getByRole("status")).toHaveTextContent("14:49");
+    await userEvent.click(within(dialog).getByRole("button", { name: "+10 s" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "+10 s" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "+1 s" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Listo" }));
+
+    clockShows("15:10");
+    expect(posts(server)).toHaveLength(0);
+  });
+
+  it("la duración de la parte se elige en el ajuste y se recuerda para el partido", async () => {
+    api();
+    const { unmount } = renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ajustar el reloj" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Parte de 1 min más" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Listo" }));
+    clockShows("21:00");
+    unmount();
+
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+    clockShows("21:00");
+  });
+
+  it("anota un gol con un toque, con el tiempo del reloj, y sube el marcador al instante", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+    await setClock("1500");
+
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Gol" }));
-    await typeTime("1500");
 
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("1 – 0");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     expect(posts(server)[0].events[0]).toMatchObject({
@@ -130,7 +247,7 @@ describe("panel en vivo", () => {
       player_id: "p1",
       seq: 1,
     });
-    expect(screen.getByRole("button", { name: /Marcador a 15:00/ })).toBeInTheDocument();
+    clockShows("15:00");
   });
 
   it("anota una falta con un solo toque usando el último tiempo y cuenta las de equipo", async () => {
@@ -203,9 +320,9 @@ describe("panel en vivo", () => {
       await userEvent.click(screen.getByRole("button", { name: "Parada de Fran Ruiz" }));
       await waitFor(() => expect(posts(server)).toHaveLength(1));
 
-      await userEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+      await userEvent.click(screen.getByRole("button", { name: /^Deshacer parada de Fran Ruiz/ }));
       const dialog = screen.getByRole("dialog");
-      expect(within(dialog).getByText(/Parada de Fran Ruiz/)).toBeInTheDocument();
+      expect(within(dialog).getByText(/parada de Fran Ruiz/)).toBeInTheDocument();
       await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
 
       await waitFor(() => expect(posts(server)).toHaveLength(2));
@@ -224,15 +341,15 @@ describe("panel en vivo", () => {
     expect(screen.queryByRole("button", { name: /^Parada/ })).not.toBeInTheDocument();
   });
 
-  it("hace un cambio desde un jugador de la pista, pidiendo el tiempo del marcador", async () => {
+  it("hace un cambio desde un jugador de la pista con el tiempo del reloj", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     const { court, bench } = await openBoard();
+    await setClock("1500");
 
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Cambio" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Gema Ruiz/ }));
-    await typeTime("1500");
 
     await waitFor(() => expect(within(court).getByText("Gema Ruiz")).toBeInTheDocument());
     expect(within(court).queryByText("Ana Ruiz")).not.toBeInTheDocument();
@@ -248,12 +365,12 @@ describe("panel en vivo", () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     const { court, bench } = await openBoard();
+    await setClock("1500");
 
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(
       within(within(sheet).getByRole("group", { name: "Cambiar por" })).getByRole("button", { name: /Gema Ruiz/ }),
     );
-    await typeTime("1500");
 
     await waitFor(() => expect(within(court).getByText("Gema Ruiz")).toBeInTheDocument());
     expect(within(bench).getByText("Ana Ruiz")).toBeInTheDocument();
@@ -270,10 +387,10 @@ describe("panel en vivo", () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     const { bench } = await openBoard();
+    await setClock("1000");
 
     await userEvent.click(within(bench).getByRole("button", { name: /Fran Ruiz/ }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Dani Ruiz/ }));
-    await typeTime("1000");
 
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     expect(posts(server)[0].lineup_events[0].payload).toMatchObject({
@@ -284,33 +401,98 @@ describe("panel en vivo", () => {
     });
   });
 
-  it("no acepta un cambio con un tiempo anterior al último y no envía nada", async () => {
+  it("hace varios cambios a la vez con el mismo tiempo", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    const { bench } = await openBoard();
+    await setClock("1000");
+
+    await userEvent.click(within(bench).getByRole("button", { name: /Fran Ruiz/ }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Varios cambios a la vez" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Sale .*Dani Ruiz/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Entra .*Gema Ruiz/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Sale .*Ana Ruiz/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Anotar 2 cambios en/ }));
+
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].lineup_events.map((e) => e.payload)).toEqual([
+      { type: "substituted", t: 600, player_out: "p4", player_in: "p6" },
+      { type: "substituted", t: 600, player_out: "p1", player_in: "p7" },
+    ]);
+  });
+
+  // Decisión: nunca se bloquea al entrenador por el tiempo. Si el reloj se ajustó hacia atrás y
+  // marca antes del último cambio, el cambio se anota en el último movimiento y solo se avisa.
+  it("con el reloj por detrás del último cambio no bloquea: anota en el último movimiento y avisa", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
+    await setClock("1000");
     const first = await tapCourt("Ana Ruiz");
     await userEvent.click(within(first).getByRole("button", { name: "Cambio" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Gema Ruiz/ }));
-    await typeTime("1000");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
 
+    await setClock("1500");
+    expect(screen.getByRole("status", { name: "Aviso del reloj" })).toHaveTextContent(
+      "El reloj va por detrás de lo último anotado (10:00)",
+    );
     const second = await tapCourt("Bea Ruiz");
     await userEvent.click(within(second).getByRole("button", { name: "Cambio" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Fran Ruiz/ }));
-    await typeTime("1500");
 
-    expect(screen.getByRole("alert")).toHaveTextContent("anterior al último movimiento (10:00)");
-    expect(posts(server)).toHaveLength(1);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(posts(server)).toHaveLength(2));
+    expect(posts(server)[1].lineup_events[0].payload).toMatchObject({
+      type: "substituted",
+      t: 600,
+      player_out: "p2",
+      player_in: "p6",
+    });
+  });
+
+  it("con el reloj por detrás del último evento anotado, lo nuevo va a ese tiempo y se avisa", async () => {
+    events = [{ id: "e1", seq: 1, kind: "goal", part: 1, t: 900, player_id: "p1", voids_event_id: null }];
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    await setClock("1500");
+    expect(screen.getByRole("status", { name: "Aviso del reloj" })).toHaveTextContent(
+      "El reloj va por detrás de lo último anotado (05:00)",
+    );
+    await userEvent.click(within(await tapCourt("Bea Ruiz")).getByRole("button", { name: "Falta" }));
+
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].events[0]).toMatchObject({ kind: "foul", player_id: "p2", t: 900 });
+  });
+
+  it("un evento deshecho no cuenta como lo último anotado para el tiempo", async () => {
+    events = [
+      { id: "e1", seq: 1, kind: "goal", part: 1, t: 900, player_id: "p1", voids_event_id: null },
+      { id: "e2", seq: 2, kind: "undo", part: 1, t: 900, player_id: null, voids_event_id: "e1" },
+    ];
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    await setClock("1500");
+    expect(screen.queryByRole("status", { name: "Aviso del reloj" })).not.toBeInTheDocument();
+    await userEvent.click(within(await tapCourt("Bea Ruiz")).getByRole("button", { name: "Falta" }));
+
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].events[0]).toMatchObject({ kind: "foul", t: 300 });
   });
 
   it("una roja anota la tarjeta y la expulsión, y el jugador no vuelve al banquillo", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     const { court, bench } = await openBoard();
+    await setClock("1800");
 
     const sheet = await tapCourt("Dani Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Roja" }));
-    await typeTime("1800");
 
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     const body = posts(server)[0];
@@ -320,67 +502,32 @@ describe("panel en vivo", () => {
     expect(within(bench).queryByText("Dani Ruiz")).not.toBeInTheDocument();
   });
 
-  it("anota un gol del rival sin jugador y lo suma al marcador", async () => {
+  it("anota un gol del rival sin jugador, con un toque, y lo suma al marcador", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
+    await setClock("1700");
 
     await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
-    await typeTime("1700");
 
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 1");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     expect(posts(server)[0].events[0]).toMatchObject({ kind: "rival_goal", player_id: null, t: 180 });
-  });
-
-  it("anota un gol del rival sin teclear, solo ajustando el tiempo propuesto", async () => {
-    const server = api();
-    renderWithAuth(<PartidoPage />);
-    await openBoard();
-
-    await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("status")).toHaveTextContent("20:00");
-    await userEvent.click(within(dialog).getByRole("button", { name: "−1 min" }));
-    await userEvent.click(within(dialog).getByRole("button", { name: "−20 s" }));
-    await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
-
-    await waitFor(() => expect(posts(server)).toHaveLength(1));
-    expect(posts(server)[0].events[0]).toMatchObject({ kind: "rival_goal", t: 80 });
-  });
-
-  it("propone un tiempo estimado con el reloj real desde el último tiempo anotado", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-24T18:00:00Z"));
-    try {
-      api();
-      renderWithAuth(<PartidoPage />);
-      await openBoard();
-
-      await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
-      await typeTime("1500");
-      vi.setSystemTime(new Date("2026-10-24T18:01:34Z"));
-      await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
-
-      // Se anotó a 05:00 jugados; 94 s después se propone 06:30 jugados = 13:30 en el marcador.
-      expect(within(screen.getByRole("dialog")).getByRole("status")).toHaveTextContent("13:30");
-    } finally {
-      vi.useRealTimers();
-    }
   });
 
   it("deshacer pide confirmación, dice qué se deshace y baja el marcador", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
+    await setClock("1500");
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Gol" }));
-    await typeTime("1500");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
 
-    await userEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Deshacer gol de Ana Ruiz \(\d\d:\d\d\)$/ }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/Gol de Ana Ruiz/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/gol de Ana Ruiz/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
 
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 0");
@@ -391,12 +538,45 @@ describe("panel en vivo", () => {
     });
   });
 
-  it("deshacer está desactivado si no hay nada que deshacer", async () => {
+  it("si lo último cambia mientras se confirma el deshacer, no deshace otra cosa y avisa", async () => {
+    const server = api((request) => {
+      const body = request.body as SyncBody;
+      const goals = body.events.filter((e) => e.kind === "goal").map((e) => e.id);
+      const accepted = [...body.events, ...body.lineup_events].map((i) => i.id).filter((id) => !goals.includes(id));
+      return { data: { accepted, duplicates: [], rejected: goals.map((id) => ({ id, reason: "unknown_player" })) } };
+    });
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+    const mocked = globalThis.fetch;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+      gate.then(() => mocked(input, init))) as typeof fetch;
+
+    await userEvent.click(within(await tapCourt("Ana Ruiz")).getByRole("button", { name: "Gol" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Deshacer gol de Ana Ruiz/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/Deshacer gol de Ana Ruiz/);
+    // El servidor rechaza el gol con el diálogo abierto: lo último pasa a ser el inicio de la parte.
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await screen.findByText(/Gol de Ana Ruiz .*jugador desconocido/);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
+    globalThis.fetch = mocked;
+
+    expect(await screen.findByText(/Lo último anotado ha cambiado/)).toBeInTheDocument();
+    expect(screen.getByText("Parte 1 en juego")).toBeInTheDocument();
+    expect(posts(server)).toHaveLength(1);
+  });
+
+  it("sin nada más anotado, deshacer ofrece deshacer el inicio de la parte", async () => {
     api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
 
-    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deshacer inicio de la 1ª parte" })).toBeEnabled();
   });
 
   it("valora el quinteto con estrellas en el último tiempo", async () => {
@@ -466,63 +646,58 @@ describe("panel en vivo", () => {
     await waitFor(() => expect(server.count("GET", "/matches/m1/events")).toBe(2));
   });
 
-  it("el interruptor del marcador cambia a hacia arriba y se recuerda", async () => {
-    api();
-    renderWithAuth(<PartidoPage />);
-    await openBoard();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Marcador hacia abajo. Cambiar a hacia arriba" }),
-    );
-
-    expect(screen.getByRole("button", { name: /Marcador a 00:00/ })).toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem("futsal:clock") ?? "{}")).toMatchObject({
-      direction: "up",
+  it("si el servidor rechaza algo concreto avisa de qué fue y deja seguir anotando", async () => {
+    let first = true;
+    const server = api((request) => {
+      const body = request.body as SyncBody;
+      if (!first) return { data: { accepted: body.events.map((e) => e.id), duplicates: [], rejected: [] } };
+      first = false;
+      return { data: { accepted: [], duplicates: [], rejected: [{ id: body.events[0].id, reason: "unknown_player" }] } };
     });
-  });
-
-  it("al tocar el tiempo del marcador se puede corregir sin anotar nada", async () => {
-    const server = api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
 
-    await userEvent.click(screen.getByRole("button", { name: /Marcador a 20:00/ }));
-    await typeTime("1000");
+    await userEvent.click(within(await tapCourt("Ana Ruiz")).getByRole("button", { name: "Falta" }));
 
-    expect(screen.getByRole("button", { name: /Marcador a 10:00/ })).toBeInTheDocument();
-    expect(posts(server)).toHaveLength(0);
+    expect(await screen.findByText(/Falta de Ana Ruiz .*jugador desconocido/)).toBeInTheDocument();
+    await userEvent.click(within(await tapCourt("Bea Ruiz")).getByRole("button", { name: "Falta" }));
+    await waitFor(() => expect(posts(server)).toHaveLength(2));
+    expect(screen.queryByRole("button", { name: "Recargar partido" })).not.toBeInTheDocument();
   });
 
-  it("no acepta un gol con tiempo anterior al último cambio, para no atribuirlo al quinteto equivocado", async () => {
+  it("un gol con el reloj por detrás del último cambio va al último movimiento, para no atribuirlo al quinteto equivocado", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
+    await setClock("1000");
     const first = await tapCourt("Ana Ruiz");
     await userEvent.click(within(first).getByRole("button", { name: "Cambio" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Gema Ruiz/ }));
-    await typeTime("1000");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
 
+    await setClock("1500");
     const second = await tapCourt("Bea Ruiz");
     await userEvent.click(within(second).getByRole("button", { name: "Gol" }));
-    await typeTime("1500");
 
-    expect(screen.getByRole("alert")).toHaveTextContent("anterior al último movimiento (10:00)");
-    expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 0");
-    expect(posts(server)).toHaveLength(1);
+    expect(screen.getByLabelText("Marcador")).toHaveTextContent("1 – 0");
+    await waitFor(() => expect(posts(server)).toHaveLength(2));
+    expect(posts(server)[1].events[0]).toMatchObject({ kind: "goal", player_id: "p2", t: 600 });
   });
 
-  it("una roja no se puede deshacer desde el panel y lo explica", async () => {
+  it("una roja se deshace junto con su expulsión y el jugador vuelve a pista", async () => {
     const server = api();
     renderWithAuth(<PartidoPage />);
     await openBoard();
     const sheet = await tapCourt("Dani Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Roja" }));
-    await typeTime("1800");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
 
-    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
-    expect(screen.getByText(/La roja no se puede deshacer/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Deshacer roja de Dani Ruiz/ }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(posts(server)).toHaveLength(2));
+    expect(posts(server)[1].events[0]).toMatchObject({ kind: "undo" });
+    expect(posts(server)[1].lineup_events[0].payload).toMatchObject({ type: "undo" });
   });
 
   it("tras un conflicto no deja anotar más hasta recargar", async () => {
@@ -554,7 +729,7 @@ describe("panel en vivo", () => {
     renderWithAuth(<PartidoPage />);
     await openBoard();
 
-    expect(screen.getByRole("button", { name: /Marcador a 15:00/ })).toBeInTheDocument();
+    clockShows("15:00");
   });
 
   it("avisa si el registro de eventos es incoherente en vez de mostrar un 0 – 0 falso", async () => {

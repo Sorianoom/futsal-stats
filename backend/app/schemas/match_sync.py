@@ -62,8 +62,15 @@ class PartEndedPayload(StrictModel):
     t: Seconds
 
 
+class LineupUndoPayload(StrictModel):
+    """Deshace el último movimiento de alineación vigente (pila)."""
+
+    type: Literal["undo"]
+    voids_event_id: uuid.UUID
+
+
 LineupPayload = Annotated[
-    PartStartedPayload | SubstitutedPayload | SentOffPayload | PartEndedPayload,
+    PartStartedPayload | SubstitutedPayload | SentOffPayload | PartEndedPayload | LineupUndoPayload,
     Field(discriminator="type"),
 ]
 

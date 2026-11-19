@@ -46,6 +46,21 @@ export type LineupEvent =
   | { type: "sent_off"; t: number; player_id: string }
   | { type: "part_ended"; t: number };
 
+/** Evento compensatorio: anula el último movimiento vigente (`voids_event_id`). */
+export interface LineupUndo {
+  type: "undo";
+  voids_event_id: string;
+}
+
+/** Lo que se guarda en el registro de alineación: un movimiento o el deshacer de uno. */
+export type LineupPayload = LineupEvent | LineupUndo;
+
+/** Un par de un cambio: quién sale y quién entra. */
+export interface SubstitutionPair {
+  out: string;
+  in: string;
+}
+
 export function emptyLineup(): LineupState {
   return { currentPart: null, lastEndedPart: 0, clock: 0, open: [], closed: [], sentOff: [] };
 }
@@ -166,4 +181,84 @@ export function liveSecondsByPlayer(state: LineupState, t: number): Record<strin
   }
   const stillOpen = state.open.map((stint): Stint => ({ ...stint, end: t }));
   return secondsByPlayer([...state.closed, ...stillOpen]);
+}
+
+interface LineupRecordLike {
+  id: string;
+  payload: LineupPayload;
+}
+
+type UndoProblem = "void_target_missing" | "void_of_undo" | "void_not_last";
+
+const UNDO_MESSAGES: Record<UndoProblem, string> = {
+  void_target_missing: "Se deshace un movimiento desconocido",
+  void_of_undo: "No se puede deshacer un deshacer",
+  void_not_last: "Solo se puede deshacer el último movimiento de alineación",
+};
+
+function undoProblem(
+  stack: readonly LineupRecordLike[],
+  seen: ReadonlyMap<string, boolean>,
+  voids: string,
+): UndoProblem | null {
+  if (!seen.has(voids)) return "void_target_missing";
+  if (seen.get(voids)) return "void_of_undo";
+  if (stack.at(-1)?.id !== voids) return "void_not_last";
+  return null;
+}
+
+/**
+ * Movimientos que cuentan, en orden: sin los deshechos ni los propios deshacer. Deshacer es una
+ * pila: solo se anula el último movimiento vigente, así que encadenar deshaceres va hacia atrás
+ * uno a uno y la alineación nunca queda incoherente. Espejo de `effective_lineup` de Python.
+ */
+export function effectiveLineup<T extends LineupRecordLike>(records: readonly T[]): T[] {
+  const stack: T[] = [];
+  const seen = new Map<string, boolean>();
+  for (const record of records) {
+    if (seen.has(record.id)) throw new LineupError(`Id de movimiento duplicado: ${record.id}`);
+    const { payload } = record;
+    if (payload.type === "undo") {
+      const problem = undoProblem(stack, seen, payload.voids_event_id);
+      if (problem) throw new LineupError(`${UNDO_MESSAGES[problem]}: ${payload.voids_event_id}`);
+      stack.pop();
+    } else {
+      stack.push(record);
+    }
+    seen.set(record.id, payload.type === "undo");
+  }
+  return stack;
+}
+
+/** El último movimiento vigente: el único que se puede deshacer. */
+export function lineupUndoTarget<T extends LineupRecordLike>(records: readonly T[]): T | null {
+  return effectiveLineup(records).at(-1) ?? null;
+}
+
+/** Reproduce la alineación sin lo deshecho. */
+export function replayRecords(records: readonly LineupRecordLike[]): LineupState {
+  const events = effectiveLineup(records).flatMap(({ payload }) =>
+    payload.type === "undo" ? [] : [payload],
+  );
+  return replay(events);
+}
+
+/**
+ * Aplica varios cambios con el mismo tiempo, en orden. Si alguno es imposible no se aplica
+ * ninguno. Un jugador no puede aparecer en dos pares (saldría con un tramo de 0 segundos).
+ */
+export function applySubstitutions(
+  state: LineupState,
+  t: number,
+  pairs: readonly SubstitutionPair[],
+): LineupState {
+  if (pairs.length === 0) throw new LineupError("No hay ningún cambio");
+  const players = pairs.flatMap((pair) => [pair.out, pair.in]);
+  if (new Set(players).size !== players.length) {
+    throw new LineupError("Un jugador está en más de un cambio");
+  }
+  return pairs.reduce(
+    (current, pair) => substitute(current, t, pair.out, pair.in),
+    state,
+  );
 }

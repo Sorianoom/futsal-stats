@@ -18,7 +18,9 @@ function renderPanel(overrides: Partial<PanelProps> = {}) {
     score: { for: 3, against: 2 },
     teamFouls: 3,
     clockText: "12:41",
-    direction: "down",
+    clockRunning: false,
+    clockFinished: false,
+    clockNote: null,
     court: [player("gk", 1, "goalkeeper"), player("a", 7), player("b", 10), player("c", 4), player("d", 9)],
     bench: [player("e", 5), player("f", 11)],
     keeper: null,
@@ -29,8 +31,8 @@ function renderPanel(overrides: Partial<PanelProps> = {}) {
     syncProblem: null,
     onCourtPlayer: vi.fn(),
     onBenchPlayer: vi.fn(),
-    onClock: vi.fn(),
-    onToggleDirection: vi.fn(),
+    onToggleClock: vi.fn(),
+    onAdjustClock: vi.fn(),
     onRivalGoal: vi.fn(),
     onSave: vi.fn(),
     onEndPart: vi.fn(),
@@ -122,6 +124,49 @@ describe("LivePanel", () => {
     renderPanel();
 
     expect(screen.queryByRole("button", { name: /^Parada/ })).not.toBeInTheDocument();
+  });
+
+  it("muestra el reloj en grande y un botón táctil para arrancarlo", async () => {
+    const props = renderPanel();
+
+    expect(screen.getByRole("timer", { name: "Reloj" })).toHaveTextContent("12:41");
+    const play = screen.getByRole("button", { name: "Arrancar el reloj" });
+    expect(play).toHaveClass("size-16");
+    await userEvent.click(play);
+    expect(props.onToggleClock).toHaveBeenCalled();
+  });
+
+  it("con el reloj en marcha el botón es para pararlo", () => {
+    renderPanel({ clockRunning: true });
+
+    expect(screen.getByRole("button", { name: "Parar el reloj" })).toBeInTheDocument();
+  });
+
+  it("en 0:00 no deja arrancar el reloj", () => {
+    renderPanel({ clockText: "00:00", clockFinished: true });
+
+    expect(screen.getByRole("button", { name: "Arrancar el reloj" })).toBeDisabled();
+  });
+
+  it("abre el ajuste del reloj", async () => {
+    const props = renderPanel();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ajustar el reloj" }));
+
+    expect(props.onAdjustClock).toHaveBeenCalled();
+  });
+
+  it("muestra el aviso del reloj de forma discreta, no como error", () => {
+    renderPanel({ clockNote: "El reloj va por detrás" });
+
+    expect(screen.getByRole("status", { name: "Aviso del reloj" })).toHaveTextContent("El reloj va por detrás");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("no hay interruptor de sentido del marcador", () => {
+    renderPanel();
+
+    expect(screen.queryByRole("button", { name: /Marcador hacia/ })).not.toBeInTheDocument();
   });
 
   it("no deja deshacer si no hay nada que deshacer", () => {

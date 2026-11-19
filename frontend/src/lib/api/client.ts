@@ -35,11 +35,17 @@ export class ApiError extends Error {
 }
 
 const SERVER_ERROR_FROM = 500;
+const NO_CONTENT = 204;
 
 /** El servidor no se pudo alcanzar o falló por su lado: reintentar o usar lo local tiene sentido. */
 export function isUnreachable(failure: unknown): boolean {
   if (!(failure instanceof ApiError)) return false;
-  return failure.code === "network" || failure.code === "bad_response" || failure.status >= SERVER_ERROR_FROM;
+  return (
+    failure.code === "network" ||
+    failure.code === "timeout" ||
+    failure.code === "bad_response" ||
+    failure.status >= SERVER_ERROR_FROM
+  );
 }
 
 interface Envelope<T> {
@@ -60,6 +66,8 @@ export interface RequestOptions {
   idempotencyKey?: string;
   /** false para login y refresco: no se envía token ni se reintenta ante un 401. */
   auth?: boolean;
+  /** Para cortar la petición (límite de espera): se rechaza con un ApiError «timeout». */
+  signal?: AbortSignal;
 }
 
 let accessToken: string | null = null;
@@ -90,7 +98,7 @@ function isEnvelope(value: unknown): value is Envelope<unknown> {
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions): Promise<RawResult<T>> {
-  const { method = "GET", body, auth = true, idempotencyKey } = options;
+  const { method = "GET", body, auth = true, idempotencyKey, signal } = options;
   const headers = new Headers();
   if (body !== undefined) headers.set("Content-Type", "application/json");
   if (auth && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
@@ -103,11 +111,17 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<Raw
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "include",
+      signal,
     });
   } catch {
+    if (signal?.aborted) throw new ApiError(0, "timeout", "El servidor no responde");
     throw new ApiError(0, "network", "Sin conexión con el servidor");
   }
 
+  // Un 204 no trae cuerpo: es un éxito sin datos (undefined, lo que espera un `Promise<void>`).
+  if (response.status === NO_CONTENT) {
+    return { status: response.status, envelope: { success: true, data: undefined as T, error: null } };
+  }
   let parsed: unknown;
   try {
     parsed = await response.json();

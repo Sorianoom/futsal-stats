@@ -2,7 +2,6 @@ import { CourtSurface } from "@/components/court-surface";
 import { SyncStatus } from "@/components/sync-status";
 import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/api/types";
-import type { ClockDirection } from "@/lib/match/clock";
 import { courtSlots } from "@/lib/match/court-layout";
 import { shortName } from "@/lib/player-name";
 import type { LogStatus } from "@/lib/match/use-match-log";
@@ -86,25 +85,79 @@ function Bench({ players, onPick }: BenchProps) {
   );
 }
 
+interface ClockControlsProps {
+  text: string;
+  running: boolean;
+  finished: boolean;
+  onToggle: () => void;
+  onAdjust: () => void;
+}
+
+/** Reloj de la parte: grande, con ▶/⏸ para seguir al árbitro y «Ajustar» para cuadrarlo con la mesa. */
+function ClockControls({ text, running, finished, onToggle, onAdjust }: ClockControlsProps) {
+  return (
+    <div className="flex items-center gap-3">
+      <p
+        role="timer"
+        aria-label="Reloj"
+        className={cn(
+          "min-w-[5ch] text-6xl leading-none font-extrabold tabular-nums",
+          running ? "text-background" : "text-background/60",
+        )}
+      >
+        {text}
+      </p>
+      <Button
+        size="icon"
+        variant={running ? "outline" : "cta"}
+        aria-label={running ? "Parar el reloj" : "Arrancar el reloj"}
+        disabled={finished && !running}
+        onClick={onToggle}
+        className={cn(
+          "size-16 rounded-2xl text-3xl",
+          running && "border-white/25 bg-white/10 text-background hover:bg-white/20 hover:text-background",
+        )}
+      >
+        <span aria-hidden="true">{running ? "⏸" : "▶"}</span>
+      </Button>
+      <Button
+        variant="ghost"
+        aria-label="Ajustar el reloj"
+        onClick={onAdjust}
+        className="h-16 rounded-2xl px-4 text-base font-bold text-background hover:bg-white/10 hover:text-background"
+      >
+        Ajustar
+      </Button>
+    </div>
+  );
+}
+
 interface LivePanelProps {
   title: string;
   score: { for: number; against: number };
   teamFouls: number;
+  /** Lo que marca el reloj (cuenta atrás, mm:ss). */
   clockText: string;
-  direction: ClockDirection;
+  clockRunning: boolean;
+  /** El reloj llegó a 0:00: ya no se puede arrancar. */
+  clockFinished: boolean;
+  /** Aviso discreto del reloj (p. ej. va por detrás del último cambio); no es un error. */
+  clockNote: string | null;
   court: readonly Player[];
   bench: readonly Player[];
   /** El portero en pista, si hay uno solo: la parada se le anota con un toque, sin abrir su ficha. */
   keeper: Player | null;
   canUndo: boolean;
   undoNote: string | null;
+  /** Qué deshace el botón, p. ej. «Deshacer cambio: entra X, sale Y (12:34)». */
+  undoLabel?: string | null;
   status: LogStatus;
   pending: number;
   syncProblem: string | null;
   onCourtPlayer: (player: Player) => void;
   onBenchPlayer: (player: Player) => void;
-  onClock: () => void;
-  onToggleDirection: () => void;
+  onToggleClock: () => void;
+  onAdjustClock: () => void;
   onRivalGoal: () => void;
   onSave: () => void;
   onEndPart: () => void;
@@ -115,12 +168,8 @@ interface LivePanelProps {
 }
 
 export function LivePanel(props: LivePanelProps) {
-  const { score, teamFouls, direction } = props;
+  const { score, teamFouls } = props;
   const fouling = teamFouls >= FOULS_WARNING_FROM;
-  const toggleLabel =
-    direction === "down"
-      ? "Marcador hacia abajo. Cambiar a hacia arriba"
-      : "Marcador hacia arriba. Cambiar a hacia abajo";
 
   return (
     <div className="space-y-4">
@@ -144,27 +193,20 @@ export function LivePanel(props: LivePanelProps) {
         <p aria-label="Marcador" className="text-7xl leading-none font-extrabold tabular-nums">
           {score.for} – {score.against}
         </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="lg"
-            aria-label={`Marcador a ${props.clockText}. Tocar para corregir`}
-            onClick={props.onClock}
-            className="h-16 rounded-2xl border-white/25 bg-white/10 px-5 text-4xl font-extrabold tabular-nums text-background hover:bg-white/20 hover:text-background"
-          >
-            {props.clockText}
-          </Button>
-          <Button
-            variant="ghost"
-            size="lg"
-            aria-label={toggleLabel}
-            onClick={props.onToggleDirection}
-            className="text-background hover:bg-white/10 hover:text-background"
-          >
-            {direction === "down" ? "↓" : "↑"}
-          </Button>
-        </div>
+        <ClockControls
+          text={props.clockText}
+          running={props.clockRunning}
+          finished={props.clockFinished}
+          onToggle={props.onToggleClock}
+          onAdjust={props.onAdjustClock}
+        />
       </header>
+
+      {props.clockNote ? (
+        <p role="status" aria-label="Aviso del reloj" className="px-2 text-sm text-muted-foreground">
+          {props.clockNote}
+        </p>
+      ) : null}
 
       <SyncStatus
         status={props.status}
@@ -200,8 +242,13 @@ export function LivePanel(props: LivePanelProps) {
               Gol rival
             </Button>
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="rounded-2xl" disabled={!props.canUndo} onClick={props.onUndo}>
-                Deshacer
+              <Button
+                variant="outline"
+                className="h-auto min-h-9 rounded-2xl py-1 text-sm leading-tight whitespace-normal"
+                disabled={!props.canUndo}
+                onClick={props.onUndo}
+              >
+                {props.undoLabel ?? "Deshacer"}
               </Button>
               <Button variant="outline" className="rounded-2xl" onClick={props.onRate}>
                 Valorar quinteto

@@ -12,4 +12,6 @@ afterEach(() => {
   queryCache.clear();
   // Una base nueva por test: todos usan el mismo partido y no deben ver lo guardado por otro.
   globalThis.indexedDB = new IDBFactory();
+  // Lo guardado en localStorage (reloj, rechazos sin atender) tampoco pasa de un test a otro.
+  window.localStorage.clear();
 });

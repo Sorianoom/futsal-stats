@@ -1,5 +1,5 @@
 import type { EventKind, MatchEvent } from "@/lib/match/events";
-import type { LineupEvent } from "@/lib/match/lineup";
+import type { LineupPayload } from "@/lib/match/lineup";
 
 export interface Match {
   id: string;
@@ -21,7 +21,7 @@ export interface NewMatch {
 export interface LineupEventRecord {
   id: string;
   seq: number;
-  payload: LineupEvent;
+  payload: LineupPayload;
 }
 
 /** Evento del partido con su número de secuencia, tal y como lo devuelve la API. */

@@ -12,13 +12,23 @@ from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.db import match_repo, points_repo
 from app.db.models import LineupEventRow, Match, MatchEvent, QuintetRatingRow
-from app.domain.sync import Decision, IncomingEvent, SyncItem, Verdict, decide, decide_voids
+from app.domain.sync import (
+    Decision,
+    IncomingEvent,
+    LineupItem,
+    SyncItem,
+    Verdict,
+    decide,
+    decide_lineup_voids,
+    decide_voids,
+)
 from app.schemas.match_sync import (
     EventIn,
     EventOut,
     LineupEventIn,
     LineupEventOut,
     LineupPayload,
+    LineupUndoPayload,
     PartStartedPayload,
     RatingIn,
     RatingsStatus,
@@ -75,6 +85,27 @@ def _new_items[T: (EventIn, LineupEventIn, RatingIn)](
     return [by_id[d.id] for d in decisions if d.verdict is Verdict.NEW]
 
 
+def _voided_id(payload: LineupPayload) -> str | None:
+    return str(payload.voids_event_id) if isinstance(payload, LineupUndoPayload) else None
+
+
+async def _lineup_void_rejections(
+    db: SessionDep, match_id: uuid.UUID, new: list[LineupEventIn]
+) -> dict[str, str]:
+    """Deshacer de alineación inválidos: solo se anula el último movimiento vigente."""
+    if not any(isinstance(e.payload, LineupUndoPayload) for e in new):
+        return {}
+    stored = await match_repo.list_lineup_events(db, match_id)
+    items = [LineupItem(str(r.id), r.seq, _stored_voids(r.payload), is_new=False) for r in stored]
+    items.extend(LineupItem(str(e.id), e.seq, _voided_id(e.payload)) for e in new)
+    return decide_lineup_voids(items)
+
+
+def _stored_voids(payload: dict[str, object]) -> str | None:
+    voids = payload.get("voids_event_id") if payload.get("type") == "undo" else None
+    return str(voids) if voids is not None else None
+
+
 async def _process_events(
     db: SessionDep, match_id: uuid.UUID, events: list[EventIn], outcome: Outcome
 ) -> list[MatchEvent]:
@@ -126,10 +157,15 @@ async def _process_lineup(
     new = _new_items(decisions, by_id)
     wanted = [pid for e in new for pid in _payload_player_ids(e.payload)]
     missing = await points_repo.find_missing_players(db, wanted)
+    known = [e for e in new if not missing.intersection(_payload_player_ids(e.payload))]
+    void_rejections = await _lineup_void_rejections(db, match_id, known)
     rows = []
     for event in new:
         if missing.intersection(_payload_player_ids(event.payload)):
             outcome.reject(event.id, "unknown_player")
+            continue
+        if (reason := void_rejections.get(str(event.id))) is not None:
+            outcome.reject(event.id, reason)
             continue
         outcome.accepted.append(event.id)
         rows.append(

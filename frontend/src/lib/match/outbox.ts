@@ -114,3 +114,47 @@ export function restoreOutbox(
     recovered: idsOf(outbox),
   };
 }
+
+export interface DroppedLog {
+  lineup: readonly LineupEventRecord[];
+  events: readonly LoggedEvent[];
+  outbox: Outbox;
+  /** Ids quitados: los rechazados y lo que deshacía algo quitado. */
+  dropped: ReadonlySet<string>;
+}
+
+function voidsOf(item: LineupEventRecord | LoggedEvent | EventIn): string | null {
+  if ("payload" in item) return item.payload.type === "undo" ? item.payload.voids_event_id : null;
+  return item.voids_event_id ?? null;
+}
+
+/**
+ * Quita de la vista y de la bandeja lo que el servidor rechazó, junto con los deshacer que apuntan
+ * a algo quitado (si no, el registro local dejaría de ser coherente).
+ */
+export function dropRejected(
+  lineup: readonly LineupEventRecord[],
+  events: readonly LoggedEvent[],
+  outbox: Outbox,
+  rejected: ReadonlySet<string>,
+): DroppedLog {
+  const dropped = new Set(rejected);
+  const all = [...lineup, ...events, ...outbox.lineup, ...outbox.events];
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const item of all) {
+      const voids = voidsOf(item);
+      if (voids !== null && dropped.has(voids) && !dropped.has(item.id)) {
+        dropped.add(item.id);
+        grew = true;
+      }
+    }
+  }
+  return {
+    lineup: lineup.filter((item) => !dropped.has(item.id)),
+    events: events.filter((item) => !dropped.has(item.id)),
+    outbox: without(outbox, dropped),
+    dropped,
+  };
+}

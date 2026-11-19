@@ -4,11 +4,12 @@ import type { LineupEventRecord, LoggedEvent, RatingIn } from "@/lib/api/match-t
 import { ApiError } from "@/lib/api/client";
 import { syncMatch } from "@/lib/api/matches";
 
-import { undoTarget, type EventKind } from "./events";
+import type { EventKind } from "./events";
 import { newId } from "@/lib/ids";
-import type { LineupEvent } from "./lineup";
+import type { LineupEvent, LineupPayload } from "./lineup";
 import {
   confirmedOf,
+  dropRejected,
   EMPTY_OUTBOX,
   idsOf,
   plus,
@@ -20,13 +21,37 @@ import {
   type Outbox,
 } from "./outbox";
 import { saveOutbox } from "./outbox-store";
+import { loadRejections, saveRejections } from "./rejections";
 import { nextSeq } from "./sequence";
+import { chooseUndo, undoTargetId, type UndoAction } from "./undo";
 
 const RETRY_EVERY_MS = 5000;
+/**
+ * Tras un rechazo del envío entero ("stalled") también se reintenta solo, pero despacio: un dato
+ * inválido no se arregla reenviándolo, pero la cola nunca debe quedarse parada para siempre.
+ */
+export const STALLED_RETRY_MS = 45_000;
 const SERVER_ERROR_FROM = 500;
+/** «Envío simultáneo; vuelve a intentarlo»: otro envío del mismo partido ganó la carrera. */
+const CONCURRENT_SYNC = 409;
+/** Límite de peticiones del servidor: pasa solo esperando. */
+const TOO_MANY_REQUESTS = 429;
+/** Un envío sin respuesta en este tiempo se corta y se reintenta como un corte de red. */
+export const SYNC_TIMEOUT_MS = 15_000;
+// Solo un choque de `seq` o de id con otro dispositivo bloquea: la base local ya no es fiable.
 const CONFLICT_REASONS = ["seq_conflict", "id_conflict"];
 
-export type LogStatus = "synced" | "pending" | "offline" | "conflict";
+/** "stalled": el servidor rechazó el envío entero; se puede seguir anotando y reintentar. */
+export type LogStatus = "synced" | "pending" | "offline" | "conflict" | "stalled";
+
+/** Algo anotado que el servidor rechazó y ya no está en el registro local. */
+export interface Rejection {
+  id: string;
+  reason: string;
+  event?: LoggedEvent;
+  lineup?: LineupEventRecord;
+  rating?: RatingIn;
+}
 
 export interface NewEvent {
   kind: EventKind;
@@ -50,6 +75,10 @@ interface Options {
    * avisos se atienden de uno en uno y en orden; si falla, el registro sigue como si nada.
    */
   onConfirmed?: (log: ConfirmedLog) => Promise<void> | void;
+  /** Límite de espera de cada envío (por defecto, `SYNC_TIMEOUT_MS`). */
+  syncTimeoutMs?: number;
+  /** Cada cuánto se reintenta tras un rechazo del envío entero (por defecto, `STALLED_RETRY_MS`). */
+  stalledRetryMs?: number;
 }
 
 export interface MatchLog {
@@ -58,8 +87,13 @@ export interface MatchLog {
   /** Cuántos elementos esperan a llegar al servidor. */
   pending: number;
   status: LogStatus;
-  /** Qué falló cuando el estado es "conflict". */
+  /** Qué falló cuando el estado es "conflict" o "stalled". */
   problem: string | null;
+  /** Lo que deshace `undoLast` (null si no hay nada que deshacer). */
+  undoable: UndoAction | null;
+  /** Lo rechazado por el servidor desde el último `dismissRejections`. */
+  rejections: readonly Rejection[];
+  dismissRejections: () => void;
   /** Sube con cada anotación: permite saber si algo cambió mientras se recargaba. */
   revision: number;
   /** No se pudo guardar en el dispositivo: si se cierra la pestaña, lo pendiente se pierde. */
@@ -67,22 +101,46 @@ export interface MatchLog {
   recordLineup: (payload: LineupEvent) => LineupEventRecord;
   recordEvent: (event: NewEvent) => LoggedEvent;
   recordRating: (part: number, t: number, stars: number) => void;
-  undoLast: () => void;
+  /**
+   * Deshace lo último. Con `expectedId` (lo que se mostró al pedir confirmación), solo si lo último
+   * sigue siendo eso; si cambió entretanto no hace nada. Devuelve si se deshizo algo.
+   */
+  undoLast: (expectedId?: string) => boolean;
   flush: () => Promise<void>;
 }
 
-/** Un corte de red o un 5xx se reintentan; el resto de errores del servidor no mejoran solos. */
+/**
+ * Se reintenta como un corte de red lo que puede pasar solo: sin red, sin respuesta a tiempo, una
+ * respuesta que no es de la API (cuerpo cortado, la página de un portal cautivo), un envío
+ * simultáneo, el límite de peticiones o un 5xx. El resto (400, 422…) es un rechazo del dato.
+ */
 function isRetryable(failure: unknown): boolean {
   if (!(failure instanceof ApiError)) return true;
-  return failure.code === "network" || failure.status >= SERVER_ERROR_FROM;
+  return (
+    failure.code === "network" ||
+    failure.code === "timeout" ||
+    failure.code === "bad_response" ||
+    failure.status === CONCURRENT_SYNC ||
+    failure.status === TOO_MANY_REQUESTS ||
+    failure.status >= SERVER_ERROR_FROM
+  );
 }
 
-function conflictMessage(reasons: readonly string[]): string {
-  if (reasons.some((reason) => CONFLICT_REASONS.includes(reason))) {
-    return "Conflicto con otro dispositivo";
-  }
-  return `El servidor rechazó lo anotado (${reasons.join(", ")})`;
+/** Qué era cada id rechazado, buscándolo en lo que se envió. */
+function describeRejected(
+  batch: Outbox,
+  events: readonly LoggedEvent[],
+  rejected: readonly { id: string; reason: string }[],
+): Rejection[] {
+  return rejected.map(({ id, reason }) => ({
+    id,
+    reason,
+    event: events.find((item) => item.id === id),
+    lineup: batch.lineup.find((item) => item.id === id),
+    rating: batch.ratings.find((item) => item.id === id),
+  }));
 }
+
 
 /**
  * Registro del partido: lo anotado aparece al instante y se envía en segundo plano. Lo que no
@@ -96,13 +154,22 @@ export function useMatchLog({
   savedOutbox = EMPTY_OUTBOX,
   storageFailed: storageFailedOnLoad = false,
   onConfirmed,
+  syncTimeoutMs = SYNC_TIMEOUT_MS,
+  stalledRetryMs = STALLED_RETRY_MS,
 }: Options): MatchLog {
   const [restored] = useState(() => restoreOutbox(savedOutbox, initialLineup, initialEvents));
   const [lineup, setLineup] = useState(restored.lineup);
   const [events, setEvents] = useState(restored.events);
   const [pending, setPending] = useState(size(restored.outbox));
   const [failed, setFailed] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const [stalled, setStalled] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // Lo rechazado y sin atender viene de lo guardado: el aviso no se pierde con una recarga.
+  const [rejections, setRejections] = useState<readonly Rejection[]>(() => loadRejections(matchId));
+  const [undoable, setUndoable] = useState(() =>
+    chooseUndo(restored.lineup, restored.events, new Map()),
+  );
   const [revision, setRevision] = useState(0);
   const [storageFailed, setStorageFailed] = useState(storageFailedOnLoad);
 
@@ -122,6 +189,18 @@ export function useMatchLog({
   // bandeja del disco hasta que la copia lo recoja: si la pestaña muriera entre medias, al reabrir
   // sin red faltaría en las dos partes y se repetirían números de secuencia (seq_conflict).
   const retained = useRef<Outbox>(EMPTY_OUTBOX);
+  // Orden de lo anotado en esta sesión entre los dos flujos (eventos y alineación), para saber qué
+  // fue lo último. Lo que vino ya guardado se ordena por parte y tiempo (ver `chooseUndo`).
+  const order = useRef<Map<string, number>>(new Map());
+  const counter = useRef(0);
+
+  /** Publica la vista tras cambiar las referencias del registro. */
+  const publish = useCallback(() => {
+    setLineup(lineupRef.current);
+    setEvents(eventsRef.current);
+    setUndoable(chooseUndo(lineupRef.current, eventsRef.current, order.current));
+    setRevision((value) => value + 1);
+  }, []);
 
   const persist = useCallback(
     (next: Outbox) => {
@@ -168,6 +247,41 @@ export function useMatchLog({
     [persist],
   );
 
+  const sendWithTimeout = useCallback(
+    async (batch: Outbox) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), syncTimeoutMs);
+      try {
+        return await syncMatch(
+          matchId,
+          { events: [...batch.events], lineup_events: [...batch.lineup], ratings: [...batch.ratings] },
+          { signal: controller.signal },
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    [matchId, syncTimeoutMs],
+  );
+
+  /** Quita lo rechazado (y lo que lo deshacía) y lo deja anotado en el aviso. */
+  const discardRejected = useCallback(
+    (batch: Outbox, rejected: readonly { id: string; reason: string }[]): ReadonlySet<string> => {
+      if (rejected.length === 0) return new Set();
+      const entries = describeRejected(batch, eventsRef.current, rejected);
+      const ids = new Set(rejected.map((item) => item.id));
+      const next = dropRejected(lineupRef.current, eventsRef.current, outbox.current, ids);
+      lineupRef.current = next.lineup;
+      eventsRef.current = next.events;
+      next.dropped.forEach((id) => order.current.delete(id));
+      commit(next.outbox);
+      publish();
+      setRejections((previous) => [...previous, ...entries]);
+      return next.dropped;
+    },
+    [commit, publish],
+  );
+
   const flush = useCallback(async () => {
     if (flushing.current || blocked.current || size(outbox.current) === 0) return;
     flushing.current = true;
@@ -176,58 +290,74 @@ export function useMatchLog({
         const batch = outbox.current;
         const ids = idsOf(batch);
         ids.forEach((id) => maybeSent.current.add(id));
-        const result = await syncMatch(matchId, {
-          events: [...batch.events],
-          lineup_events: [...batch.lineup],
-          ratings: [...batch.ratings],
-        });
+        const result = await sendWithTimeout(batch);
         ids.forEach((id) => maybeSent.current.delete(id));
-        const accepted = result.rejected.length === 0;
-        if (accepted && onConfirmedRef.current) {
-          retained.current = plus(retained.current, { ...batch, ratings: [] });
-        }
-        commit(without(outbox.current, ids));
-        if (!accepted) {
+        if (result.rejected.some((item) => CONFLICT_REASONS.includes(item.reason))) {
+          commit(without(outbox.current, ids));
           blocked.current = true;
-          setProblem(conflictMessage(result.rejected.map((item) => item.reason)));
+          setConflict(true);
+          setProblem("Conflicto con otro dispositivo");
           return;
         }
+        const removed = discardRejected(batch, result.rejected);
+        if (onConfirmedRef.current) {
+          retained.current = plus(retained.current, without({ ...batch, ratings: [] }, removed));
+        }
+        commit(without(outbox.current, ids));
         notifyConfirmed();
       }
       setFailed(false);
+      setStalled(false);
+      setProblem(null);
     } catch (failure) {
+      // Solo uno de los dos reintentos automáticos a la vez: el rápido (5 s) o el lento (45 s).
       if (isRetryable(failure)) {
+        setStalled(false);
+        setProblem(null);
         setFailed(true);
       } else {
+        // El lote entero no vale: se avisa y se reintenta con el botón, al anotar lo siguiente o,
+        // despacio, solo.
         const message = failure instanceof ApiError ? failure.message : "error";
-        blocked.current = true;
-        setProblem(`El servidor rechazó lo anotado (${message})`);
+        setFailed(false);
+        setStalled(true);
+        setProblem(`El servidor rechazó el envío (${message})`);
       }
     } finally {
       flushing.current = false;
     }
-  }, [matchId, commit, notifyConfirmed]);
+  }, [commit, notifyConfirmed, sendWithTimeout, discardRejected]);
 
   // Se espera un instante para que lo anotado a la vez viaje en un solo envío.
   const scheduleFlush = useCallback(() => {
     void Promise.resolve().then(flush);
   }, [flush]);
 
-  const recordLineup = useCallback(
-    (payload: LineupEvent): LineupEventRecord => {
+  const remember = useCallback((id: string) => {
+    counter.current += 1;
+    order.current.set(id, counter.current);
+  }, []);
+
+  const appendLineup = useCallback(
+    (payload: LineupPayload): LineupEventRecord => {
       const record: LineupEventRecord = {
         id: newId(),
         seq: nextSeq(lineupRef.current),
         payload,
       };
       lineupRef.current = [...lineupRef.current, record];
-      setLineup(lineupRef.current);
-      setRevision((value) => value + 1);
+      remember(record.id);
+      publish();
       commit({ ...outbox.current, lineup: [...outbox.current.lineup, record] });
       scheduleFlush();
       return record;
     },
-    [commit, scheduleFlush],
+    [commit, scheduleFlush, publish, remember],
+  );
+
+  const recordLineup = useCallback(
+    (payload: LineupEvent): LineupEventRecord => appendLineup(payload),
+    [appendLineup],
   );
 
   const recordEvent = useCallback(
@@ -242,13 +372,13 @@ export function useMatchLog({
         voids_event_id: input.voids_event_id ?? null,
       };
       eventsRef.current = [...eventsRef.current, event];
-      setEvents(eventsRef.current);
-      setRevision((value) => value + 1);
+      remember(event.id);
+      publish();
       commit({ ...outbox.current, events: [...outbox.current.events, toEventIn(event)] });
       scheduleFlush();
       return event;
     },
-    [commit, scheduleFlush],
+    [commit, scheduleFlush, publish, remember],
   );
 
   const recordRating = useCallback(
@@ -261,21 +391,44 @@ export function useMatchLog({
     [commit, scheduleFlush],
   );
 
-  const undoLast = useCallback(() => {
-    const target = undoTarget(eventsRef.current);
-    if (!target) return;
-    const unsent =
-      outbox.current.events.some((e) => e.id === target.id) && !maybeSent.current.has(target.id);
-    if (unsent) {
-      // Nunca llegó al servidor: basta con quitarlo, sin dejar un evento compensatorio.
-      eventsRef.current = eventsRef.current.filter((e) => e.id !== target.id);
-      setEvents(eventsRef.current);
-      setRevision((value) => value + 1);
-      commit(without(outbox.current, new Set([target.id])));
-      return;
+  /** Nunca llegó al servidor: basta con quitarlo, sin dejar un evento compensatorio. */
+  const dropUnsent = useCallback(
+    (id: string): boolean => {
+      const queued = [...outbox.current.events, ...outbox.current.lineup].some((e) => e.id === id);
+      if (!queued || maybeSent.current.has(id)) return false;
+      eventsRef.current = eventsRef.current.filter((e) => e.id !== id);
+      lineupRef.current = lineupRef.current.filter((e) => e.id !== id);
+      order.current.delete(id);
+      commit(without(outbox.current, new Set([id])));
+      publish();
+      return true;
+    },
+    [commit, publish],
+  );
+
+  const undoLast = useCallback((expectedId?: string): boolean => {
+    const action = chooseUndo(lineupRef.current, eventsRef.current, order.current);
+    if (!action || action.kind === "blocked") return false;
+    if (expectedId !== undefined && undoTargetId(action) !== expectedId) return false;
+    if (action.kind === "lineup" || action.kind === "red") {
+      const { id } = action.record;
+      if (!dropUnsent(id)) appendLineup({ type: "undo", voids_event_id: id });
     }
-    recordEvent({ kind: "undo", part: target.part, t: target.t, voids_event_id: target.id });
-  }, [commit, recordEvent]);
+    if (action.kind === "event" || action.kind === "red") {
+      const target = action.event;
+      if (!dropUnsent(target.id)) {
+        recordEvent({ kind: "undo", part: target.part, t: target.t, voids_event_id: target.id });
+      }
+    }
+    return true;
+  }, [appendLineup, dropUnsent, recordEvent]);
+
+  const dismissRejections = useCallback(() => setRejections([]), []);
+
+  // Cada cambio del aviso se copia al dispositivo; atenderlo (lista vacía) borra la copia.
+  useEffect(() => {
+    saveRejections(matchId, rejections);
+  }, [matchId, rejections]);
 
   useEffect(() => {
     // Lo recuperado del dispositivo se limpia de lo que el servidor ya tenía y se envía el resto.
@@ -297,8 +450,15 @@ export function useMatchLog({
     return () => clearInterval(timer);
   }, [failed, pending, flush]);
 
+  useEffect(() => {
+    if (!stalled || pending === 0) return;
+    const timer = setInterval(() => void flush(), stalledRetryMs);
+    return () => clearInterval(timer);
+  }, [stalled, pending, flush, stalledRetryMs]);
+
   let status: LogStatus = "synced";
-  if (problem !== null) status = "conflict";
+  if (conflict) status = "conflict";
+  else if (stalled) status = "stalled";
   else if (pending > 0) status = failed ? "offline" : "pending";
 
   return {
@@ -307,6 +467,9 @@ export function useMatchLog({
     pending,
     status,
     problem,
+    undoable,
+    rejections,
+    dismissRejections,
     revision,
     storageFailed,
     recordLineup, recordEvent, recordRating,

@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-07 (limitador de login en la BD, en `main` con la migración 0005).
+Última actualización: 2026-11-19 (cronómetro y corrección en directo, en `main`).
 
 ## Hecho y en producción
 
@@ -55,6 +55,29 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     sobrescribe; fuera de Vercel se ignora y se usa la del socket. Antes se usaba siempre la del
     socket, que detrás del proxy podía ser compartida.
   - Desaparece el limitador en memoria (`LoginRateLimiter`, `LoginGuard`, `app.state.login_guard`).
+
+- **Cronómetro y corrección en directo** (push directo a `main`, sin PR; sin migración). Tests en
+  verde. En un partido real no se podían apuntar cambios: la propuesta de tiempo sumaba tiempo
+  real (el marcador se para), se confirmaba adelantada y el suelo «No puede ser anterior al último
+  movimiento» bloqueaba los cambios siguientes.
+  - Reloj de cuenta atrás ▶/⏸ (`lib/match/stopwatch.ts`): se calcula por diferencia de horas y se
+    guarda en localStorage por partido, así que aguanta recargas y segundo plano. Se para solo en
+    0:00; la 2ª parte vuelve a la duración de la parte (20:00 por defecto, cambiable en
+    «Ajustar»). «Ajustar» mueve ±1/±10 s o se teclea, hacia delante y hacia atrás.
+  - Cada acción se anota con un toque y el tiempo del reloj. Si el reloj va por detrás de lo
+    último anotado, se usa ese tiempo y se avisa: nunca se bloquea. Desaparecen el diálogo de
+    tiempo y el botón ↓/↑.
+  - Deshacer también cambios, expulsiones (con su roja) e inicio/fin de parte, como pila: evento
+    `undo` con `voids_event_id` en la alineación, igual en Python y TS (fixture
+    `shared/fixtures/lineup_undo.json`). `/sync` rechaza deshaceres inválidos y `finalize` ignora
+    lo deshecho. Confirmación al terminar la parte y cambios múltiples con el mismo tiempo.
+  - Sincronización: un rechazo concreto se quita y se avisa (el aviso sobrevive a recargas) sin
+    bloquear; límite de espera de 15 s; red, límite, 409 simultáneo, 429, 5xx y respuestas rotas
+    se reintentan cada 5 s, y un 4xx de validación cada 45 s. Solo `seq_conflict`/`id_conflict`
+    (dos dispositivos) siguen pidiendo recargar.
+  - Pendiente: si el servidor rechaza un cambio, los movimientos posteriores que dependían de él
+    se quedan y pueden dejar la alineación imposible (`outbox.ts` `dropRejected`). Poco probable.
+  - Sin comprobar todavía en un partido real.
 
 ## En curso
 

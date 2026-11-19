@@ -76,6 +76,14 @@ describe("apiData", () => {
     expect(failure).toMatchObject({ status: 0, code: "network" });
   });
 
+  it("un 204 sin cuerpo es un éxito sin datos", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+
+    const result = await apiData("/x", { method: "DELETE" });
+
+    expect(result).toBeUndefined();
+  });
+
   it("trata una respuesta que no es JSON como respuesta inválida", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>", { status: 502 })));
 
@@ -260,5 +268,24 @@ describe("renovación de sesión", () => {
     mockApi({ "POST /auth/refresh": { status: 401, error: { code: "unauthorized", message: "No" } } });
 
     expect(await refreshAccessToken()).toBe(false);
+  });
+});
+
+describe("apiData con límite de espera", () => {
+  it("pasa la señal a fetch y un corte por ella es un ApiError «timeout»", async () => {
+    const hanging = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    );
+    vi.stubGlobal("fetch", hanging);
+    const controller = new AbortController();
+
+    const pending = apiData("/lento", { method: "POST", body: {}, signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ status: 0, code: "timeout" });
+    expect(isUnreachable(await pending.catch((e: unknown) => e))).toBe(true);
   });
 });
