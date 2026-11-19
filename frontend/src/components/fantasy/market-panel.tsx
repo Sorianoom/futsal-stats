@@ -13,12 +13,14 @@ import { useNow } from "@/lib/use-now";
 
 interface MarketPanelProps {
   balance: number;
+  /** Jugadores de los que ya tengo copia: en sus ventas no se puede pujar. */
+  ownedPlayers: ReadonlySet<string>;
   /** Tras una escritura recarga mi vista: el saldo pudo cambiar (se procesan cierres vencidos). */
   onChanged: () => void;
 }
 
 /** Ventas abiertas del mercado (banca y participantes) y mis pujas. */
-export function MarketPanel({ balance, onChanged }: MarketPanelProps) {
+export function MarketPanel({ balance, ownedPlayers, onChanged }: MarketPanelProps) {
   const { data: market, failed, reload } = useApiQuery(fantasyMarketQuery.key, fantasyMarketQuery.fetch);
   const [bidding, setBidding] = useState<MarketListing | null>(null);
   const now = useNow();
@@ -47,7 +49,13 @@ export function MarketPanel({ balance, onChanged }: MarketPanelProps) {
       {market && market.listings.length > 0 ? (
         <ul aria-label="Ventas abiertas" className="divide-y">
           {market.listings.map((listing) => (
-            <MarketRow key={listing.listing_id} listing={listing} now={now} onBid={() => setBidding(listing)} />
+            <MarketRow
+              key={listing.listing_id}
+              listing={listing}
+              now={now}
+              owned={ownedPlayers.has(listing.player_id)}
+              onBid={() => setBidding(listing)}
+            />
           ))}
         </ul>
       ) : null}

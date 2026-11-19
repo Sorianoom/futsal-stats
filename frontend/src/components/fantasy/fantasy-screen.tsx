@@ -65,7 +65,14 @@ const ICONS = {
 function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () => void }) {
   const tabs: FantasyTab[] = [
     { id: "team", label: "Mi equipo", short: "Equipo", icon: ICONS.team, render: () => <MyTeam view={view} onChanged={onChanged} /> },
-    { id: "market", label: "Mercado", short: "Mercado", icon: ICONS.market, render: () => <MarketPanel balance={view.me.balance} onChanged={onChanged} /> },
+    { id: "market", label: "Mercado", short: "Mercado", icon: ICONS.market, render: () => (
+        <MarketPanel
+          balance={view.me.balance}
+          ownedPlayers={new Set(view.squad.map((copy) => copy.player_id))}
+          onChanged={onChanged}
+        />
+      ),
+    },
     {
       id: "clauses",
       label: "Cláusulas",

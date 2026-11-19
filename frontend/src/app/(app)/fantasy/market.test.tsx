@@ -41,6 +41,18 @@ async function bidWith(list: HTMLElement, name: string, amount: string, button: 
 }
 
 describe("Mercado", () => {
+  it("en un jugador que ya tengo pone «Ya lo tienes» en vez de dejar pujar", async () => {
+    const hugo = { ...ME.squad[0], copy_id: "c9", player_id: "p7", name: "Hugo Mar" };
+    api({ "GET /fantasy/me": { data: { ...ME, squad: [...ME.squad, hugo] } } });
+
+    const list = await openMarket();
+
+    const row = rowOf(list, "Hugo Mar");
+    expect(row).toHaveTextContent("Ya lo tienes");
+    expect(within(row).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(rowOf(list, "Iker Sol")).getByRole("button", { name: "Cambiar puja" })).toBeInTheDocument();
+  });
+
   it("lista las ventas con jugador, posición, valor, puja mínima, vendedor y cierre", async () => {
     api();
 

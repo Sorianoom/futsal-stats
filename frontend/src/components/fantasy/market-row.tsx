@@ -9,11 +9,13 @@ const FIGURE = "rounded-xl bg-muted px-2 py-1 text-sm font-semibold tabular-nums
 interface MarketRowProps {
   listing: MarketListing;
   now: Date;
+  /** Ya tengo una copia de este jugador: no puedo pujar por otra. */
+  owned: boolean;
   onBid: () => void;
 }
 
 /** Una venta abierta: jugador, quién la vende, cifras, cierre y mi puja. */
-export function MarketRow({ listing, now, onBid }: MarketRowProps) {
+export function MarketRow({ listing, now, owned, onBid }: MarketRowProps) {
   return (
     <li className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -42,6 +44,8 @@ export function MarketRow({ listing, now, onBid }: MarketRowProps) {
         ) : null}
         {listing.mine ? (
           <span className="text-sm font-bold text-muted-foreground">La vendes tú</span>
+        ) : owned ? (
+          <span className="text-sm font-bold text-muted-foreground">Ya lo tienes</span>
         ) : (
           <Button variant={listing.my_bid === null ? "cta" : "outline"} className="rounded-xl" onClick={onBid}>
             {listing.my_bid === null ? "Pujar" : "Cambiar puja"}
