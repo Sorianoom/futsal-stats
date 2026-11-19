@@ -10,6 +10,7 @@ const REASONS: Record<string, string> = {
   void_of_undo: "no se puede deshacer un deshacer",
   already_voided: "ya estaba deshecho",
   void_not_last: "no era el último movimiento",
+  depends_on_rejected: "dependía de algo rechazado",
 };
 
 function what(rejection: Rejection, nameOf: (id: string) => string, timeText: (t: number) => string): string {

@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { canVisit, homeFor } from "./roles";
 
 describe("roles", () => {
-  it("el jugador empieza en las estadísticas y los entrenadores en el inicio", () => {
-    expect(homeFor("player")).toBe("/estadisticas");
+  it("el jugador empieza en el Fantasy y los entrenadores en el inicio", () => {
+    expect(homeFor("player")).toBe("/fantasy");
     expect(homeFor("head_coach")).toBe("/");
     expect(homeFor("assistant_coach")).toBe("/");
   });
 
-  it.each(["/estadisticas", "/estadisticas/", "/fantasy", "/fantasy/"])("el jugador puede ver %s", (pathname) => {
+  it.each(["/fantasy", "/fantasy/", "/estadisticas", "/estadisticas/"])("el jugador puede ver %s", (pathname) => {
     expect(canVisit("player", pathname)).toBe(true);
   });
 

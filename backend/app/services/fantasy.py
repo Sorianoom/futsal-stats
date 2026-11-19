@@ -1,7 +1,7 @@
-"""Fantasy: crear la liga, entrar en ella (con el alta tardía), mi equipo y la alineación.
+"""Fantasy: crear la liga, entrar en ella (con el alta tardía) y la alineación.
 
-Sin cron: lo pendiente (copias de jugadores nuevos, alta de usuarios nuevos) se pone al día en la
-siguiente petición del Fantasy.
+Sin cron: lo pendiente (copias de jugadores nuevos, alta de usuarios nuevos, ventas vencidas,
+jornadas por cerrar y el mercado de hoy) se pone al día en la siguiente petición del Fantasy.
 """
 
 import random
@@ -12,28 +12,15 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import fantasy_repo
+from app.db import fantasy_money_repo, fantasy_repo
 from app.db.models import FantasyLeague, FantasyParticipant, User
-from app.domain.fantasy.calendar import (
-    Round,
-    league_rounds,
-    lock_time,
-    madrid_date,
-    next_open_round,
-)
+from app.domain.fantasy.calendar import madrid_date
 from app.domain.fantasy.copies import deal_copies, missing_copies
-from app.domain.fantasy.lineup import Lineup, build_lineup, latest_lineup
-from app.domain.fantasy.rules import INITIAL_BALANCE, INITIAL_FIELD_COPIES, INITIAL_PLAYER_VALUE
+from app.domain.fantasy.lineup import Lineup, build_lineup
+from app.domain.fantasy.rules import INITIAL_BALANCE, INITIAL_FIELD_COPIES
 from app.domain.fantasy.standings import display_name
-from app.schemas.fantasy import (
-    LeagueCreatedOut,
-    LeagueOut,
-    LineupOut,
-    MyTeamOut,
-    NextRoundOut,
-    ParticipantOut,
-    SquadCopyOut,
-)
+from app.schemas.fantasy import LeagueCreatedOut, LineupOut
+from app.services.fantasy_processing import catch_up
 
 LeagueExistsError = fantasy_repo.LeagueExistsError
 
@@ -72,10 +59,12 @@ async def _missing(db: AsyncSession, league_id: uuid.UUID) -> list[tuple[str, in
 
 
 async def _add_missing_copies(db: AsyncSession, league_id: uuid.UUID) -> None:
-    """Jugadores activos sin copias (altas posteriores): sus copias van a la banca."""
+    """Jugadores activos sin copias (altas posteriores): sus copias van a la banca y empiezan
+    con el valor inicial."""
     missing = await _missing(db, league_id)
     if missing:
         await fantasy_repo.add_copies(db, league_id, missing)
+        await fantasy_money_repo.add_player_values(db, league_id, [pid for pid, _ in missing])
 
 
 async def _deal_initial_copies(
@@ -96,7 +85,22 @@ async def _deal_initial_copies(
 async def enter(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
 ) -> Membership | None:
-    """Liga activa y participante del usuario, tras poner al día lo pendiente.
+    """Liga activa y participante del usuario, tras poner al día todo lo pendiente (el alta y
+    luego lo vencido del mercado y las jornadas)."""
+    membership = await _join(db, user, now, rng)
+    if membership is None:
+        return None
+    if not await catch_up(db, now, rng):
+        return membership
+    participant = await fantasy_repo.get_participant(db, membership.league.id, user.id)
+    assert participant is not None
+    return Membership(membership.league, participant)
+
+
+async def _join(
+    db: AsyncSession, user: User, now: datetime, rng: random.Random
+) -> Membership | None:
+    """Liga activa y participante del usuario, con el alta tardía y las copias nuevas.
 
     Si falta algo, bloquea la fila de la liga para que dos peticiones a la vez no den de alta
     dos veces al mismo usuario ni dupliquen copias.
@@ -131,65 +135,24 @@ async def require_membership(
     return membership
 
 
-async def rounds_of(db: AsyncSession, league: FantasyLeague) -> list[Round]:
-    """Jornadas de la liga: partidos oficiales desde su inicio, por fecha."""
-    matches = await fantasy_repo.scheduled_matches(db, league.starts_on)
-    return league_rounds(matches, league.starts_on)
+async def participant_names(db: AsyncSession, league_id: uuid.UUID) -> dict[uuid.UUID, str]:
+    """Nombre visible de cada participante de la liga."""
+    return {
+        p.participant.id: display_name(p.player_name, p.email)
+        for p in await fantasy_repo.list_participants(db, league_id)
+    }
 
 
 def lineup_out(lineup: Lineup) -> LineupOut:
     return LineupOut(
         goalkeeper_copy_id=_uuid_or_none(lineup.goalkeeper),
         field_copy_ids=[_uuid_or_none(c) for c in lineup.field],
+        captain_copy_id=_uuid_or_none(lineup.captain),
     )
 
 
 def _uuid_or_none(value: str | None) -> uuid.UUID | None:
     return uuid.UUID(value) if value is not None else None
-
-
-async def my_team(
-    db: AsyncSession, user: User, now: datetime, rng: random.Random
-) -> MyTeamOut | None:
-    """Mi participante, plantilla, alineación vigente y siguiente jornada; None sin liga."""
-    membership = await enter(db, user, now, rng)
-    if membership is None:
-        return None
-    league, participant = membership.league, membership.participant
-    copies = await fantasy_repo.squad(db, participant.id)
-    history = await fantasy_repo.lineup_history(db, [participant.id])
-    upcoming = next_open_round(await rounds_of(db, league), now)
-    info = await fantasy_repo.participant_info(db, participant)
-    return MyTeamOut(
-        league=LeagueOut(id=league.id, starts_on=league.starts_on),
-        me=ParticipantOut(
-            participant_id=participant.id,
-            display_name=display_name(info.player_name, info.email),
-            balance=participant.balance,
-        ),
-        squad=[
-            SquadCopyOut(
-                copy_id=c.copy.id,
-                player_id=c.player.id,
-                name=c.player.name,
-                dorsal=c.player.dorsal,
-                position=c.player.position,
-                value=INITIAL_PLAYER_VALUE,
-            )
-            for c in copies
-        ],
-        lineup=lineup_out(latest_lineup(history.get(participant.id, []))),
-        next_round=(
-            NextRoundOut(
-                match_id=uuid.UUID(upcoming.match_id),
-                opponent=upcoming.opponent,
-                held_on=upcoming.held_on,
-                locks_at=lock_time(upcoming.held_on),
-            )
-            if upcoming is not None
-            else None
-        ),
-    )
 
 
 async def save_lineup(
@@ -199,6 +162,7 @@ async def save_lineup(
     rng: random.Random,
     goalkeeper: str | None,
     field: Sequence[str | None],
+    captain: str | None = None,
 ) -> Lineup:
     """Guarda una alineación nueva, que vale para la siguiente jornada no bloqueada.
 
@@ -209,7 +173,7 @@ async def save_lineup(
     squad = {
         str(c.copy.id): c.player.position for c in await fantasy_repo.squad(db, participant_id)
     }
-    lineup = build_lineup(goalkeeper, field, squad)
+    lineup = build_lineup(goalkeeper, field, squad, captain)
     await fantasy_repo.save_lineup(db, participant_id, lineup, now)
     await db.commit()
     return lineup

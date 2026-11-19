@@ -14,6 +14,18 @@ export interface FantasyParticipant {
   participant_id: string;
   display_name: string;
   balance: number;
+  /** Copias máximas por plantilla (7). */
+  squad_limit: number;
+  /** Suma del valor de mi plantilla. */
+  team_value: number;
+}
+
+/** Venta abierta de una de mis copias. */
+export interface CopyListing {
+  listing_id: string;
+  /** Precio mínimo que fijé; null si no puse ninguno. */
+  min_price: number | null;
+  closes_at: string;
 }
 
 /** Copia de un jugador real en mi plantilla. */
@@ -23,13 +35,25 @@ export interface SquadCopy {
   name: string;
   dorsal: number;
   position: Position;
+  /** Valor actual del jugador en la liga. */
   value: number;
+  /** Cambio de valor en la última jornada cerrada; 0 si no hay. */
+  value_change: number;
+  listing: CopyListing | null;
+  /** Cláusula de rescisión actual. */
+  clause: number;
+  /** Hasta cuándo no se puede clausular por fichaje reciente (puede haber pasado). */
+  protected_until: string;
+  /** Puntos del jugador en la última jornada puntuada (0 si no jugó); null si aún no hay ninguna. */
+  last_points: number | null;
 }
 
 /** 1 portero y 4 de campo; null es un hueco vacío, que puntúa 0. */
 export interface FantasyLineup {
   goalkeeper_copy_id: string | null;
   field_copy_ids: (string | null)[];
+  /** Copia capitana (puntúa doble) o null. */
+  captain_copy_id: string | null;
 }
 
 export interface NextRound {
@@ -46,11 +70,20 @@ export interface FantasyLeagueView {
   squad: SquadCopy[];
   lineup: FantasyLineup;
   next_round: NextRound | null;
+  /** Última jornada que ya puntúa (provisional o cerrada); null si aún no hay ninguna. */
+  last_round: LastRound | null;
+}
+
+export interface LastRound {
+  match_id: string;
+  opponent: string;
+  held_on: string;
 }
 
 export type FantasyMe = { league: null } | FantasyLeagueView;
 
-export type RoundStatus = "scored" | "pending";
+/** pending: sin puntos; scored: provisional (sin cerrar la jornada); settled: cerrada y congelada. */
+export type RoundStatus = "pending" | "scored" | "settled";
 
 export interface StandingsRound {
   match_id: string;
@@ -79,7 +112,9 @@ export interface RoundSlot {
   name: string | null;
   rating: number | null;
   goals: number;
+  /** Ya multiplicados si es el capitán. */
   points: number;
+  captain: boolean;
 }
 
 export interface FantasyRound {
@@ -87,4 +122,88 @@ export interface FantasyRound {
   status: RoundStatus;
   total: number;
   slots: RoundSlot[];
+  /** Lo que cobré en la jornada; 0 si aún no está cerrada. */
+  payout: number;
+  /** Puntuó 0 por tener saldo negativo al bloquearse la alineación. */
+  negative_balance: boolean;
+}
+
+/** Otro participante (vendedor, comprador…). null en su lugar significa la banca. */
+export interface ParticipantRef {
+  participant_id: string;
+  display_name: string;
+}
+
+export interface MarketListing {
+  listing_id: string;
+  copy_id: string;
+  player_id: string;
+  name: string;
+  dorsal: number;
+  position: Position;
+  value: number;
+  /** max(valor actual, precio mínimo del vendedor). */
+  min_bid: number;
+  /** null = la vende la banca. */
+  seller: ParticipantRef | null;
+  closes_at: string;
+  my_bid: number | null;
+  /** La vendo yo. */
+  mine: boolean;
+}
+
+export interface FantasyMarket {
+  /** Ya ordenados por cierre y nombre. */
+  listings: MarketListing[];
+}
+
+export interface BankSale {
+  price: number;
+  balance: number;
+}
+
+export type TransferKind = "market" | "bank_sale" | "clause";
+
+export interface Transfer {
+  at: string;
+  kind: TransferKind;
+  player_id: string;
+  name: string;
+  /** null = la banca. */
+  from: ParticipantRef | null;
+  to: ParticipantRef | null;
+  price: number;
+}
+
+export interface FantasyTransfers {
+  /** Del más reciente al más antiguo. */
+  transfers: Transfer[];
+}
+
+/** Copia con dueño de la liga y su cláusula. */
+export interface ClauseCopy {
+  copy_id: string;
+  player_id: string;
+  name: string;
+  dorsal: number;
+  position: Position;
+  value: number;
+  clause: number;
+  owner: ParticipantRef;
+  protected_until: string;
+  /** Es mía. */
+  mine: boolean;
+}
+
+export interface FantasyClauses {
+  /** Hoy hay partido (hora de Madrid): nadie puede clausular. */
+  match_day: boolean;
+  /** Ya ordenadas por dueño y dorsal. */
+  copies: ClauseCopy[];
+}
+
+export interface ClauseRaise {
+  clause: number;
+  cost: number;
+  balance: number;
 }

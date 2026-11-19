@@ -39,14 +39,14 @@ function acceptReplying(reply: MockReply) {
 }
 
 describe("InvitacionPage", () => {
-  it("crea la cuenta, inicia sesión con esas credenciales y lleva a las estadísticas", async () => {
+  it("crea la cuenta, inicia sesión con esas credenciales y lleva al Fantasy", async () => {
     const server = acceptReplying({ status: 201, data: CREATED });
     const login = vi.fn().mockResolvedValue(undefined);
     renderPage(login);
 
     await fillForm();
 
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/estadisticas"));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/fantasy"));
     expect(server.calls[0].body).toEqual({
       token: "tok-123",
       email: "ana@club.es",

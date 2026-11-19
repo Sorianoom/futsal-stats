@@ -1,8 +1,8 @@
 import type { Role } from "@/lib/api/types";
 
-/** Pantallas que puede abrir un jugador (con sus subrutas): estadísticas y su Fantasy. */
-const PLAYER_SECTIONS = ["/estadisticas", "/fantasy"];
-const PLAYER_HOME = "/estadisticas";
+/** Pantallas que puede abrir un jugador (con sus subrutas): su Fantasy y las estadísticas de todos. */
+const PLAYER_SECTIONS = ["/fantasy", "/estadisticas"];
+const PLAYER_HOME = "/fantasy";
 const STAFF_HOME = "/";
 
 export function isPlayer(role: Role | undefined): boolean {

@@ -63,3 +63,54 @@ describe("queryCache.setIfCurrent", () => {
     expect(queryCache.get("a")).toBe("nuevo");
   });
 });
+
+describe("queryCache.invalidatePrefix", () => {
+  it("olvida las claves que empiezan por el prefijo y deja las demás", () => {
+    queryCache.set("x:1", "uno");
+    queryCache.set("x:2", "dos");
+    queryCache.set("y:1", "otra");
+
+    queryCache.invalidatePrefix("x:");
+
+    expect(queryCache.get("x:1")).toBeUndefined();
+    expect(queryCache.get("x:2")).toBeUndefined();
+    expect(queryCache.get("y:1")).toBe("otra");
+  });
+
+  it("impide guardar las respuestas en curso del prefijo, aunque la clave aún no estuviera", () => {
+    const startedAt = queryCache.generation();
+
+    queryCache.invalidatePrefix("x:");
+    queryCache.setIfCurrent("x:nueva", "de antes del cambio", startedAt);
+
+    expect(queryCache.get("x:nueva")).toBeUndefined();
+  });
+
+  it("no impide guardar la respuesta en curso de una clave sin ese prefijo", () => {
+    const startedAt = queryCache.generation();
+
+    queryCache.invalidatePrefix("x:");
+    queryCache.setIfCurrent("y:1", "de y", startedAt);
+
+    expect(queryCache.get("y:1")).toBe("de y");
+  });
+
+  it("una petición que empieza tras invalidar el prefijo sí guarda", () => {
+    queryCache.invalidatePrefix("x:");
+    const startedAt = queryCache.generation();
+
+    queryCache.setIfCurrent("x:1", "nuevo", startedAt);
+
+    expect(queryCache.get("x:1")).toBe("nuevo");
+  });
+
+  it("tras vaciar, una invalidación de prefijo antigua no bloquea peticiones nuevas", () => {
+    queryCache.invalidatePrefix("x:");
+    queryCache.clear();
+    const startedAt = queryCache.generation();
+
+    queryCache.setIfCurrent("x:1", "nuevo", startedAt);
+
+    expect(queryCache.get("x:1")).toBe("nuevo");
+  });
+});

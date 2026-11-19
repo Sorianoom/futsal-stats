@@ -92,6 +92,45 @@ describe("useMatchLog: un rechazo no bloquea la anotación", () => {
     expect(posts(server)).toHaveLength(1);
   });
 
+  it("si se rechaza un cambio, los cambios pendientes que dependían de él se quitan y se avisan", async () => {
+    const original = globalThis.fetch;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // Rechaza el cambio en que entra p6 como si p6 no existiera.
+    const { result, server } = setup((request) => {
+      const body = request.body as Omit<SyncBody, "lineup_events"> & {
+        lineup_events: { id: string; payload: { player_in?: string } }[];
+      };
+      const bad = body.lineup_events.filter((l) => l.payload.player_in === "p6").map((l) => l.id);
+      const accepted = idsOf(body).filter((id) => !bad.includes(id));
+      return { data: { accepted, duplicates: [], rejected: bad.map((id) => ({ id, reason: "unknown_player" })) } };
+    });
+    const mocked = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+      gate.then(() => mocked(input, init))) as typeof fetch;
+    act(() => {
+      result.current.recordLineup({ type: "substituted", t: 60, player_out: "p1", player_in: "p6" });
+    });
+    await act(async () => Promise.resolve());
+    // Anotado mientras el primero va de camino: saca a p6, que solo está en pista si entró.
+    act(() => {
+      result.current.recordLineup({ type: "substituted", t: 90, player_out: "p6", player_in: "p7" });
+      result.current.recordLineup({ type: "substituted", t: 120, player_out: "p2", player_in: "p8" });
+    });
+    release();
+    await waitFor(() => expect(result.current.pending).toBe(0));
+    globalThis.fetch = original;
+
+    expect(result.current.lineup.map((l) => l.payload.type === "substituted" && l.payload.player_in)).toEqual([
+      false,
+      "p8",
+    ]);
+    expect(result.current.rejections.map((r) => r.reason)).toEqual(["unknown_player", "depends_on_rejected"]);
+    expect(result.current.rejections[1].lineup?.payload).toMatchObject({ player_out: "p6", player_in: "p7" });
+    const sent = posts(server).flatMap((c) => (c.body as SyncBody).lineup_events.map((l) => l.id));
+    expect(sent).toHaveLength(2);
+  });
+
   it("un choque de secuencia con otro dispositivo sigue pidiendo recargar", async () => {
     const { result } = setup((request) => ({
       data: {

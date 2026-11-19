@@ -7,12 +7,15 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     MetaData,
@@ -25,6 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.auth_sessions import RevokeReason
+from app.domain.fantasy.market import LedgerKind, TransferKind
 from app.domain.fantasy.rules import LINEUP_FIELD_SLOTS
 from app.domain.points.attendance import AttendanceStatus, SessionKind
 from app.domain.points.callup import PlayerStatus, Position
@@ -402,6 +406,8 @@ class FantasyLeague(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Último día (Madrid) con mercado de la banca abierto. Si nadie entra un día, no hay mercado.
+    market_day: Mapped[date | None] = mapped_column(Date, nullable=True, default=None)
 
 
 class FantasyParticipant(Base):
@@ -432,6 +438,8 @@ class FantasyCopy(Base):
         UniqueConstraint("owner_id", "player_id"),
         CheckConstraint("copy_number >= 1", name="copy_number_positive"),
         CheckConstraint("(owner_id IS NULL) = (acquired_at IS NULL)", name="acquired_iff_owned"),
+        CheckConstraint("(owner_id IS NULL) = (clause IS NULL)", name="clause_iff_owned"),
+        CheckConstraint("clause >= 0", name="clause_not_negative"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -446,6 +454,8 @@ class FantasyCopy(Base):
     acquired_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    # Cláusula de rescisión en miles; solo las copias con dueño la tienen.
+    clause: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
 
 class FantasyLineup(Base):
@@ -461,6 +471,10 @@ class FantasyLineup(Base):
         ForeignKey("fantasy_participants.id", ondelete="CASCADE")
     )
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Copia capitana (puntúa doble); None = sin capitán.
+    captain_copy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("fantasy_copies.id", ondelete="SET NULL"), nullable=True, default=None
+    )
 
 
 class FantasyLineupSlot(Base):
@@ -481,3 +495,190 @@ class FantasyLineupSlot(Base):
     copy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("fantasy_copies.id", ondelete="SET NULL"), nullable=True, index=True
     )
+
+
+# --- Fantasy, paso 3: mercado, dinero y cierre de jornada ----------------------------------------
+
+
+def _kind_check(enum_class: type[PyEnum]) -> str:
+    values = ", ".join(f"'{member.value}'" for member in enum_class)
+    return f"kind IN ({values})"
+
+
+def _participant_fk(nullable: bool = False) -> Mapped[Any]:
+    return mapped_column(
+        ForeignKey("fantasy_participants.id", ondelete="CASCADE"), nullable=nullable
+    )
+
+
+class FantasyPlayerValue(Base):
+    """Valor actual de un jugador en una liga. Se crea con las copias del jugador."""
+
+    __tablename__ = "fantasy_player_values"
+    __table_args__ = (CheckConstraint("value >= 0", name="value_not_negative"),)
+
+    league_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id"), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer)
+
+
+class FantasyTransfer(Base):
+    """Historial de propiedad: el dueño de una copia en un instante es el del último traspaso
+    anterior. `from`/`to` None = la banca. El id da el orden de registro."""
+
+    __tablename__ = "fantasy_transfers"
+    __table_args__ = (
+        CheckConstraint(_kind_check(TransferKind), name="kind_valid"),
+        CheckConstraint("price >= 0", name="price_not_negative"),
+        Index("ix_fantasy_transfers_copy_id_at", "copy_id", "at"),
+        Index("ix_fantasy_transfers_league_id_at", "league_id", "at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    league_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_leagues.id", ondelete="CASCADE")
+    )
+    copy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("fantasy_copies.id", ondelete="CASCADE"))
+    from_participant_id: Mapped[uuid.UUID | None] = _participant_fk(nullable=True)
+    to_participant_id: Mapped[uuid.UUID | None] = _participant_fk(nullable=True)
+    price: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[TransferKind] = mapped_column(_enum(TransferKind))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FantasyLedgerEntry(Base):
+    """Movimiento del saldo (con signo). Saldo en t = saldo actual − movimientos desde t."""
+
+    __tablename__ = "fantasy_ledger"
+    __table_args__ = (
+        CheckConstraint(_kind_check(LedgerKind), name="kind_valid"),
+        Index("ix_fantasy_ledger_participant_id_at", "participant_id", "at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    participant_id: Mapped[uuid.UUID] = _participant_fk()
+    amount: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[LedgerKind] = mapped_column(_enum(LedgerKind))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+OPEN_LISTING = "resolved_at IS NULL AND cancelled_at IS NULL"
+
+
+class FantasyListing(Base):
+    """Copia en venta. Sin vendedor es de la banca (y tiene `market_day`). Una sola venta
+    abierta por copia (índice único parcial)."""
+
+    __tablename__ = "fantasy_listings"
+    __table_args__ = (
+        CheckConstraint("min_price IS NULL OR min_price >= 0", name="min_price_not_negative"),
+        CheckConstraint(
+            "(seller_participant_id IS NULL) = (market_day IS NOT NULL)", name="bank_has_day"
+        ),
+        CheckConstraint("resolved_at IS NULL OR cancelled_at IS NULL", name="one_ending"),
+        CheckConstraint("closes_at > opened_at", name="closes_after_opening"),
+        Index(
+            "ux_fantasy_listings_one_open",
+            "copy_id",
+            unique=True,
+            postgresql_where=text(OPEN_LISTING),
+        ),
+        Index(
+            "ix_fantasy_listings_open_closes_at",
+            "league_id",
+            "closes_at",
+            postgresql_where=text(OPEN_LISTING),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    league_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_leagues.id", ondelete="CASCADE")
+    )
+    copy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("fantasy_copies.id", ondelete="CASCADE"))
+    seller_participant_id: Mapped[uuid.UUID | None] = _participant_fk(nullable=True)
+    min_price: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closes_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    market_day: Mapped[date | None] = mapped_column(Date, nullable=True, default=None)
+
+
+class FantasyBid(Base):
+    """Puja en sobre cerrado. `updated_at` es la hora del último cambio y desempata."""
+
+    __tablename__ = "fantasy_bids"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "participant_id"),
+        CheckConstraint("amount >= 0", name="amount_not_negative"),
+        Index("ix_fantasy_bids_participant_id", "participant_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_listings.id", ondelete="CASCADE")
+    )
+    participant_id: Mapped[uuid.UUID] = _participant_fk()
+    amount: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FantasySettledRound(Base):
+    """Jornada cerrada: sus puntos, cobros y cambios de valor quedan congelados."""
+
+    __tablename__ = "fantasy_settled_rounds"
+
+    league_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("matches.id", ondelete="CASCADE"), primary_key=True
+    )
+    settled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+def _settled_round_fk() -> ForeignKeyConstraint:
+    return ForeignKeyConstraint(
+        ["league_id", "match_id"],
+        ["fantasy_settled_rounds.league_id", "fantasy_settled_rounds.match_id"],
+        ondelete="CASCADE",
+    )
+
+
+class FantasyRoundScore(Base):
+    """Puntos congelados de un participante en una jornada cerrada, con el detalle por hueco."""
+
+    __tablename__ = "fantasy_round_scores"
+    __table_args__ = (_settled_round_fk(),)
+
+    league_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    match_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    participant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fantasy_participants.id", ondelete="CASCADE"), primary_key=True
+    )
+    points: Mapped[int] = mapped_column(Integer)
+    payout: Mapped[int] = mapped_column(Integer)
+    negative_balance: Mapped[bool] = mapped_column(Boolean)
+    # [{slot, copy_id, player_id, rating, goals, points}] en el orden de los huecos.
+    slots: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+
+
+class FantasyValueChange(Base):
+    """Cambio de valor de un jugador al cerrar una jornada."""
+
+    __tablename__ = "fantasy_value_changes"
+    __table_args__ = (_settled_round_fk(),)
+
+    league_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    match_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id"), primary_key=True)
+    before: Mapped[int] = mapped_column(Integer)
+    after: Mapped[int] = mapped_column(Integer)

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.domain.fantasy.lineup import Lineup
-from app.domain.fantasy.rules import MIN_PLAYER_POINTS, POINTS_PER_GOAL
+from app.domain.fantasy.rules import CAPTAIN_MULTIPLIER, MIN_PLAYER_POINTS, POINTS_PER_GOAL
 from app.domain.points.callup import Position
 from app.domain.rating.match import PlayerMatchResult
 
@@ -32,6 +32,8 @@ class SlotScore:
     rating: float | None
     goals: int
     points: int
+    # Capitán: `points` ya va multiplicado.
+    captain: bool = False
 
 
 def _slot_score(
@@ -39,18 +41,24 @@ def _slot_score(
     copy_id: str | None,
     copy_players: Mapping[str, str],
     results: Mapping[str, PlayerResult],
+    captain: bool,
 ) -> SlotScore:
     player_id = copy_players.get(copy_id) if copy_id is not None else None
     result = results.get(player_id) if player_id is not None else None
+    multiplier = CAPTAIN_MULTIPLIER if captain else 1
     if result is None:
-        return SlotScore(slot, copy_id, player_id, None, 0, MIN_PLAYER_POINTS)
-    points = player_points(result.rating, result.goals)
-    return SlotScore(slot, copy_id, player_id, result.rating, result.goals, points)
+        return SlotScore(slot, copy_id, player_id, None, 0, MIN_PLAYER_POINTS * multiplier, captain)
+    points = player_points(result.rating, result.goals) * multiplier
+    return SlotScore(slot, copy_id, player_id, result.rating, result.goals, points, captain)
 
 
 def score_lineup(
     lineup: Lineup, copy_players: Mapping[str, str], results: Mapping[str, PlayerResult]
 ) -> list[SlotScore]:
     """Puntos de los 5 huecos. `copy_players` da el jugador de cada copia; `results` la nota y
-    los goles de cada jugador en el partido (vacío si la jornada aún no puntúa)."""
-    return [_slot_score(slot, c, copy_players, results) for slot, c in lineup.slots()]
+    los goles de cada jugador en el partido (vacío si la jornada aún no puntúa). El capitán
+    puntúa por `CAPTAIN_MULTIPLIER`."""
+    return [
+        _slot_score(slot, c, copy_players, results, c is not None and c == lineup.captain)
+        for slot, c in lineup.slots()
+    ]

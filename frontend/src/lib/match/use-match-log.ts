@@ -45,6 +45,9 @@ const CONFLICT_REASONS = ["seq_conflict", "id_conflict"];
 export type LogStatus = "synced" | "pending" | "offline" | "conflict" | "stalled";
 
 /** Algo anotado que el servidor rechazó y ya no está en el registro local. */
+/** Motivo propio (no del servidor): el movimiento pendiente dependía de algo rechazado. */
+export const DEPENDS_ON_REJECTED = "depends_on_rejected";
+
 export interface Rejection {
   id: string;
   reason: string;
@@ -264,19 +267,22 @@ export function useMatchLog({
     [matchId, syncTimeoutMs],
   );
 
-  /** Quita lo rechazado (y lo que lo deshacía) y lo deja anotado en el aviso. */
+  /** Quita lo rechazado (y lo que dependía de ello) y lo deja anotado en el aviso. */
   const discardRejected = useCallback(
     (batch: Outbox, rejected: readonly { id: string; reason: string }[]): ReadonlySet<string> => {
       if (rejected.length === 0) return new Set();
       const entries = describeRejected(batch, eventsRef.current, rejected);
       const ids = new Set(rejected.map((item) => item.id));
-      const next = dropRejected(lineupRef.current, eventsRef.current, outbox.current, ids);
+      const next = dropRejected(lineupRef.current, eventsRef.current, outbox.current, ids, idsOf(batch));
+      const dependent = next.impossible.map(
+        (lineup): Rejection => ({ id: lineup.id, reason: DEPENDS_ON_REJECTED, lineup }),
+      );
       lineupRef.current = next.lineup;
       eventsRef.current = next.events;
       next.dropped.forEach((id) => order.current.delete(id));
       commit(next.outbox);
       publish();
-      setRejections((previous) => [...previous, ...entries]);
+      setRejections((previous) => [...previous, ...entries, ...dependent]);
       return next.dropped;
     },
     [commit, publish],

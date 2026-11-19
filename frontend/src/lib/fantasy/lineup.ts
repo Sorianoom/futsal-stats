@@ -17,17 +17,29 @@ export function slotOptions(squad: readonly SquadCopy[], lineup: FantasyLineup, 
   return squad.filter((copy) => copy.position === "field" && !takenElsewhere.has(copy.copy_id));
 }
 
+/** Pone una copia en un hueco. Si el capitán sale de la alineación, se queda sin capitán. */
 export function assignSlot(lineup: FantasyLineup, slot: LineupSlot, copyId: string | null): FantasyLineup {
-  if (slot.kind === "goalkeeper") return { ...lineup, goalkeeper_copy_id: copyId };
-  return {
-    ...lineup,
-    field_copy_ids: lineup.field_copy_ids.map((id, index) => (index === slot.index ? copyId : id)),
-  };
+  const next =
+    slot.kind === "goalkeeper"
+      ? { ...lineup, goalkeeper_copy_id: copyId }
+      : {
+          ...lineup,
+          field_copy_ids: lineup.field_copy_ids.map((id, index) => (index === slot.index ? copyId : id)),
+        };
+  const captain = next.captain_copy_id;
+  return captain !== null && !isLinedUp(next, captain) ? { ...next, captain_copy_id: null } : next;
+}
+
+/** Hace capitán a una copia alineada, o le quita la capitanía si ya lo era. */
+export function toggleCaptain(lineup: FantasyLineup, copyId: string): FantasyLineup {
+  if (!isLinedUp(lineup, copyId)) return lineup;
+  return { ...lineup, captain_copy_id: lineup.captain_copy_id === copyId ? null : copyId };
 }
 
 export function sameLineup(a: FantasyLineup, b: FantasyLineup): boolean {
   return (
     a.goalkeeper_copy_id === b.goalkeeper_copy_id &&
+    a.captain_copy_id === b.captain_copy_id &&
     a.field_copy_ids.length === b.field_copy_ids.length &&
     a.field_copy_ids.every((id, index) => id === b.field_copy_ids[index])
   );

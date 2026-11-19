@@ -88,3 +88,26 @@ def test_without_lineup_before_the_lock_the_round_has_an_empty_lineup() -> None:
 def test_latest_lineup_is_the_last_saved() -> None:
     assert latest_lineup([_saved(23, "last"), _saved(10, "first")]).goalkeeper == "last"
     assert latest_lineup([]) == EMPTY_LINEUP
+
+
+# --- Capitán -------------------------------------------------------------------------------------
+
+
+def test_the_captain_is_optional() -> None:
+    assert build_lineup("gk", ["a"], SQUAD).captain is None
+
+
+def test_any_lined_up_copy_can_be_captain_also_the_goalkeeper() -> None:
+    assert build_lineup("gk", ["a"], SQUAD, captain="gk").captain == "gk"
+    assert build_lineup("gk", ["a"], SQUAD, captain="a").captain == "a"
+
+
+def test_the_captain_must_be_in_the_lineup() -> None:
+    with pytest.raises(LineupError):
+        build_lineup("gk", ["a"], SQUAD, captain="b")
+
+
+def test_without_captain_the_copy_ids_do_not_change() -> None:
+    lineup = Lineup(goalkeeper="gk", field=("a", None, None, None), captain="a")
+
+    assert lineup.copy_ids() == {"gk", "a"}

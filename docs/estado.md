@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-19 (cronómetro y corrección en directo, en `main`).
+Última actualización: 2026-11-19 (Fantasy pasos 3, 4 y 5 subidos a `main`; migraciones 0008, 0009 y 0010 aplicadas en Neon).
 
 ## Hecho y en producción
 
@@ -75,24 +75,60 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     bloquear; límite de espera de 15 s; red, límite, 409 simultáneo, 429, 5xx y respuestas rotas
     se reintentan cada 5 s, y un 4xx de validación cada 45 s. Solo `seq_conflict`/`id_conflict`
     (dos dispositivos) siguen pidiendo recargar.
-  - Pendiente: si el servidor rechaza un cambio, los movimientos posteriores que dependían de él
-    se quedan y pueden dejar la alineación imposible (`outbox.ts` `dropRejected`). Poco probable.
   - Sin comprobar todavía en un partido real.
 
 ## En curso
 
-- **Fantasy, paso 2: liga, alineaciones, puntos y clasificación** (rama `feat/fantasy-liga`, sin
-  subir). Tests en verde y probado contra la API local. **Lleva la migración 0007**: aplicarla en
-  Neon antes de subir a `main`.
+- **Fantasy, paso 5: capitán, diseño nuevo y jugadores solo con el Fantasy** (subido el
+  2026-11-19, migración 0010 aplicada en Neon).
+  - Capitán opcional que puntúa doble (reglas en `docs/fantasy.md`, sección «Capitán»).
+  - La cuenta de jugador ve el Fantasy (ahora su inicio) y «Estadísticas» con los datos de todos
+    (decidido el 2026-11-19); el resto de pantallas le devuelven al Fantasy.
+  - Sobres de bienvenida (`pack-opening.tsx`): la primera vez que alguien entra al Fantasy abre un
+    sobre por cada jugador de su plantilla (tiembla, se rompe y gira la carta; sin animación con
+    «reducir movimiento»). Se recuerda por participante en localStorage: en otro dispositivo
+    vuelven a salir una vez.
+  - Diseño (https://claude.ai/artifact/WdFLa1Zx4AKCmxuubzBnKT): saldo en tarjeta oscura, próxima
+    jornada con su fecha, alineación sobre una pista con los puntos de la última jornada de cada
+    jugador y la C de capitán, y en el móvil las secciones en una barra fija abajo.
+- **Rechazo de un cambio con cambios posteriores** (subido el 2026-11-19, sin migración; fue con el
+  push del Fantasy). Si el servidor rechaza un movimiento de alineación, `dropRejected` (`outbox.ts`)
+  quita también los movimientos pendientes que sin él ya no son posibles (p. ej. sacar a quien no
+  llegó a entrar), en cadena, y sus deshacer. Lo ya aceptado por el servidor no se toca. Salen en
+  el aviso como «dependía de algo rechazado».
+- **Fantasy, paso 4: cláusulas** (subido el 2026-11-19, migración
+  0009 aplicada en Neon).
+  - Reglas de detalle acordadas el 2026-11-19: `docs/fantasy.md`, sección «Detalles de las
+    cláusulas». Contrato de la API: `docs/fantasy-api-paso4.md`.
+  - Cada copia con dueño guarda su cláusula (la 0009 la rellena con 1,5 × el valor actual).
+    Clausulazo inmediato bajo el bloqueo de la liga; anula la venta de la copia si la había.
+  - Pantalla: pestaña «Cláusulas» (copias de los demás, protección y aviso de día de partido),
+    cláusula y «Subir cláusula» en mi plantilla, y «Clausulazo» en los fichajes.
+  - Probado en el navegador contra la API local (clausulazo, subir cláusula y fichajes). Salieron
+    y se arreglaron tres cosas: el resumen leía `team_value`/`squad_limit` fuera de `me` («NaN M» y
+    «2/undefined», fallo del paso 3 que los tests no veían por el fixture); la lista de cláusulas
+    no se recargaba tras clausular; y ahora la lista avisa antes de abrir el diálogo si ya tengo
+    ese jugador («Ya lo tienes en tu plantilla») o la plantilla está llena.
+  - Arreglado de paso un test intermitente del mercado (`changed_owner`): la copia elegida podía
+    ser de un jugador que el otro ya tenía. Probablemente era el fallo sin identificar del backend.
+- **Fantasy, paso 3: mercado** (subido el 2026-11-19, migración 0008
+  aplicada en Neon).
+  - Reglas de detalle decididas por defecto (cierre de jornada al día siguiente y congelado,
+    propiedad en el bloqueo, pujas sin reserva de dinero): `docs/fantasy.md`, sección «Detalles
+    del mercado y cierre de jornada». Contrato de la API: `docs/fantasy-api-paso3.md`.
+  - Tablas nuevas: valores por jugador, traspasos (historial de propiedad), movimientos de saldo,
+    ventas, pujas, jornadas cerradas con sus puntos por participante y cambios de valor.
+  - Sin cron: al entrar en cualquier ruta del Fantasy se procesa lo vencido (ventas cerradas,
+    jornadas por cerrar, mercado de la banca de hoy) bloqueando la fila de la liga.
+  - Revisión de código: sin CRITICAL ni HIGH; los MEDIUM y LOW arreglados (reparto de copias en
+    venta, bloqueo con un partido incoherente, caché de jornadas por prefijo, precio real tras
+    vender a la banca, saldo recargado tras pujar). Backend 891 tests, frontend 950.
+- **Fantasy, paso 2: liga, alineaciones, puntos y clasificación** (push directo a `main`,
+  `2fc0f88`; migración 0007 aplicada en Neon según el usuario, no verificado desde aquí).
   - Partidos con `is_official` (por defecto sí; `PATCH /matches/{id}`); solo los oficiales son
     jornadas. Casilla «Amistoso» al crear y botón en el detalle de estadísticas.
   - Rutas `/fantasy/*` para todos los roles salvo `POST /fantasy/league` (entrenador principal).
     Dominio puro en `backend/app/domain/fantasy/`, orquestación en `backend/app/services/`.
-  - Dinero en enteros de miles (1000 = 1 M). Valor fijo de 4 M hasta el paso 3.
-  - Puntos y clasificación se calculan en cada consulta, sin guardarse (como la nota).
-  - Alta tardía y copias de jugadores nuevos se ponen al día en cualquier petición del Fantasy.
-  - Pendiente para el paso 3: regla de saldo negativo al bloquear, valores por jornada, propiedad
-    de la copia en el momento del bloqueo, plantilla máxima de 7.
 - **Fantasy, paso 1: cuentas de jugador** (push directo a `main`, `dfafb11`; migración 0006
   aplicada en Neon antes). Revisión de seguridad sin hallazgos graves (arreglos menores hechos).
   - Reglamento completo del Fantasy, acordado regla a regla: `docs/fantasy.md`.
@@ -114,7 +150,7 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 - Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
 - Comprobar en producción que `x-real-ip` llega con la IP real y que el bloqueo funciona.
-- Fantasy, pasos 3 y 4 de `docs/fantasy.md`: mercado y cláusulas.
+- Comprobar en producción el Fantasy (pasos 2, 3 y 4).
 - Cambiar la contraseña de `neondb_owner` en Neon: se escribió en claro en un comando (historial
   de zsh). Para migrar, poner `DIRECT_DATABASE_URL` en `backend/.env` en vez de en el comando.
 - Un test del frontend falló una vez bajo carga y pasó en las tres repeticiones siguientes; no se

@@ -1,5 +1,7 @@
 import type { EventIn, LineupEventRecord, LoggedEvent, RatingIn } from "@/lib/api/match-types";
 
+import { LineupError, replayRecords } from "./lineup";
+
 /** Lo anotado que todavía no ha confirmado el servidor. */
 export interface Outbox {
   lineup: readonly LineupEventRecord[];
@@ -119,8 +121,10 @@ export interface DroppedLog {
   lineup: readonly LineupEventRecord[];
   events: readonly LoggedEvent[];
   outbox: Outbox;
-  /** Ids quitados: los rechazados y lo que deshacía algo quitado. */
+  /** Ids quitados: los rechazados, lo que dejó de ser posible sin ellos y lo que deshacía algo quitado. */
   dropped: ReadonlySet<string>;
+  /** Movimientos pendientes quitados porque dependían de algo rechazado (p. ej. sacar a quien no entró). */
+  impossible: readonly LineupEventRecord[];
 }
 
 function voidsOf(item: LineupEventRecord | LoggedEvent | EventIn): string | null {
@@ -128,22 +132,25 @@ function voidsOf(item: LineupEventRecord | LoggedEvent | EventIn): string | null
   return item.voids_event_id ?? null;
 }
 
-/**
- * Quita de la vista y de la bandeja lo que el servidor rechazó, junto con los deshacer que apuntan
- * a algo quitado (si no, el registro local dejaría de ser coherente).
- */
-export function dropRejected(
-  lineup: readonly LineupEventRecord[],
-  events: readonly LoggedEvent[],
-  outbox: Outbox,
-  rejected: ReadonlySet<string>,
-): DroppedLog {
-  const dropped = new Set(rejected);
-  const all = [...lineup, ...events, ...outbox.lineup, ...outbox.events];
+function fits(records: readonly LineupEventRecord[]): boolean {
+  try {
+    replayRecords(records);
+    return true;
+  } catch (error) {
+    if (error instanceof LineupError) return false;
+    throw error;
+  }
+}
+
+/** Añade a `dropped` lo que deshace algo quitado, hasta que no crezca. */
+function dropUndosOfDropped(
+  items: readonly (LineupEventRecord | LoggedEvent | EventIn)[],
+  dropped: Set<string>,
+): void {
   let grew = true;
   while (grew) {
     grew = false;
-    for (const item of all) {
+    for (const item of items) {
       const voids = voidsOf(item);
       if (voids !== null && dropped.has(voids) && !dropped.has(item.id)) {
         dropped.add(item.id);
@@ -151,10 +158,43 @@ export function dropRejected(
       }
     }
   }
+}
+
+/**
+ * Quita de la vista y de la bandeja lo que el servidor rechazó, junto con lo que dependía de ello:
+ * los deshacer que apuntan a algo quitado y los movimientos de alineación pendientes que ya no son
+ * posibles (si no, el registro local dejaría de ser coherente). Lo de `settled` ya lo aceptó el
+ * servidor y no se toca.
+ */
+export function dropRejected(
+  lineup: readonly LineupEventRecord[],
+  events: readonly LoggedEvent[],
+  outbox: Outbox,
+  rejected: ReadonlySet<string>,
+  settled: ReadonlySet<string> = new Set(),
+): DroppedLog {
+  const dropped = new Set(rejected);
+  const all = [...lineup, ...events, ...outbox.lineup, ...outbox.events];
+  const pending = new Set(outbox.lineup.map((item) => item.id));
+  const impossible: LineupEventRecord[] = [];
+  const kept: LineupEventRecord[] = [];
+  for (const record of lineup) {
+    dropUndosOfDropped(all, dropped);
+    if (dropped.has(record.id)) continue;
+    const candidate = [...kept, record];
+    if (pending.has(record.id) && !settled.has(record.id) && !fits(candidate)) {
+      dropped.add(record.id);
+      if (record.payload.type !== "undo") impossible.push(record);
+      continue;
+    }
+    kept.push(record);
+  }
+  dropUndosOfDropped(all, dropped);
   return {
     lineup: lineup.filter((item) => !dropped.has(item.id)),
     events: events.filter((item) => !dropped.has(item.id)),
     outbox: without(outbox, dropped),
     dropped,
+    impossible,
   };
 }

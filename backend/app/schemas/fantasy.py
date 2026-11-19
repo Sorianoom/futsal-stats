@@ -6,6 +6,8 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.fantasy.calendar import RoundStatus
+from app.domain.fantasy.market import TransferKind
+from app.domain.fantasy.rules import MAX_MONEY_AMOUNT
 from app.domain.points.callup import Position
 
 # Tope de seguridad del cuerpo: más de 4 de campo ya es `invalid_lineup`, pero una lista enorme
@@ -28,6 +30,17 @@ class ParticipantOut(BaseModel):
     participant_id: uuid.UUID
     display_name: str
     balance: int
+    squad_limit: int
+    # Suma del valor actual de su plantilla.
+    team_value: int
+
+
+class SquadListingOut(BaseModel):
+    """Venta abierta de una copia de mi plantilla. `min_price` es el que puse (o null)."""
+
+    listing_id: uuid.UUID
+    min_price: int | None
+    closes_at: datetime
 
 
 class SquadCopyOut(BaseModel):
@@ -36,12 +49,22 @@ class SquadCopyOut(BaseModel):
     name: str
     dorsal: int
     position: Position
+    # Valor actual del jugador en la liga y su cambio en la última jornada cerrada (0 si no hay).
     value: int
+    value_change: int
+    listing: SquadListingOut | None
+    # Cláusula actual y hasta cuándo no se puede clausular (puede haber pasado ya).
+    clause: int
+    protected_until: datetime
+    # Puntos del jugador en la última jornada puntuada (0 si no jugó); null si aún no hay ninguna.
+    last_points: int | None
 
 
 class LineupOut(BaseModel):
     goalkeeper_copy_id: uuid.UUID | None
     field_copy_ids: list[uuid.UUID | None]
+    # Copia capitana (puntúa doble) o null.
+    captain_copy_id: uuid.UUID | None
 
 
 class LineupIn(BaseModel):
@@ -51,6 +74,7 @@ class LineupIn(BaseModel):
     field_copy_ids: list[uuid.UUID | None] = Field(
         default_factory=list, max_length=MAX_FIELD_IDS_ACCEPTED
     )
+    captain_copy_id: uuid.UUID | None = None
 
 
 class NextRoundOut(BaseModel):
@@ -58,6 +82,14 @@ class NextRoundOut(BaseModel):
     opponent: str
     held_on: date
     locks_at: datetime
+
+
+class LastRoundOut(BaseModel):
+    """Última jornada que ya puntúa (provisional o cerrada)."""
+
+    match_id: uuid.UUID
+    opponent: str
+    held_on: date
 
 
 class NoLeagueOut(BaseModel):
@@ -72,6 +104,7 @@ class MyTeamOut(BaseModel):
     squad: list[SquadCopyOut]
     lineup: LineupOut
     next_round: NextRoundOut | None
+    last_round: LastRoundOut | None
 
 
 class RoundOut(BaseModel):
@@ -100,11 +133,112 @@ class SlotOut(BaseModel):
     name: str | None
     rating: float | None
     goals: int
+    # Ya multiplicados si es el capitán.
     points: int
+    captain: bool
 
 
 class RoundDetailOut(BaseModel):
     match_id: uuid.UUID
     status: RoundStatus
     total: int
+    # Cobro de la jornada (0 si aún no está cerrada).
+    payout: int
+    # Puntuó 0 por tener saldo negativo al bloquearse la alineación.
+    negative_balance: bool
     slots: list[SlotOut]
+
+
+# --- Mercado -------------------------------------------------------------------------------------
+
+
+class ParticipantRefOut(BaseModel):
+    participant_id: uuid.UUID
+    display_name: str
+
+
+class MarketListingOut(BaseModel):
+    listing_id: uuid.UUID
+    copy_id: uuid.UUID
+    player_id: uuid.UUID
+    name: str
+    dorsal: int
+    position: Position
+    value: int
+    # max(valor actual, precio mínimo del vendedor).
+    min_bid: int
+    # null = la banca.
+    seller: ParticipantRefOut | None
+    closes_at: datetime
+    # Sobre cerrado: solo mi puja, nunca las ajenas.
+    my_bid: int | None
+    mine: bool
+
+
+class MarketOut(BaseModel):
+    listings: list[MarketListingOut]
+
+
+class BidIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount: int = Field(ge=0, le=MAX_MONEY_AMOUNT)
+
+
+class ListingIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_price: int | None = Field(default=None, ge=0, le=MAX_MONEY_AMOUNT)
+
+
+class BankSaleOut(BaseModel):
+    """Venta a la banca o clausulazo: lo que se cobró o pagó y el saldo que queda."""
+
+    price: int
+    balance: int
+
+
+class ClauseCopyOut(BaseModel):
+    copy_id: uuid.UUID
+    player_id: uuid.UUID
+    name: str
+    dorsal: int
+    position: Position
+    value: int
+    clause: int
+    owner: ParticipantRefOut
+    protected_until: datetime
+    mine: bool
+
+
+class ClausesOut(BaseModel):
+    # Hoy hay partido (hora de Madrid): nadie puede clausular.
+    match_day: bool
+    copies: list[ClauseCopyOut]
+
+
+class ClauseIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    clause: int = Field(ge=0, le=MAX_MONEY_AMOUNT)
+
+
+class ClauseRaiseOut(BaseModel):
+    clause: int
+    cost: int
+    balance: int
+
+
+class TransferOut(BaseModel):
+    at: datetime
+    kind: TransferKind
+    player_id: uuid.UUID
+    name: str
+    # null = la banca. `from` es palabra reservada en Python: sale con alias.
+    from_: ParticipantRefOut | None = Field(serialization_alias="from")
+    to: ParticipantRefOut | None
+    price: int
+
+
+class TransfersOut(BaseModel):
+    transfers: list[TransferOut]

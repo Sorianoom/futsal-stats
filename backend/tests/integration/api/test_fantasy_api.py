@@ -39,7 +39,8 @@ SEED = 20261110
 LEAGUE_DAY = datetime(2026, 10, 10, 10, 0, tzinfo=UTC)
 BEFORE_LOCK = datetime(2026, 10, 16, 21, 59, tzinfo=UTC)  # 23:59 en Madrid
 AFTER_LOCK = datetime(2026, 10, 16, 22, 0, tzinfo=UTC)  # 00:00 del 17 en Madrid
-AFTER_MATCH = datetime(2026, 10, 18, 10, 0, tzinfo=UTC)
+# Noche del partido: jornada puntuada pero provisional (se cierra a las 00:00 del 18).
+AFTER_MATCH = datetime(2026, 10, 17, 20, 0, tzinfo=UTC)
 MATCH_DAY = "2026-10-17"
 
 
@@ -88,8 +89,13 @@ async def _put_lineup(
     headers: dict[str, str],
     goalkeeper: str | None = None,
     field: list[str | None] | None = None,
+    captain: str | None = None,
 ) -> Any:
-    body = {"goalkeeper_copy_id": goalkeeper, "field_copy_ids": field or []}
+    body = {
+        "goalkeeper_copy_id": goalkeeper,
+        "field_copy_ids": field or [],
+        "captain_copy_id": captain,
+    }
     return await client.put("/fantasy/lineup", json=body, headers=headers)
 
 
@@ -198,8 +204,15 @@ async def test_each_participant_starts_with_two_field_players_and_twenty_million
     assert len({c["player_id"] for c in squad}) == INITIAL_FIELD_COPIES
     assert {c["position"] for c in squad} == {"field"}
     assert {c["value"] for c in squad} == {INITIAL_PLAYER_VALUE}
-    assert set(squad[0]) == {"copy_id", "player_id", "name", "dorsal", "position", "value"}
-    assert me["lineup"] == {"goalkeeper_copy_id": None, "field_copy_ids": [None] * 4}
+    assert set(squad[0]) == {
+        "copy_id", "player_id", "name", "dorsal", "position", "value", "value_change", "listing",
+        "clause", "protected_until", "last_points",
+    }  # fmt: skip
+    assert me["lineup"] == {
+        "goalkeeper_copy_id": None,
+        "field_copy_ids": [None] * 4,
+        "captain_copy_id": None,
+    }
     assert me["next_round"] is None
 
 
@@ -257,6 +270,25 @@ async def test_a_late_user_joins_on_first_visit(
     assert len(standings["rows"]) == 2
 
 
+async def test_a_late_user_never_gets_a_copy_listed_by_the_bank(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    # Dos de campo: 10 copias, 2 para el entrenador y las 8 libres salen todas en el mercado.
+    await _field_players(make_player, 2)
+    coach = await login()
+    await _create_league(client, coach)
+    listings = (await client.get("/fantasy/market", headers=coach)).json()["data"]["listings"]
+    player = await make_player(20, name="Lucas Tardío")
+    late = await login(Role.PLAYER, player_id=player.id)
+
+    me = await _me(client, late)
+
+    listed = {x["copy_id"] for x in listings}
+    assert len(listed) == 8
+    assert not listed & {c["copy_id"] for c in me["squad"]}
+    assert {c["player_id"] for c in me["squad"]} == {str(player.id)}
+
+
 async def test_a_player_added_after_the_league_gets_copies_on_the_next_visit(
     client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
 ) -> None:
@@ -289,10 +321,37 @@ async def test_saving_a_lineup_returns_it_padded_and_me_shows_it(
 
     response = await _put_lineup(client, headers, field=[None, squad[0], squad[1]])
 
-    expected = {"goalkeeper_copy_id": None, "field_copy_ids": [None, squad[0], squad[1], None]}
+    expected = {
+        "goalkeeper_copy_id": None,
+        "field_copy_ids": [None, squad[0], squad[1], None],
+        "captain_copy_id": None,
+    }
     assert response.status_code == 200, response.text
     assert response.json()["data"] == expected
     assert (await _me(client, headers))["lineup"] == expected
+
+
+async def test_a_lineup_can_have_a_captain(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers, squad = await _league_with_squad(client, login, make_player)
+
+    response = await _put_lineup(client, headers, field=[squad[0], squad[1]], captain=squad[1])
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["captain_copy_id"] == squad[1]
+    assert (await _me(client, headers))["lineup"]["captain_copy_id"] == squad[1]
+
+
+async def test_the_captain_must_be_lined_up(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers, squad = await _league_with_squad(client, login, make_player)
+
+    response = await _put_lineup(client, headers, field=[squad[0]], captain=squad[1])
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_lineup"
 
 
 async def test_invalid_lineups_are_rejected(
@@ -334,6 +393,7 @@ async def test_a_goalkeeper_cannot_play_in_the_field(
     )
     assert participant_copy is not None
     copy.owner_id, copy.acquired_at = participant_copy.owner_id, AFTER_MATCH
+    copy.clause = 6000
     await session.flush()
 
     in_field = await _put_lineup(client, headers, field=[str(copy.id)])
@@ -425,6 +485,7 @@ async def test_round_detail_lists_my_five_slots(
         "rating": None,
         "goals": 0,
         "points": 0,
+        "captain": False,
     }
     filled = data["slots"][1:3]
     assert [s["copy_id"] for s in filled] == [c["copy_id"] for c in me["squad"]]

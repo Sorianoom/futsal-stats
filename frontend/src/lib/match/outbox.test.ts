@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { EventIn, LineupEventRecord, LoggedEvent, RatingIn } from "@/lib/api/match-types";
 
-import { confirmedOf, EMPTY_OUTBOX, plus, restoreOutbox, size, without, type Outbox } from "./outbox";
+import {
+  confirmedOf,
+  dropRejected,
+  EMPTY_OUTBOX,
+  plus,
+  restoreOutbox,
+  size,
+  without,
+  type Outbox,
+} from "./outbox";
 
 const STARTED: LineupEventRecord = {
   id: "l1",
@@ -169,5 +178,102 @@ describe("restoreOutbox", () => {
 
     expect(serverEvents).toHaveLength(1);
     expect(saved.events).toHaveLength(1);
+  });
+});
+
+describe("dropRejected", () => {
+  const sub = (id: string, seq: number, t: number, out: string, into: string): LineupEventRecord => ({
+    id,
+    seq,
+    payload: { type: "substituted", t, player_out: out, player_in: into },
+  });
+  const undo = (id: string, seq: number, voids: string): LineupEventRecord => ({
+    id,
+    seq,
+    payload: { type: "undo", voids_event_id: voids },
+  });
+
+  it("quita lo rechazado de la vista y de la bandeja", () => {
+    const lineup = [STARTED, SUBSTITUTION];
+
+    const next = dropRejected(lineup, [], outbox({ lineup: [SUBSTITUTION] }), new Set(["l2"]));
+
+    expect(next.lineup).toEqual([STARTED]);
+    expect(next.outbox.lineup).toEqual([]);
+    expect([...next.dropped]).toEqual(["l2"]);
+    expect(next.impossible).toEqual([]);
+  });
+
+  it("también quita el deshacer pendiente de algo rechazado", () => {
+    const undone = undo("l3", 3, "l2");
+    const lineup = [STARTED, SUBSTITUTION, undone];
+
+    const next = dropRejected(lineup, [], outbox({ lineup: [SUBSTITUTION, undone] }), new Set(["l2"]));
+
+    expect(next.lineup).toEqual([STARTED]);
+    expect(next.dropped).toEqual(new Set(["l2", "l3"]));
+  });
+
+  it("quita los cambios pendientes que ya no son posibles sin lo rechazado y los devuelve aparte", () => {
+    // l2 mete a p6 por p1; l3 saca a p6, que sin l2 no está en pista.
+    const dependent = sub("l3", 3, 90, "p6", "p7");
+    const independent = sub("l4", 4, 120, "p2", "p8");
+    const pending = [SUBSTITUTION, dependent, independent];
+
+    const next = dropRejected([STARTED, ...pending], [], outbox({ lineup: pending }), new Set(["l2"]));
+
+    expect(next.lineup).toEqual([STARTED, independent]);
+    expect(next.outbox.lineup).toEqual([independent]);
+    expect(next.impossible).toEqual([dependent]);
+    expect(next.dropped).toEqual(new Set(["l2", "l3"]));
+  });
+
+  it("encadena: lo que dependía de un cambio quitado por imposible también se quita", () => {
+    const second = sub("l3", 3, 90, "p6", "p7");
+    const third = sub("l4", 4, 120, "p7", "p1");
+    const pending = [SUBSTITUTION, second, third];
+
+    const next = dropRejected([STARTED, ...pending], [], outbox({ lineup: pending }), new Set(["l2"]));
+
+    expect(next.lineup).toEqual([STARTED]);
+    expect(next.impossible).toEqual([second, third]);
+  });
+
+  it("no toca lo que el servidor ya aceptó aunque sea de la misma tanda", () => {
+    const accepted = sub("l3", 3, 90, "p6", "p7");
+    const pending = [SUBSTITUTION, accepted];
+
+    const next = dropRejected(
+      [STARTED, ...pending],
+      [],
+      outbox({ lineup: pending }),
+      new Set(["l2"]),
+      new Set(["l2", "l3"]),
+    );
+
+    expect(next.lineup).toEqual([STARTED, accepted]);
+    expect(next.impossible).toEqual([]);
+  });
+
+  it("quita el deshacer pendiente de un cambio quitado por imposible", () => {
+    const dependent = sub("l3", 3, 90, "p6", "p7");
+    const undone = undo("l4", 4, "l3");
+    const pending = [SUBSTITUTION, dependent, undone];
+
+    const next = dropRejected([STARTED, ...pending], [], outbox({ lineup: pending }), new Set(["l2"]));
+
+    expect(next.lineup).toEqual([STARTED]);
+    expect(next.dropped).toEqual(new Set(["l2", "l3", "l4"]));
+    expect(next.impossible).toEqual([dependent]);
+  });
+
+  it("no modifica las entradas", () => {
+    const lineup = [STARTED, SUBSTITUTION];
+    const pending = outbox({ lineup: [SUBSTITUTION], events: [GOAL_IN] });
+
+    dropRejected(lineup, [GOAL_LOGGED], pending, new Set(["l2"]));
+
+    expect(lineup).toHaveLength(2);
+    expect(pending.lineup).toHaveLength(1);
   });
 });

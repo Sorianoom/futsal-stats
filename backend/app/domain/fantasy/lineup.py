@@ -18,10 +18,12 @@ class LineupError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Lineup:
-    """Ids de copia por hueco; None es un hueco vacío. `field` tiene siempre 4 huecos."""
+    """Ids de copia por hueco; None es un hueco vacío. `field` tiene siempre 4 huecos.
+    `captain` es la copia que puntúa doble (una de las alineadas) o None."""
 
     goalkeeper: str | None
     field: tuple[str | None, ...]
+    captain: str | None = None
 
     def slots(self) -> list[tuple[Position, str | None]]:
         """Los 5 huecos en orden: el portero primero."""
@@ -49,9 +51,13 @@ def _check_slot(copy_id: str, expected: Position, squad: Mapping[str, Position])
 
 
 def build_lineup(
-    goalkeeper: str | None, field: Sequence[str | None], squad: Mapping[str, Position]
+    goalkeeper: str | None,
+    field: Sequence[str | None],
+    squad: Mapping[str, Position],
+    captain: str | None = None,
 ) -> Lineup:
-    """Valida la alineación con la posición de cada copia de la plantilla (copia → posición)."""
+    """Valida la alineación con la posición de cada copia de la plantilla (copia → posición).
+    El capitán, si lo hay, tiene que ser una de las copias alineadas."""
     if len(field) > LINEUP_FIELD_SLOTS:
         raise LineupError(f"Como mucho {LINEUP_FIELD_SLOTS} jugadores de campo")
     chosen = [c for c in (goalkeeper, *field) if c is not None]
@@ -62,8 +68,10 @@ def build_lineup(
     for copy_id in field:
         if copy_id is not None:
             _check_slot(copy_id, Position.FIELD, squad)
+    if captain is not None and captain not in chosen:
+        raise LineupError("El capitán tiene que estar en la alineación")
     padding = (None,) * (LINEUP_FIELD_SLOTS - len(field))
-    return Lineup(goalkeeper=goalkeeper, field=(*field, *padding))
+    return Lineup(goalkeeper=goalkeeper, field=(*field, *padding), captain=captain)
 
 
 def lineup_in_force(history: Iterable[SavedLineup], lock: datetime) -> Lineup:

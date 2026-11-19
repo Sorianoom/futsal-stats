@@ -5,7 +5,7 @@ import { useState } from "react";
 import { RoundDialog } from "@/components/fantasy/round-dialog";
 import { FANTASY_HEADING } from "@/components/fantasy/styles";
 import { Button } from "@/components/ui/button";
-import type { FantasyStandings, StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
+import type { FantasyStandings, RoundStatus, StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
 import { fantasyStandingsQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
 import { cn } from "@/lib/utils";
@@ -26,8 +26,14 @@ function roundCell(round: StandingsRound, row: StandingsRow): string {
   return String(row.points_by_round[round.match_id] ?? 0);
 }
 
+/** Marca de las jornadas que aún no están cerradas; las cerradas (`settled`) no llevan. */
+const ROUND_MARK: Partial<Record<RoundStatus, { text: string; className: string }>> = {
+  pending: { text: "Pendiente", className: "bg-muted text-muted-foreground" },
+  scored: { text: "Provisional", className: "bg-cta/20 text-foreground" },
+};
+
 function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen: () => void }) {
-  const pending = round.status === "pending";
+  const mark = ROUND_MARK[round.status];
   return (
     <th scope="col" className="px-1 py-2 text-left align-bottom">
       <button
@@ -37,8 +43,8 @@ function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen: () => v
       >
         <span className="text-sm font-extrabold">{round.opponent}</span>
         <span className="text-xs text-muted-foreground">{formatShortDay(round.held_on)}</span>
-        {pending ? (
-          <span className="mt-0.5 rounded-full bg-muted px-2 text-xs font-bold text-muted-foreground">Pendiente</span>
+        {mark ? (
+          <span className={cn("mt-0.5 rounded-full px-2 text-xs font-bold", mark.className)}>{mark.text}</span>
         ) : null}
       </button>
     </th>
@@ -87,7 +93,11 @@ function Table({ standings, myId, onOpenRound }: TableProps) {
                 {standings.rounds.map((round) => (
                   <td
                     key={round.match_id}
-                    className={cn(CELL, round.status === "pending" && "text-muted-foreground")}
+                    className={cn(
+                      CELL,
+                      round.status === "pending" && "text-muted-foreground",
+                      round.status === "scored" && "italic",
+                    )}
                   >
                     {roundCell(round, row)}
                   </td>
@@ -123,7 +133,10 @@ export function Standings({ myId }: { myId: string }) {
       {standings ? (
         <>
           {standings.rounds.length > 0 ? (
-            <p className="text-sm text-muted-foreground">Toca una jornada para ver tu alineación y sus puntos.</p>
+            <p className="text-sm text-muted-foreground">
+              Toca una jornada para ver tu alineación y sus puntos. Las provisionales se congelan al cerrarse la
+              jornada.
+            </p>
           ) : (
             <p className="text-sm text-muted-foreground">Aún no se ha jugado ninguna jornada.</p>
           )}

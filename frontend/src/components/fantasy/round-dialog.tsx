@@ -2,8 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { RoundSlot, StandingsRound } from "@/lib/api/fantasy-types";
-import { formatPoints, formatRating } from "@/lib/fantasy/format";
+import type { FantasyRound, RoundSlot, StandingsRound } from "@/lib/api/fantasy-types";
+import { formatMoney, formatPoints, formatRating } from "@/lib/fantasy/format";
 import { POSITION_LABEL } from "@/lib/labels";
 import { fantasyRoundQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -18,11 +18,42 @@ function SlotRow({ slot }: { slot: RoundSlot }) {
       <td className={`${CELL} text-muted-foreground`}>{POSITION_LABEL[slot.slot]}</td>
       <th scope="row" className={`${CELL} text-left font-bold`}>
         {slot.name ?? <span className="font-medium text-muted-foreground">Vacío · 0 puntos</span>}
+        {slot.captain ? (
+          <span className="ml-2 rounded-full bg-yellow-300 px-2 py-0.5 text-xs font-extrabold text-slate-900">
+            Capitán · ×2
+          </span>
+        ) : null}
       </th>
       <td className={CELL}>{slot.name ? formatRating(slot.rating) : "—"}</td>
       <td className={CELL}>{slot.name ? slot.goals : "—"}</td>
       <td className={`${CELL} font-extrabold`}>{slot.points}</td>
     </tr>
+  );
+}
+
+const NOTICE = "rounded-xl border p-3";
+
+/** Por qué los puntos aún no son definitivos, o por qué la jornada puntuó 0. */
+function RoundNotice({ round }: { round: FantasyRound }) {
+  if (round.status === "pending") {
+    return (
+      <p className={`${NOTICE} text-muted-foreground`}>
+        Jornada pendiente: los puntos llegan cuando se cierre el partido.
+      </p>
+    );
+  }
+  if (round.status === "scored") {
+    return (
+      <p className={`${NOTICE} text-muted-foreground`}>
+        Puntos provisionales: se congelan, junto con los cobros y los valores, al cerrarse la jornada.
+      </p>
+    );
+  }
+  if (!round.negative_balance) return null;
+  return (
+    <p className={`${NOTICE} border-destructive/40 font-semibold text-destructive`}>
+      Puntuó 0: tenías saldo negativo al bloquearse la alineación.
+    </p>
   );
 }
 
@@ -44,11 +75,7 @@ function RoundBody({ matchId }: { matchId: string }) {
 
   return (
     <div className="space-y-3">
-      {round.status === "pending" ? (
-        <p className="rounded-xl border p-3 text-muted-foreground">
-          Jornada pendiente: los puntos llegan cuando se cierre el partido.
-        </p>
-      ) : null}
+      <RoundNotice round={round} />
       <div className="overflow-x-auto">
         <table aria-label="Mi alineación" className="w-full border-collapse">
           <thead>
@@ -68,6 +95,7 @@ function RoundBody({ matchId }: { matchId: string }) {
         </table>
       </div>
       <p className="text-lg font-extrabold">{`Total: ${formatPoints(round.total)}`}</p>
+      {round.status === "settled" ? <p className="font-semibold">{`Cobrado: ${formatMoney(round.payout)}`}</p> : null}
       <p className="text-sm text-muted-foreground">Puntos = nota redondeada + 2 por gol. Sin nota, 0.</p>
     </div>
   );

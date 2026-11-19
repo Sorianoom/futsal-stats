@@ -19,6 +19,10 @@ describe("describeRejection", () => {
       { id: "l2", reason: "unknown_player", lineup: { id: "l2", seq: 2, payload: { type: "substituted", t: 9, player_out: "p1", player_in: "p6" } } },
       "Cambio: entra Fer, sale Ana (t9): jugador desconocido",
     ],
+    [
+      { id: "l3", reason: "depends_on_rejected", lineup: { id: "l3", seq: 3, payload: { type: "substituted", t: 9, player_out: "p6", player_in: "p1" } } },
+      "Cambio: entra Ana, sale Fer (t9): dependía de algo rechazado",
+    ],
     [{ id: "r1", reason: "raro", rating: { id: "r1", part: 1, t: 3, stars: 4 } }, "Valoración de 4 estrellas (t3): raro"],
     [{ id: "z", reason: "raro" }, "Algo anotado: raro"],
   ] as const)("%#", (rejection, text) => {

@@ -31,6 +31,16 @@ PLAYER_ROUTES = {
     ("PUT", "/fantasy/lineup"),
     ("GET", "/fantasy/standings"),
     ("GET", "/fantasy/rounds/{match_id}/me"),
+    ("GET", "/fantasy/market"),
+    ("PUT", "/fantasy/market/{listing_id}/bid"),
+    ("DELETE", "/fantasy/market/{listing_id}/bid"),
+    ("POST", "/fantasy/copies/{copy_id}/listing"),
+    ("DELETE", "/fantasy/copies/{copy_id}/listing"),
+    ("POST", "/fantasy/copies/{copy_id}/sell"),
+    ("GET", "/fantasy/transfers"),
+    ("GET", "/fantasy/clauses"),
+    ("POST", "/fantasy/copies/{copy_id}/clause/buy"),
+    ("PUT", "/fantasy/copies/{copy_id}/clause"),
 }
 # Rutas sin autenticación por token: no miran el rol, así que tampoco dan 403.
 PUBLIC_ROUTES = {

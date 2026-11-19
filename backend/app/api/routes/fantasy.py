@@ -1,7 +1,7 @@
 """Fantasy del equipo (`docs/fantasy.md`): liga, mi equipo, alineación y clasificación.
 
 Todas las rutas las usa cualquier usuario activo (también los jugadores), salvo crear la liga,
-que es del entrenador principal.
+que es del entrenador principal. El mercado está en `fantasy_market.py`.
 """
 
 import uuid
@@ -21,7 +21,7 @@ from app.schemas.fantasy import (
     RoundDetailOut,
     StandingsOut,
 )
-from app.services import fantasy, fantasy_scoring
+from app.services import fantasy, fantasy_scoring, fantasy_team
 
 router = APIRouter(prefix="/fantasy", tags=["fantasy"])
 
@@ -44,7 +44,7 @@ async def create_league(
 async def my_team(
     db: SessionDep, user: AnyUser, now: NowDep, rng: RngDep
 ) -> Envelope[MyTeamOut | NoLeagueOut]:
-    team = await fantasy.my_team(db, user, now, rng)
+    team = await fantasy_team.my_team(db, user, now, rng)
     return ok(team if team is not None else NoLeagueOut())
 
 
@@ -54,8 +54,9 @@ async def save_lineup(
 ) -> Envelope[LineupOut]:
     goalkeeper = str(payload.goalkeeper_copy_id) if payload.goalkeeper_copy_id else None
     field = [str(c) if c else None for c in payload.field_copy_ids]
+    captain = str(payload.captain_copy_id) if payload.captain_copy_id else None
     try:
-        lineup = await fantasy.save_lineup(db, user, now, rng, goalkeeper, field)
+        lineup = await fantasy.save_lineup(db, user, now, rng, goalkeeper, field, captain)
     except fantasy.NoLeagueError as error:
         raise _no_league() from error
     except LineupError as error:

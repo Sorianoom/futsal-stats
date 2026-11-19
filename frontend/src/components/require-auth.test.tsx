@@ -69,7 +69,7 @@ describe("RequireAuth", () => {
   });
 
   it.each(["/", "/partido", "/puntos", "/convocatoria", "/plantilla", "/entrenos", "/corregir"])(
-    "un jugador que entra en %s va a las estadísticas sin ver la pantalla",
+    "un jugador que entra en %s va al Fantasy sin ver la pantalla",
     (pathname) => {
       navigation.pathname = pathname;
 
@@ -81,11 +81,11 @@ describe("RequireAuth", () => {
       );
 
       expect(screen.queryByText("secreto")).not.toBeInTheDocument();
-      expect(router.replace).toHaveBeenCalledWith("/estadisticas");
+      expect(router.replace).toHaveBeenCalledWith("/fantasy");
     },
   );
 
-  it("un jugador ve las estadísticas y el detalle de un partido", () => {
+  it("un jugador ve las estadísticas de todos", () => {
     navigation.pathname = "/estadisticas/";
 
     renderWithAuth(

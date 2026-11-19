@@ -6,14 +6,15 @@ de Madrid) del día del partido.
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import StrEnum
 
 from app.domain.fantasy.rules import FANTASY_TIMEZONE
 
 
 class RoundStatus(StrEnum):
-    SCORED = "scored"
+    SETTLED = "settled"  # cerrada: puntos, cobros y valores congelados
+    SCORED = "scored"  # provisional: bloqueada y con el partido cerrado
     PENDING = "pending"
 
 
@@ -35,6 +36,16 @@ class Round:
 def lock_time(held_on: date) -> datetime:
     """Momento del bloqueo: las 00:00 de Madrid del día del partido."""
     return datetime.combine(held_on, time.min, tzinfo=FANTASY_TIMEZONE)
+
+
+def settle_time(held_on: date) -> datetime:
+    """Cierre de la jornada: las 00:00 de Madrid del día siguiente al partido."""
+    return lock_time(held_on + timedelta(days=1))
+
+
+def day_start(day: date) -> datetime:
+    """00:00 de Madrid de un día (apertura del mercado de la banca de ese día)."""
+    return lock_time(day)
 
 
 def madrid_date(moment: datetime) -> date:

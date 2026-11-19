@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMoney, formatPoints, lockText } from "./format";
+import { formatMoment, formatMoney, formatPoints, formatValueChange, lockText } from "./format";
 
 describe("formatMoney", () => {
   it.each([
@@ -31,5 +31,21 @@ describe("formatPoints", () => {
     expect(formatPoints(1)).toBe("1 punto");
     expect(formatPoints(0)).toBe("0 puntos");
     expect(formatPoints(13)).toBe("13 puntos");
+  });
+});
+
+describe("formatValueChange", () => {
+  it.each([
+    [200, "+0,2 M"],
+    [-400, "-0,4 M"],
+    [0, "="],
+  ])("%i miles se muestran como %s", (thousands, text) => {
+    expect(formatValueChange(thousands)).toBe(text);
+  });
+});
+
+describe("formatMoment", () => {
+  it("da el día corto y la hora en Madrid (cierres y fichajes)", () => {
+    expect(formatMoment("2026-11-14T23:00:00Z")).toBe("dom 15, 00:00");
   });
 });

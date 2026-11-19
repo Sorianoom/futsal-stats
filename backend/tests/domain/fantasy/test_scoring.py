@@ -56,3 +56,22 @@ def test_score_lineup_without_results_scores_zero_everywhere() -> None:
 
     assert sum(s.points for s in slots) == 0
     assert all(s.rating is None for s in slots)
+
+
+def test_the_captain_scores_double() -> None:
+    lineup = Lineup(goalkeeper="c-gk", field=("c-a", None, None, None), captain="c-a")
+    copy_players = {"c-gk": "p-gk", "c-a": "p-a"}
+    results = {"p-gk": PlayerResult(7.5, 0), "p-a": PlayerResult(6.3, 1)}
+
+    slots = score_lineup(lineup, copy_players, results)
+
+    assert [s.points for s in slots] == [8, 16, 0, 0, 0]
+    assert [s.captain for s in slots] == [False, True, False, False, False]
+
+
+def test_a_captain_without_rating_still_scores_zero() -> None:
+    lineup = Lineup(goalkeeper="c-gk", field=(None,) * 4, captain="c-gk")
+
+    [goalkeeper, *_] = score_lineup(lineup, {"c-gk": "p-gk"}, {})
+
+    assert goalkeeper.captain and goalkeeper.points == 0

@@ -39,3 +39,23 @@ const RATING = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximu
 export function formatRating(rating: number | null): string {
   return rating === null ? "—" : RATING.format(rating);
 }
+
+const CHANGE = new Intl.NumberFormat("es-ES", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  signDisplay: "always",
+});
+
+/** Cambio de valor: 200 → "+0,2 M", -400 → "-0,4 M"; sin cambio, "=". */
+export function formatValueChange(thousands: number): string {
+  if (thousands === 0) return "=";
+  return `${CHANGE.format(thousands / THOUSANDS_PER_MILLION)} M`;
+}
+
+const CLOSE_DAY = new Intl.DateTimeFormat("es-ES", { weekday: "short", day: "numeric", timeZone: CLUB_TIME_ZONE });
+
+/** Un momento (cierre de una venta, fichaje) en hora de Madrid: "dom 15, 00:00". */
+export function formatMoment(closesAt: string): string {
+  const moment = new Date(closesAt);
+  return `${CLOSE_DAY.format(moment)}, ${LOCK_TIME.format(moment)}`;
+}

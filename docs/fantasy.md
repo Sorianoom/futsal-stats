@@ -57,6 +57,27 @@ nombre en el código para poder ajustarlos.
 - Sin cron: los cierres de mercado y de jornada se procesan al llegar la siguiente petición del
   Fantasy (los que estén vencidos), así que no depende de tareas programadas de Vercel.
 
+### Detalles del mercado y cierre de jornada (paso 3, 2026-11-14)
+
+Decididos por defecto al construir el paso 3; se pueden cambiar.
+
+- **Cierre de jornada**: a las 00:00 (Madrid) del día siguiente al partido, si el partido está
+  cerrado; si no, en cuanto se cierre. Al cerrarse se congelan los puntos de cada participante,
+  los cobros y los cambios de valor: corregir después las estadísticas ya no los cambia. Antes
+  del cierre la clasificación muestra los puntos como provisionales.
+- **Propiedad en el bloqueo**: un hueco de la alineación solo puntúa si la copia era del
+  participante en el momento del bloqueo. Vender una copia después del bloqueo no le quita esos
+  puntos, y el comprador no los gana.
+- **Pujas**: cada puja debe ser como mucho el saldo en ese momento, pero no reserva dinero. Se
+  puede pujar por varias copias a la vez y acabar con saldo negativo si se ganan todas; con saldo
+  negativo al bloquearse la alineación, la jornada puntúa 0. Para arreglarlo, vender.
+- Una puja se puede cambiar o retirar hasta el cierre. Al cierre se descartan las pujas de quien
+  ya tenga 7 copias o una copia del mismo jugador, y gana la siguiente.
+- Las copias de la banca salen a las 00:00 y cierran a las 00:00 del día siguiente. Una copia
+  puesta a la venta por un participante cierra 24 h después de ponerla; mientras tanto se puede
+  retirar y sigue siendo suya (puede alinearla). Si nadie puja, no pasa nada.
+- Si nadie entra en un día, ese día no hay mercado (no se crean mercados atrasados).
+
 ## Cláusulas
 
 - Cada copia tiene una cláusula de rescisión, que al ficharla vale **1,5 × su valor de mercado**.
@@ -65,12 +86,49 @@ nombre en el código para poder ajustarlos.
   momento (clausulazo). El dinero va al antiguo dueño.
 - No se puede clausular durante **7 días tras un fichaje** ni **el día del partido**.
 
+### Detalles de las cláusulas (paso 4, 2026-11-19)
+
+Acordados con el usuario el 2026-11-19. Contrato de la API: `docs/fantasy-api-paso4.md`.
+
+- Las copias que ya tenían dueño al activar las cláusulas empiezan con **1,5 × su valor de ese
+  momento**. Cada vez que una copia cambia de dueño (mercado, clausulazo), la cláusula vuelve a ser
+  1,5 × el valor actual (redondeo hacia abajo). En la banca no hay cláusula.
+- La **protección de 7 días** cuenta para toda copia recién llegada a su dueño: reparto inicial,
+  mercado o clausulazo.
+- **Día del partido**: de 00:00 a 23:59 (hora de Madrid) del día de un partido oficial de la liga.
+- Si la copia clausulada estaba **a la venta**, la venta y sus pujas se anulan.
+- Subir la cláusula cuesta la mitad de la subida (redondeo hacia arriba) y necesita saldo para ese
+  coste; no se puede bajar. Pagar una cláusula necesita saldo para la cláusula entera, hueco en la
+  plantilla y no tener ya ese jugador.
+
+### Capitán (acordado y construido el 2026-11-19, migración 0010)
+
+- En la alineación se puede elegir un capitán: es opcional y puede ser cualquiera de los 5,
+  también el portero. Se bloquea con la alineación (00:00 en Madrid del día del partido).
+- Sus puntos de la jornada cuentan el doble, para la clasificación y para el cobro por punto.
+- Si no juega o se queda sin nota, sus 0 puntos siguen siendo 0: no hay vicecapitán.
+- Si algún día hay puntos negativos, también se doblan. Hoy no los hay (`MIN_PLAYER_POINTS = 0`).
+- `fantasy_lineups.captain_copy_id` guarda la copia capitana (migración 0010). API:
+  `PUT /fantasy/lineup` y `lineup` de `GET /fantasy/me` llevan `captain_copy_id`; cada hueco de
+  `GET /fantasy/rounds/{id}/me` lleva `captain` y sus `points` ya doblados.
+- `GET /fantasy/me` añade `last_round` (`match_id`, `opponent`, `held_on`: la última jornada que ya
+  puntúa) y `last_points` en cada copia de `squad` (puntos del jugador en ella, sin doblar; null si
+  aún no hay ninguna). Se calculan al momento: son informativos.
+
+### Diseño y fotos (2026-11-19)
+
+- Diseño de las pantallas del jugador en móvil: https://claude.ai/artifact/WdFLa1Zx4AKCmxuubzBnKT
+  (Mi equipo con los puntos de la jornada en la pista, Mercado, Cláusulas, Liga y Fichajes, con
+  barra de navegación propia abajo).
+- Más adelante, una foto por jugador en lugar del círculo con el dorsal.
+
 ## Orden de construcción
 
 1. **Cuentas de jugador y visibilidad**: rol `player` vinculado a un jugador, invitación de un solo
    uso, y las rutas de datos internos cerradas para ese rol (migración 0006).
 2. **Liga, copias, plantillas iniciales, alineaciones, puntos y clasificación.**
 3. **Mercado diario**: pujas, ventas, valores de mercado y cobros por jornada.
-4. **Cláusulas y clausulazos.**
+4. **Cláusulas y clausulazos** (migración 0009).
+5. **Capitán** (puntúa doble, migración 0010) y el diseño nuevo de las pantallas del jugador.
 
 Cada paso lleva migración: se aplica en Neon antes de subir a `main`.
