@@ -9,6 +9,7 @@ import { SellCopyDialog } from "@/components/fantasy/sell-copy-dialog";
 import { FANTASY_CARD, FANTASY_HEADING } from "@/components/fantasy/styles";
 import { ValueChange } from "@/components/fantasy/value-change";
 import { Button } from "@/components/ui/button";
+import { PlayerAvatar } from "@/components/player-avatar";
 import type { SquadCopy } from "@/lib/api/fantasy-types";
 import { formatMoney } from "@/lib/fantasy/format";
 import { POSITION_LABEL } from "@/lib/labels";
@@ -25,9 +26,12 @@ function SquadRow({ copy, onList, onSell, onRaise, onChanged }: RowProps) {
   return (
     <li className="space-y-2 py-3">
       <div className="flex min-h-12 items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-extrabold text-primary tabular-nums">
-          {copy.dorsal}
-        </span>
+        <PlayerAvatar
+          name={copy.name}
+          dorsal={copy.dorsal}
+          photoUrl={copy.photo_url}
+          className="size-10 rounded-xl bg-primary/10 text-primary tabular-nums"
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-bold">{copy.name}</span>
           <span className="block text-sm text-muted-foreground">{POSITION_LABEL[copy.position]}</span>

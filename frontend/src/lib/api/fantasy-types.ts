@@ -46,6 +46,8 @@ export interface SquadCopy {
   protected_until: string;
   /** Puntos del jugador en la última jornada puntuada (0 si no jugó); null si aún no hay ninguna. */
   last_points: number | null;
+  /** Ruta de la foto del jugador, relativa a la API. Ver `photoSrc`. */
+  photo_url?: string | null;
 }
 
 /** 1 portero y 4 de campo; null es un hueco vacío, que puntúa 0. */
@@ -150,6 +152,8 @@ export interface MarketListing {
   my_bid: number | null;
   /** La vendo yo. */
   mine: boolean;
+  /** Ruta de la foto del jugador, relativa a la API. Ver `photoSrc`. */
+  photo_url?: string | null;
 }
 
 export interface FantasyMarket {
@@ -193,6 +197,8 @@ export interface ClauseCopy {
   protected_until: string;
   /** Es mía. */
   mine: boolean;
+  /** Ruta de la foto del jugador, relativa a la API. Ver `photoSrc`. */
+  photo_url?: string | null;
 }
 
 export interface FantasyClauses {

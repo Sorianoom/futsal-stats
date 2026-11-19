@@ -28,6 +28,8 @@ export interface Player {
   is_active: boolean;
   /** El jugador ya creó su cuenta con una invitación. */
   has_account: boolean;
+  /** Ruta de su foto, relativa a la API (null o ausente si no tiene). Ver `photoSrc`. */
+  photo_url?: string | null;
 }
 
 /** Enlace de un solo uso para que un jugador cree su cuenta. */

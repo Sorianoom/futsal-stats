@@ -79,6 +79,15 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
+- **Fotos de jugadores y alineación con fichas** (subido el 2026-11-19, migración 0011 aplicada):
+  - El entrenador principal toca el círculo del dorsal en Plantilla → «Elegir foto». El navegador
+    la recorta en cuadrado (384 px, WebP) y la sube; se guarda en `player_photos` y se sirve en
+    `/player-photos/{token}` (token aleatorio que cambia con cada foto, caché del navegador).
+  - La foto sale en Plantilla, en la pista, en los sobres, en la plantilla del Fantasy, en el
+    mercado y en las cláusulas (`PlayerAvatar`).
+  - Alineación: prototipo B elegido por el usuario
+    (https://claude.ai/artifact/2UYXPDXGS279zqsu26sV9V). Pista con fichas; al tocar un hueco
+    sale una hoja abajo con fichas grandes, «Hacer capitán» y «Dejar vacío».
 - **Listo para compartir** (subido el 2026-11-19, sin migración):
   - Mercado: en un jugador que ya tienes pone «Ya lo tienes» en vez de «Pujar».
   - Botón «Cómo se juega» en el Fantasy (`rules-dialog.tsx`): reglas en corto. Si cambian los

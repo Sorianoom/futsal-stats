@@ -5,6 +5,7 @@ import { useState } from "react";
 import { BuyClauseDialog } from "@/components/fantasy/buy-clause-dialog";
 import { FANTASY_CARD, FANTASY_HEADING } from "@/components/fantasy/styles";
 import { Button } from "@/components/ui/button";
+import { PlayerAvatar } from "@/components/player-avatar";
 import type { ClauseCopy } from "@/lib/api/fantasy-types";
 import { clauseBlock, type ClauseBlock } from "@/lib/fantasy/clauses";
 import { formatMoment, formatMoney } from "@/lib/fantasy/format";
@@ -26,9 +27,12 @@ function ClauseRow({ copy, block, onBuy }: RowProps) {
   return (
     <li className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-extrabold text-primary tabular-nums">
-          {copy.dorsal}
-        </span>
+        <PlayerAvatar
+          name={copy.name}
+          dorsal={copy.dorsal}
+          photoUrl={copy.photo_url}
+          className="size-10 rounded-xl bg-primary/10 text-primary tabular-nums"
+        />
         <span className="min-w-0">
           <span className="block truncate font-bold">{copy.name}</span>
           <span className="block text-sm text-muted-foreground">

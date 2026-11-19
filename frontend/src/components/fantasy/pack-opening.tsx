@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { PlayerAvatar } from "@/components/player-avatar";
 import type { SquadCopy } from "@/lib/api/fantasy-types";
 import { formatMoney } from "@/lib/fantasy/format";
 import { POSITION_LABEL } from "@/lib/labels";
@@ -72,6 +73,14 @@ function PlayerCard({ copy }: { copy: SquadCopy }) {
         </span>
       </div>
       <div className="-mt-6 mx-3 flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl bg-white px-3 pb-4 text-center">
+        {copy.photo_url ? (
+          <PlayerAvatar
+            name={copy.name}
+            dorsal={copy.dorsal}
+            photoUrl={copy.photo_url}
+            className="-mt-10 size-24 ring-4 ring-white"
+          />
+        ) : null}
         <span className="text-2xl leading-tight font-extrabold">{copy.name}</span>
         <dl className="grid w-full grid-cols-2 gap-2 text-left">
           <div className="rounded-xl bg-slate-100 px-2.5 py-1.5">

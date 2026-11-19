@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { PlayerAvatar } from "@/components/player-avatar";
 import type { MarketListing } from "@/lib/api/fantasy-types";
 import { formatMoment, formatMoney } from "@/lib/fantasy/format";
 import { closingIn } from "@/lib/fantasy/market";
@@ -19,9 +20,12 @@ export function MarketRow({ listing, now, owned, onBid }: MarketRowProps) {
   return (
     <li className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-extrabold text-primary tabular-nums">
-          {listing.dorsal}
-        </span>
+        <PlayerAvatar
+          name={listing.name}
+          dorsal={listing.dorsal}
+          photoUrl={listing.photo_url}
+          className="size-10 rounded-xl bg-primary/10 text-primary tabular-nums"
+        />
         <span className="min-w-0">
           <span className="block truncate font-bold">{listing.name}</span>
           <span className="block text-sm text-muted-foreground">

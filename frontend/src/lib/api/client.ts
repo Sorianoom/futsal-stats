@@ -100,7 +100,9 @@ function isEnvelope(value: unknown): value is Envelope<unknown> {
 async function rawRequest<T>(path: string, options: RequestOptions): Promise<RawResult<T>> {
   const { method = "GET", body, auth = true, idempotencyKey, signal } = options;
   const headers = new Headers();
-  if (body !== undefined) headers.set("Content-Type", "application/json");
+  // Un Blob (una foto) va tal cual, con su tipo; lo demás, como JSON.
+  const binary = body instanceof Blob;
+  if (body !== undefined) headers.set("Content-Type", binary ? body.type : "application/json");
   if (auth && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
 
@@ -109,7 +111,7 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<Raw
     response = await fetch(`${API_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : binary ? body : JSON.stringify(body),
       credentials: "include",
       signal,
     });

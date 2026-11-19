@@ -4,7 +4,9 @@ import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { InvitationDialog } from "@/components/invitation-dialog";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerFormDialog } from "@/components/player-form-dialog";
+import { PlayerPhotoDialog } from "@/components/player-photo-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/api/types";
@@ -22,12 +24,27 @@ const FILTERS: { id: RosterFilter; label: string; matches: (player: Player) => b
   { id: "injured", label: "Lesionados", matches: (player) => player.status === "injured" },
 ];
 
+function RosterAvatar({ player }: { player: Player }) {
+  return (
+    <PlayerAvatar
+      name={player.name}
+      dorsal={player.dorsal}
+      photoUrl={player.photo_url}
+      className={cn(
+        "size-12 text-xl",
+        player.position === "goalkeeper" ? "bg-cta text-cta-foreground" : "bg-secondary text-primary",
+      )}
+    />
+  );
+}
+
 export default function PlantillaPage() {
   const { user } = useAuth();
   const canEdit = user?.role === "head_coach";
   const { data: players, failed: loadFailed, reload } = useApiQuery(playersQuery.key, playersQuery.fetch);
   const [editing, setEditing] = useState<Player | "new" | null>(null);
   const [inviting, setInviting] = useState<Player | null>(null);
+  const [photoOf, setPhotoOf] = useState<Player | null>(null);
   const [filter, setFilter] = useState<RosterFilter>("all");
 
   function handleSaved() {
@@ -107,16 +124,18 @@ export default function PlantillaPage() {
             className="flex min-h-36 flex-col justify-between gap-3 rounded-3xl border bg-card p-4"
           >
             <div className="flex items-center justify-between gap-2">
-              <span
-                className={cn(
-                  "flex size-12 shrink-0 items-center justify-center rounded-full text-xl font-extrabold",
-                  player.position === "goalkeeper"
-                    ? "bg-cta text-cta-foreground"
-                    : "bg-secondary text-primary",
-                )}
-              >
-                {player.dorsal}
-              </span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  aria-label={`Foto de ${player.name}`}
+                  onClick={() => setPhotoOf(player)}
+                  className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <RosterAvatar player={player} />
+                </button>
+              ) : (
+                <RosterAvatar player={player} />
+              )}
               <Badge
                 variant={player.status === "injured" ? "destructive" : "secondary"}
                 className={cn(
@@ -168,6 +187,7 @@ export default function PlantillaPage() {
         onClose={() => setEditing(null)}
         onSaved={handleSaved}
       />
+      <PlayerPhotoDialog player={photoOf} onClose={() => setPhotoOf(null)} onChanged={reload} />
       <InvitationDialog player={inviting} onClose={() => setInviting(null)} onRosterStale={reload} />
     </div>
   );

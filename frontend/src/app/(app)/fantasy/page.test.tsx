@@ -77,6 +77,14 @@ describe("Fantasy sin liga", () => {
   });
 });
 
+/** Toca un hueco de la pista y elige una ficha en la hoja que se abre. */
+async function pick(editor: HTMLElement, slot: string, player: string) {
+  await userEvent.click(within(editor).getByRole("button", { name: slot }));
+  const sheet = screen.getByRole("dialog", { name: slot.split(":")[0] });
+  await userEvent.click(within(sheet).getByRole("button", { name: player }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+}
+
 describe("Fantasy con liga", () => {
   it("quien entra por primera vez abre un sobre por cada jugador de su equipo", async () => {
     window.localStorage.clear();
@@ -108,8 +116,8 @@ describe("Fantasy con liga", () => {
 
     const editor = await screen.findByRole("region", { name: "Alineación" });
     expect(within(editor).getAllByText("Vacío · 0 puntos")).toHaveLength(3);
-    expect(within(editor).getByLabelText("Portero")).toHaveValue("");
-    expect(within(editor).getByLabelText("Campo 1")).toHaveValue("c1");
+    expect(within(editor).getByRole("button", { name: "Portero: vacío" })).toBeInTheDocument();
+    expect(within(editor).getByRole("button", { name: "Campo 1: Ana Ruiz" })).toBeInTheDocument();
   });
 
   it("el jugador edita y guarda su alineación", async () => {
@@ -121,8 +129,9 @@ describe("Fantasy con liga", () => {
     const save = within(editor).getByRole("button", { name: "Guardar alineación" });
     expect(save).toBeDisabled();
 
-    await userEvent.selectOptions(within(editor).getByLabelText("Portero"), "g1");
-    await userEvent.selectOptions(within(editor).getByLabelText("Campo 3"), "c3");
+    await pick(editor, "Portero: vacío", "Elena Paz");
+    await pick(editor, "Campo 3: vacío", "Dani Gil");
+    expect(within(editor).getByRole("button", { name: "Campo 3: Dani Gil" })).toBeInTheDocument();
     await userEvent.click(save);
 
     expect(await within(editor).findByRole("status")).toHaveTextContent("Alineación guardada");
@@ -162,16 +171,45 @@ describe("Fantasy con liga", () => {
     const server = api({ "PUT /fantasy/lineup": (request) => ({ data: request.body }) });
     renderWithAuth(<FantasyPage />, { user: fakeUser("player") });
     const editor = await screen.findByRole("region", { name: "Alineación" });
-    const captain = within(editor).getByRole("button", { name: "Capitán: Bea Soto" });
+    await userEvent.click(within(editor).getByRole("button", { name: "Campo 2: Bea Soto" }));
+    const sheet = screen.getByRole("dialog", { name: "Campo 2" });
+    const captain = within(sheet).getByRole("button", { name: "Capitán: Bea Soto" });
     expect(captain).toHaveAttribute("aria-pressed", "false");
-    expect(within(editor).queryByRole("button", { name: /Capitán: Dani Gil/ })).not.toBeInTheDocument();
 
     await userEvent.click(captain);
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
-    expect(captain).toHaveAttribute("aria-pressed", "true");
+    expect(within(editor).getByRole("button", { name: "Campo 2: Bea Soto, capitán" })).toBeInTheDocument();
     expect(await within(editor).findByRole("status")).toHaveTextContent("Alineación guardada");
     expect(server.calls.find((call) => call.method === "PUT")?.body).toMatchObject({ captain_copy_id: "c2" });
+  });
+
+  it("las fichas enseñan la foto del jugador si la tiene", async () => {
+    const withPhoto = {
+      ...ME,
+      squad: ME.squad.map((copy) => (copy.copy_id === "c1" ? { ...copy, photo_url: "/player-photos/ana" } : copy)),
+    };
+    api({ "GET /fantasy/me": { data: withPhoto } });
+    renderWithAuth(<FantasyPage />);
+    const editor = await screen.findByRole("region", { name: "Alineación" });
+
+    const photo = within(within(editor).getByRole("button", { name: "Campo 1: Ana Ruiz" })).getByRole("img", {
+      name: "Ana Ruiz",
+    });
+
+    expect(photo.getAttribute("src")).toMatch(/\/player-photos\/ana$/);
+  });
+
+  it("desde la hoja se puede dejar un hueco vacío", async () => {
+    api();
+    renderWithAuth(<FantasyPage />);
+    const editor = await screen.findByRole("region", { name: "Alineación" });
+
+    await userEvent.click(within(editor).getByRole("button", { name: "Campo 1: Ana Ruiz" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Dejar vacío" }));
+
+    expect(within(editor).getByRole("button", { name: "Campo 1: vacío" })).toBeInTheDocument();
+    expect(within(editor).getByRole("button", { name: "Guardar alineación" })).toBeEnabled();
   });
 
   it("un hueco de campo no ofrece al portero ni a quien ya está alineado", async () => {
@@ -179,9 +217,12 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    const options = within(within(editor).getByLabelText("Campo 3")).getAllByRole("option");
+    await userEvent.click(within(editor).getByRole("button", { name: "Campo 3: vacío" }));
+    const sheet = screen.getByRole("dialog", { name: "Campo 3" });
+    const cards = within(within(sheet).getByRole("list", { name: "Jugadores para este hueco" })).getAllByRole("button");
 
-    expect(options.map((option) => option.textContent)).toEqual(["Vacío", "5 · Dani Gil"]);
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual(["Dani Gil"]);
+    expect(within(sheet).queryByRole("button", { name: "Capitán: Dani Gil" })).not.toBeInTheDocument();
   });
 
   it("explica una alineación rechazada por el servidor", async () => {
@@ -191,11 +232,11 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    await userEvent.selectOptions(within(editor).getByLabelText("Campo 3"), "c3");
+    await pick(editor, "Campo 3: vacío", "Dani Gil");
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
     expect(await within(editor).findByRole("alert")).toHaveTextContent("La alineación no es válida");
-    expect(within(editor).getByLabelText("Campo 3")).toHaveValue("c3");
+    expect(within(editor).getByRole("button", { name: "Campo 3: Dani Gil" })).toBeInTheDocument();
   });
 
   it("avisa de un fallo de red al guardar", async () => {
@@ -203,7 +244,7 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    await userEvent.selectOptions(within(editor).getByLabelText("Campo 3"), "c3");
+    await pick(editor, "Campo 3: vacío", "Dani Gil");
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
     expect(await within(editor).findByRole("alert")).toHaveTextContent("No se pudo guardar");
@@ -283,7 +324,7 @@ describe("Fantasy con liga", () => {
     const editor = await screen.findByRole("region", { name: "Alineación" });
     const before = server.count("GET", "/fantasy/me");
 
-    await userEvent.selectOptions(within(editor).getByLabelText("Campo 3"), "c3");
+    await pick(editor, "Campo 3: vacío", "Dani Gil");
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
     await waitFor(() => expect(server.count("GET", "/fantasy/me")).toBeGreaterThan(before));
