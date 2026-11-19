@@ -79,6 +79,13 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
+- **Listo para compartir** (subido el 2026-11-19, sin migración):
+  - Mercado: en un jugador que ya tienes pone «Ya lo tienes» en vez de «Pujar».
+  - Botón «Cómo se juega» en el Fantasy (`rules-dialog.tsx`): reglas en corto. Si cambian los
+    números de `rules.py`, actualizar también este texto.
+  - Vista previa al compartir el enlace (WhatsApp, etc.): `src/app/opengraph-image.png` (fuente
+    HTML en el historial de la sesión) y `openGraph` en `layout.tsx`. Next completa la URL absoluta
+    con `VERCEL_PROJECT_PRODUCTION_URL` en Vercel.
 - **Fantasy, paso 5: capitán, diseño nuevo y jugadores solo con el Fantasy** (subido el
   2026-11-19, migración 0010 aplicada en Neon).
   - Capitán opcional que puntúa doble (reglas en `docs/fantasy.md`, sección «Capitán»).
@@ -150,7 +157,9 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 - Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
 - Comprobar en producción que `x-real-ip` llega con la IP real y que el bloqueo funciona.
-- Comprobar en producción el Fantasy (pasos 2, 3 y 4).
+- Comprobar en producción el Fantasy (pasos 2 a 5): invitación, sobres, alineación con capitán,
+  pujas, cláusulas y el cierre de la primera jornada oficial.
+- Comprobar la vista previa del enlace en WhatsApp (puede tardar por la caché de WhatsApp).
 - Cambiar la contraseña de `neondb_owner` en Neon: se escribió en claro en un comando (historial
   de zsh). Para migrar, poner `DIRECT_DATABASE_URL` en `backend/.env` en vez de en el comando.
 - Un test del frontend falló una vez bajo carga y pasó en las tres repeticiones siguientes; no se

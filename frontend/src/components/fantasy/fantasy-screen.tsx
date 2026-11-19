@@ -7,6 +7,7 @@ import { MarketPanel } from "@/components/fantasy/market-panel";
 import { MyTeam } from "@/components/fantasy/my-team";
 import { NoLeague } from "@/components/fantasy/no-league";
 import { PackOpening } from "@/components/fantasy/pack-opening";
+import { RulesDialog } from "@/components/fantasy/rules-dialog";
 import { Standings } from "@/components/fantasy/standings-table";
 import { TeamSummary } from "@/components/fantasy/team-summary";
 import { TransfersPanel } from "@/components/fantasy/transfers-panel";
@@ -65,7 +66,12 @@ const ICONS = {
 function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () => void }) {
   const tabs: FantasyTab[] = [
     { id: "team", label: "Mi equipo", short: "Equipo", icon: ICONS.team, render: () => <MyTeam view={view} onChanged={onChanged} /> },
-    { id: "market", label: "Mercado", short: "Mercado", icon: ICONS.market, render: () => (
+    {
+      id: "market",
+      label: "Mercado",
+      short: "Mercado",
+      icon: ICONS.market,
+      render: () => (
         <MarketPanel
           balance={view.me.balance}
           ownedPlayers={new Set(view.squad.map((copy) => copy.player_id))}
@@ -98,6 +104,9 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
   return (
     <>
       <PackOpening participantId={view.me.participant_id} squad={view.squad} />
+      <div className="flex justify-end">
+        <RulesDialog squadLimit={view.me.squad_limit} />
+      </div>
       <TeamSummary view={view} />
       <FantasyTabs tabs={tabs} label="Secciones del Fantasy" />
     </>

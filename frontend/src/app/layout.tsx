@@ -13,7 +13,16 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: "Futsal Stats",
-  description: "Gestión del equipo: plantilla, puntos, convocatorias y partidos en vivo",
+  description: "Estadísticas del equipo y su Fantasy: abre tus sobres, ficha, elige capitán y compite cada jornada.",
+  // La imagen es src/app/opengraph-image.png; en Vercel, Next completa la URL absoluta con el dominio de producción.
+  openGraph: {
+    title: "Futsal Stats · El Fantasy del equipo",
+    description: "Abre tus sobres, ficha, elige capitán y compite cada jornada.",
+    siteName: "Futsal Stats",
+    locale: "es_ES",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image" },
   manifest: "/manifest.webmanifest",
   icons: {
     // El SVG, para los navegadores modernos. El .ico (16, 32 y 48 px) lo enlaza Next por convención.
