@@ -39,3 +39,8 @@ export function acceptInvitation(acceptance: InvitationAcceptance): Promise<User
     auth: false,
   });
 }
+
+/** Pone o quita (null) el nombre visible. Solo el personal técnico. */
+export function updateMyName(displayName: string | null): Promise<User> {
+  return apiData<User>("/auth/me", { method: "PATCH", body: { display_name: displayName } });
+}

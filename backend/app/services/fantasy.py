@@ -138,7 +138,7 @@ async def require_membership(
 async def participant_names(db: AsyncSession, league_id: uuid.UUID) -> dict[uuid.UUID, str]:
     """Nombre visible de cada participante de la liga."""
     return {
-        p.participant.id: display_name(p.player_name, p.email)
+        p.participant.id: display_name(p.user_name, p.player_name, p.email)
         for p in await fantasy_repo.list_participants(db, league_id)
     }
 

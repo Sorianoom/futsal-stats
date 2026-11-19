@@ -50,6 +50,7 @@ class ParticipantInfo:
     participant: FantasyParticipant
     email: str
     player_name: str | None
+    user_name: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,23 +126,24 @@ async def add_participants(
 
 async def list_participants(db: AsyncSession, league_id: uuid.UUID) -> list[ParticipantInfo]:
     query = (
-        select(FantasyParticipant, User.email, Player.name)
+        select(FantasyParticipant, User.email, Player.name, User.display_name)
         .join(User, User.id == FantasyParticipant.user_id)
         .outerjoin(Player, Player.id == User.player_id)
         .where(FantasyParticipant.league_id == league_id)
         .execution_options(populate_existing=True)
     )
-    return [ParticipantInfo(p, email, name) for p, email, name in (await db.execute(query)).all()]
+    rows = (await db.execute(query)).all()
+    return [ParticipantInfo(p, email, name, user_name) for p, email, name, user_name in rows]
 
 
 async def participant_info(db: AsyncSession, participant: FantasyParticipant) -> ParticipantInfo:
     query = (
-        select(User.email, Player.name)
+        select(User.email, Player.name, User.display_name)
         .outerjoin(Player, Player.id == User.player_id)
         .where(User.id == participant.user_id)
     )
-    email, name = (await db.execute(query)).one()
-    return ParticipantInfo(participant, email, name)
+    email, name, user_name = (await db.execute(query)).one()
+    return ParticipantInfo(participant, email, name, user_name)
 
 
 # --- Copias --------------------------------------------------------------------------------------

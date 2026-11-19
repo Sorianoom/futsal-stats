@@ -79,6 +79,12 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
+- **Nombre de los entrenadores en el Fantasy** (sin subir: **lleva la migración 0012**, aplicarla
+  en Neon antes del push; sin ella falla el login porque `users.display_name` no existe).
+  - `users.display_name` (40 caracteres, opcional). `PATCH /auth/me` lo pone o quita; solo el
+    personal técnico (un jugador usa el nombre de su ficha).
+  - En el Fantasy, los entrenadores tienen el botón «Tu nombre: …» junto a «Cómo se juega».
+  - Orden del nombre visible: el que puso el usuario, el de su ficha de jugador, el email antes de `@`.
 - **Fotos de jugadores y alineación con fichas** (subido el 2026-11-19, migración 0011 aplicada):
   - El entrenador principal toca el círculo del dorsal en Plantilla → «Elegir foto». El navegador
     la recorta en cuadrado (384 px, WebP) y la sube; se guarda en `player_photos` y se sirve en

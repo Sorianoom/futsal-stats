@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="flex shrink-0 items-center gap-3">
           <p className="hidden text-sm text-muted-foreground 2xl:block">
-            {user ? `${ROLE_LABEL[user.role]} · ${user.email}` : null}
+            {user ? `${ROLE_LABEL[user.role]} · ${user.display_name || user.email}` : null}
           </p>
           <Button
             variant="outline"

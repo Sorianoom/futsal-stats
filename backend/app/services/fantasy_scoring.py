@@ -86,7 +86,7 @@ async def standings(
     rows = [
         StandingRow(
             participant_id=str(p.participant.id),
-            display_name=display_name(p.player_name, p.email),
+            display_name=display_name(p.user_name, p.player_name, p.email),
             points_by_round=_points_by_round(p.participant.id, scored, frozen, ctx, results),
         )
         for p in participants

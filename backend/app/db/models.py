@@ -120,6 +120,8 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     email: Mapped[str] = mapped_column(String(254), unique=True)
+    # Nombre visible (Fantasy, cabecera). Lo usan los entrenadores; un jugador, el de su ficha.
+    display_name: Mapped[str | None] = mapped_column(String(40), default=None)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(_enum(Role))
     player_id: Mapped[uuid.UUID | None] = mapped_column(

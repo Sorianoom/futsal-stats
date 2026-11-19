@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { ClausesPanel } from "@/components/fantasy/clauses-panel";
+import { DisplayNameDialog } from "@/components/fantasy/display-name-dialog";
 import { FantasyTabs, type FantasyTab } from "@/components/fantasy/fantasy-tabs";
 import { MarketPanel } from "@/components/fantasy/market-panel";
 import { MyTeam } from "@/components/fantasy/my-team";
@@ -64,6 +65,9 @@ const ICONS = {
 };
 
 function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () => void }) {
+  const { user } = useAuth();
+  // Un jugador sale con el nombre de su ficha; los entrenadores eligen el suyo.
+  const canRename = user !== null && user.role !== "player";
   const tabs: FantasyTab[] = [
     { id: "team", label: "Mi equipo", short: "Equipo", icon: ICONS.team, render: () => <MyTeam view={view} onChanged={onChanged} /> },
     {
@@ -104,7 +108,8 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
   return (
     <>
       <PackOpening participantId={view.me.participant_id} squad={view.squad} />
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        {canRename ? <DisplayNameDialog current={view.me.display_name} onChanged={onChanged} /> : null}
         <RulesDialog squadLimit={view.me.squad_limit} />
       </div>
       <TeamSummary view={view} />

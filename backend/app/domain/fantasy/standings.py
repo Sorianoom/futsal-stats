@@ -4,8 +4,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 
-def display_name(player_name: str | None, email: str) -> str:
-    """Nombre del jugador vinculado a la cuenta; si no hay, la parte del email antes de `@`."""
+def display_name(user_name: str | None, player_name: str | None, email: str) -> str:
+    """El nombre que puso el usuario (entrenadores), si no el del jugador vinculado a la cuenta y,
+    si tampoco hay, la parte del email antes de `@`."""
+    if user_name:
+        return user_name
     return player_name if player_name is not None else email.split("@", 1)[0]
 
 

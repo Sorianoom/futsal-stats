@@ -115,7 +115,7 @@ async def test_the_clause_list_has_every_owned_copy_with_its_owner(
     sample = copies[next(iter(theirs))]
     assert set(sample) == {
         "copy_id", "player_id", "name", "dorsal", "position", "value", "clause", "owner",
-        "protected_until", "mine",
+        "protected_until", "mine", "photo_url",
     }  # fmt: skip
     assert sample["clause"] == INITIAL_CLAUSE
     assert (

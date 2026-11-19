@@ -21,6 +21,8 @@ export type AuthStatus = "loading" | "anonymous" | "authenticated" | "offline";
 
 export interface AuthContextValue {
   user: User | null;
+  /** Sustituye el usuario de la sesión tras cambiar sus datos (p. ej. su nombre). */
+  replaceUser: (user: User) => void;
   status: AuthStatus;
   login: (email: string, password: string) => Promise<void>;
   /** Rechaza si el servidor no confirma el cierre: la sesión sigue abierta. */
@@ -132,9 +134,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDegraded(false);
   }, []);
 
+  const replaceUser = useCallback((next: User) => {
+    saveUser(next);
+    setUser(next);
+  }, []);
+
   const value = useMemo(
-    () => ({ user, status, login, logout, retry }),
-    [user, status, login, logout, retry],
+    () => ({ user, status, login, logout, retry, replaceUser }),
+    [user, status, login, logout, retry, replaceUser],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

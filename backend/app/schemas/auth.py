@@ -21,6 +21,18 @@ class UserOut(BaseModel):
     email: EmailStr
     role: Role
     player_id: uuid.UUID | None
+    display_name: str | None
+
+
+MAX_DISPLAY_NAME_LENGTH = 40
+
+
+class DisplayNameUpdate(BaseModel):
+    """`null` quita el nombre (se vuelve a usar la parte del email antes de `@`)."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    display_name: str | None = Field(min_length=1, max_length=MAX_DISPLAY_NAME_LENGTH)
 
 
 class InvitationAccept(BaseModel):

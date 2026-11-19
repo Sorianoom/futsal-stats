@@ -129,7 +129,7 @@ async def my_team(
         league=LeagueOut(id=league.id, starts_on=league.starts_on),
         me=ParticipantOut(
             participant_id=participant.id,
-            display_name=display_name(info.player_name, info.email),
+            display_name=display_name(info.user_name, info.player_name, info.email),
             balance=participant.balance,
             squad_limit=SQUAD_LIMIT,
             team_value=sum(c.value for c in squad),

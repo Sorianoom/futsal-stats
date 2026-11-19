@@ -8,6 +8,8 @@ export interface User {
   role: Role;
   /** Ficha del jugador vinculada a la cuenta; null para los entrenadores. */
   player_id: string | null;
+  /** Nombre que puso el usuario (entrenadores); null o ausente si no tiene. */
+  display_name?: string | null;
 }
 
 export interface LoginData {

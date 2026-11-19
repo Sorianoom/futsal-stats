@@ -16,6 +16,7 @@ export function renderWithAuth(ui: ReactElement, overrides: Partial<AuthContextV
     login: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     retry: vi.fn().mockResolvedValue(undefined),
+    replaceUser: vi.fn(),
     ...overrides,
   };
   return { value, ...render(<AuthContext.Provider value={value}>{ui}</AuthContext.Provider>) };

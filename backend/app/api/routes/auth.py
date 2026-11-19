@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.api.deps import (
     AnyUser,
+    CurrentUser,
     HeadCoach,
     SessionDep,
     SettingsDep,
@@ -57,6 +58,7 @@ from app.db.users_repo import (
 from app.domain.auth_sessions import RevokeReason
 from app.domain.roles import Role
 from app.schemas.auth import (
+    DisplayNameUpdate,
     InvitationAccept,
     LoginData,
     LoginRequest,
@@ -317,6 +319,16 @@ async def accept_invitation(
 
 @router.get("/me", response_model=Envelope[UserOut])
 async def me(user: AnyUser) -> Envelope[UserOut]:
+    return ok(UserOut.model_validate(user))
+
+
+@router.patch("/me", response_model=Envelope[UserOut])
+async def update_me(
+    payload: DisplayNameUpdate, user: CurrentUser, session: SessionDep
+) -> Envelope[UserOut]:
+    """Pone o quita el nombre visible. Solo el personal técnico: un jugador usa el de su ficha."""
+    user.display_name = payload.display_name
+    await session.commit()
     return ok(UserOut.model_validate(user))
 
 
