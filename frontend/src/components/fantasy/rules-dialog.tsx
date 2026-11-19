@@ -57,11 +57,12 @@ export function RulesDialog({ squadLimit }: { squadLimit: number }) {
         Cómo se juega
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Cómo se juega</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          {/* Solo se desplaza el texto: título y botón quedan fijos y la barra no pisa las esquinas. */}
+          <div className="-mx-6 min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 [scrollbar-width:thin]">
             {SECTIONS.map((section) => (
               <section key={section.title} className="space-y-1.5">
                 <h3 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
@@ -75,7 +76,7 @@ export function RulesDialog({ squadLimit }: { squadLimit: number }) {
               </section>
             ))}
           </div>
-          <Button className="w-full rounded-xl" onClick={() => setOpen(false)}>
+          <Button className="w-full shrink-0 rounded-xl" onClick={() => setOpen(false)}>
             Entendido
           </Button>
         </DialogContent>
