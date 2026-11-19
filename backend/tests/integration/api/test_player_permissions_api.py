@@ -49,6 +49,8 @@ PUBLIC_ROUTES = {
     ("POST", "/auth/logout"),
     ("POST", "/auth/invitations/accept"),
     ("GET", "/health"),
+    # Fotos por enlace con token aleatorio: las carga una <img> sin sesión.
+    ("GET", "/player-photos/{token}"),
 }
 NOT_FORBIDDEN = {(method, f"{PREFIX}{path}") for method, path in PLAYER_ROUTES | PUBLIC_ROUTES}
 

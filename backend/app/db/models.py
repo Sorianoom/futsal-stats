@@ -18,6 +18,7 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     String,
     UniqueConstraint,
@@ -84,6 +85,26 @@ class Player(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_at: Mapped[datetime] = _created_at()
+
+
+class PlayerPhoto(Base):
+    """Foto de un jugador. Va aparte para no cargar los bytes con cada consulta de jugadores.
+
+    `token` es aleatorio y cambia con cada foto: el enlace público no se puede adivinar y el
+    navegador puede guardarlo en caché para siempre.
+    """
+
+    __tablename__ = "player_photos"
+
+    player_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("players.id", ondelete="CASCADE"), primary_key=True
+    )
+    token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, default=uuid.uuid4)
+    content_type: Mapped[str] = mapped_column(String(20))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class User(Base):

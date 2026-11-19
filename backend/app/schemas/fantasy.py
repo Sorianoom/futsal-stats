@@ -58,6 +58,8 @@ class SquadCopyOut(BaseModel):
     protected_until: datetime
     # Puntos del jugador en la última jornada puntuada (0 si no jugó); null si aún no hay ninguna.
     last_points: int | None
+    # Ruta pública de la foto del jugador, relativa a la API (null si no tiene).
+    photo_url: str | None = None
 
 
 class LineupOut(BaseModel):
@@ -173,6 +175,8 @@ class MarketListingOut(BaseModel):
     # Sobre cerrado: solo mi puja, nunca las ajenas.
     my_bid: int | None
     mine: bool
+    # Ruta pública de la foto del jugador, relativa a la API (null si no tiene).
+    photo_url: str | None = None
 
 
 class MarketOut(BaseModel):
@@ -209,6 +213,8 @@ class ClauseCopyOut(BaseModel):
     owner: ParticipantRefOut
     protected_until: datetime
     mine: bool
+    # Ruta pública de la foto del jugador, relativa a la API (null si no tiene).
+    photo_url: str | None = None
 
 
 class ClausesOut(BaseModel):

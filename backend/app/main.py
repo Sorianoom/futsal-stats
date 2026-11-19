@@ -13,6 +13,7 @@ from app.api.routes import (
     fantasy_market,
     matches,
     movements,
+    photos,
     players,
     sessions,
     stats,
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     for router in (
         auth.router,
         players.router,
+        photos.router,
         sessions.router,
         movements.router,
         matches.router,

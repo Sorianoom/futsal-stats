@@ -4,15 +4,16 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.api.deps import CurrentUser, HeadCoach, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.auth.invitations import hash_invitation_token, new_invitation_token
-from app.db import invitations_repo, players_repo
+from app.db import invitations_repo, photos_repo, players_repo
 from app.db.models import Player
 from app.db.refresh_sessions_repo import revoke_all_for_user
+from app.domain.photos import MAX_PHOTO_BYTES, is_valid_photo
 from app.schemas.players import InvitationOut, PlayerCreate, PlayerOut, PlayerUpdate
 
 router = APIRouter(prefix="/players", tags=["players"])
@@ -27,15 +28,17 @@ def _duplicate_dorsal() -> ApiError:
 
 
 async def _outs(session: SessionDep, players: Sequence[Player]) -> list[PlayerOut]:
-    """Respuestas con `has_account`, resuelto para todos los jugadores en una sola consulta."""
-    with_account = await invitations_repo.players_with_active_account(
-        session, [p.id for p in players]
-    )
+    """Respuestas con `has_account` y `photo_url`, resueltos para todos en una consulta cada uno."""
+    ids = [p.id for p in players]
+    with_account = await invitations_repo.players_with_active_account(session, ids)
+    photos = await photos_repo.photo_urls(session, ids)
+    computed = {"has_account", "photo_url"}
     return [
         PlayerOut.model_validate(
             {
-                **{f: getattr(p, f) for f in PlayerOut.model_fields if f != "has_account"},
+                **{f: getattr(p, f) for f in PlayerOut.model_fields if f not in computed},
                 "has_account": p.id in with_account,
+                "photo_url": photos.get(p.id),
             }
         )
         for p in players
@@ -140,3 +143,38 @@ async def create_invitation(
     )
     await session.commit()
     return ok(InvitationOut(token=token, expires_at=invitation.expires_at))
+
+
+async def _photo_body(request: Request) -> tuple[bytes, str]:
+    """Los bytes de la foto y su tipo, comprobados: tamaño, tipo admitido y firma del fichero."""
+    declared = request.headers.get("Content-Length")
+    if declared is not None and declared.isdigit() and int(declared) > MAX_PHOTO_BYTES:
+        raise ApiError(413, "photo_too_big", "La foto es demasiado grande")
+    content = await request.body()
+    if len(content) > MAX_PHOTO_BYTES:
+        raise ApiError(413, "photo_too_big", "La foto es demasiado grande")
+    content_type = request.headers.get("Content-Type", "").split(";")[0].strip().lower()
+    if not is_valid_photo(content, content_type):
+        raise ApiError(422, "invalid_photo", "La foto tiene que ser una imagen JPEG, PNG o WebP")
+    return content, content_type
+
+
+@router.put("/{player_id}/photo", response_model=Envelope[PlayerOut])
+async def put_photo(
+    player_id: uuid.UUID, request: Request, session: SessionDep, _: HeadCoach
+) -> Envelope[PlayerOut]:
+    player = await _existing(session, player_id)
+    content, content_type = await _photo_body(request)
+    await photos_repo.save_photo(session, player.id, content, content_type)
+    await session.commit()
+    return ok(await _out(session, player))
+
+
+@router.delete("/{player_id}/photo", response_model=Envelope[PlayerOut])
+async def delete_photo(
+    player_id: uuid.UUID, session: SessionDep, _: HeadCoach
+) -> Envelope[PlayerOut]:
+    player = await _existing(session, player_id)
+    await photos_repo.delete_photo(session, player.id)
+    await session.commit()
+    return ok(await _out(session, player))

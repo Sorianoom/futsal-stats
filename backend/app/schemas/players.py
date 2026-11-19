@@ -42,6 +42,8 @@ class PlayerOut(BaseModel):
     is_active: bool
     # Hay un usuario activo vinculado al jugador.
     has_account: bool
+    # Ruta pública de su foto, relativa a la API (null si no tiene).
+    photo_url: str | None
 
 
 class InvitationOut(BaseModel):

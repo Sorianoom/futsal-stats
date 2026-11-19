@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import fantasy_market_repo as market_repo
 from app.db import fantasy_money_repo as money
-from app.db import fantasy_repo
+from app.db import fantasy_repo, photos_repo
 from app.db.fantasy_market_repo import ListingRow
 from app.db.models import FantasyLeague, FantasyParticipant, User
 from app.domain.fantasy.market import LedgerKind, TransferKind, check_bid, min_bid
@@ -77,6 +77,7 @@ async def _listings_out(
     values = await money.player_values(db, league_id)
     names = await participant_names(db, league_id)
     bids = await market_repo.my_bids(db, me, [r.listing.id for r in rows])
+    photos = await photos_repo.photo_urls(db, [r.player.id for r in rows])
     out = []
     for row in rows:
         listing, player = row.listing, row.player
@@ -95,6 +96,7 @@ async def _listings_out(
                 closes_at=listing.closes_at.astimezone(FANTASY_TIMEZONE),
                 my_bid=bids.get(listing.id),
                 mine=listing.seller_participant_id == me,
+                photo_url=photos.get(player.id),
             )
         )
     return out

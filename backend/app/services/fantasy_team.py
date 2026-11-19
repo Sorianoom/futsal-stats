@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import fantasy_market_repo as market_repo
 from app.db import fantasy_money_repo as money
-from app.db import fantasy_repo
+from app.db import fantasy_repo, photos_repo
 from app.db.fantasy_repo import SquadCopy
 from app.db.models import FantasyListing, User
 from app.domain.fantasy.calendar import Round, is_locked, lock_time, next_open_round
@@ -59,6 +59,7 @@ def _squad_out(
     changes: Mapping[str, int],
     listings: Mapping[uuid.UUID, FantasyListing],
     last_points: Mapping[str, int] | None,
+    photos: Mapping[uuid.UUID, str],
 ) -> list[SquadCopyOut]:
     return [
         SquadCopyOut(
@@ -73,6 +74,7 @@ def _squad_out(
             clause=c.copy.clause or 0,
             protected_until=protected_until(c.copy.acquired_at).astimezone(FANTASY_TIMEZONE),
             last_points=last_points.get(str(c.player.id), 0) if last_points is not None else None,
+            photo_url=photos.get(c.player.id),
         )
         for c in copies
     ]
@@ -116,7 +118,8 @@ async def my_team(
     listings = await market_repo.open_listings_of_copies(db, [c.copy.id for c in copies])
     rounds = await rounds_of(db, league)
     last = await _last_scored(db, rounds, now)
-    squad = _squad_out(copies, values, changes, listings, last[1] if last else None)
+    photos = await photos_repo.photo_urls(db, [c.player.id for c in copies])
+    squad = _squad_out(copies, values, changes, listings, last[1] if last else None, photos)
     history = await fantasy_repo.lineup_history(db, [participant.id])
     lineup = owned_only(
         latest_lineup(history.get(participant.id, [])), {str(c.copy.id) for c in copies}

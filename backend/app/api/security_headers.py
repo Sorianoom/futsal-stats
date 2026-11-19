@@ -11,6 +11,10 @@ SECURITY_HEADERS: dict[str, str] = {
 }
 
 
+# Las fotos de jugadores sí se cachean (en el navegador): su enlace cambia con cada foto.
+CACHEABLE_PATH_MARKER = "/player-photos/"
+
+
 class SecurityHeadersMiddleware:
     """Pone SECURITY_HEADERS en cada respuesta HTTP, pisando lo que haya puesto una ruta."""
 
@@ -25,7 +29,10 @@ class SecurityHeadersMiddleware:
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
+                cacheable = CACHEABLE_PATH_MARKER in scope["path"] and "Cache-Control" in headers
                 for name, value in SECURITY_HEADERS.items():
+                    if name == "Cache-Control" and cacheable:
+                        continue
                     headers[name] = value
             await send(message)
 
