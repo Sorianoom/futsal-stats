@@ -10,8 +10,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.api.deps import (
     AnyUser,
-    CurrentUser,
     HeadCoach,
+    NamedUser,
     SessionDep,
     SettingsDep,
     require_trusted_origin,
@@ -279,7 +279,8 @@ async def _failed_invitation(session: SessionDep, key: str, now: datetime) -> Ap
 async def accept_invitation(
     payload: InvitationAccept, request: Request, session: SessionDep, settings: SettingsDep
 ) -> Envelope[UserOut]:
-    """Crea la cuenta de jugador de una invitación vigente y la gasta en la misma transacción.
+    """Crea la cuenta (de jugador o del Fantasy) de una invitación vigente y la gasta en la misma
+    transacción.
 
     Los tokens inválidos cuentan por IP: superado el límite se responde 429 sin mirar el token.
     El token se comprueba antes que el email: sin una invitación válida no se puede averiguar
@@ -302,12 +303,19 @@ async def accept_invitation(
     if await get_user_by_email(session, payload.email) is not None:
         await session.rollback()
         raise _email_taken()
-    if await player_has_user(session, invitation.player_id):
+    if invitation.player_id is not None and await player_has_user(session, invitation.player_id):
         await session.rollback()
         raise _invalid_invitation()
+    # Sin ficha: cuenta del Fantasy del cuerpo técnico, con el nombre que puso el entrenador.
+    role = Role.PLAYER if invitation.player_id is not None else Role.FANTASY
     try:
         user = await add_user(
-            session, payload.email, password_hash, Role.PLAYER, invitation.player_id
+            session,
+            payload.email,
+            password_hash,
+            role,
+            invitation.player_id,
+            display_name=invitation.display_name,
         )
     except IntegrityError as error:
         # Carrera con otra alta del mismo email (o del mismo jugador) que se confirmó antes.
@@ -324,9 +332,9 @@ async def me(user: AnyUser) -> Envelope[UserOut]:
 
 @router.patch("/me", response_model=Envelope[UserOut])
 async def update_me(
-    payload: DisplayNameUpdate, user: CurrentUser, session: SessionDep
+    payload: DisplayNameUpdate, user: NamedUser, session: SessionDep
 ) -> Envelope[UserOut]:
-    """Pone o quita el nombre visible. Solo el personal técnico: un jugador usa el de su ficha."""
+    """Pone o quita el nombre visible. Solo cuentas sin ficha: un jugador usa el de su ficha."""
     user.display_name = payload.display_name
     await session.commit()
     return ok(UserOut.model_validate(user))

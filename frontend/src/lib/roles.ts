@@ -1,12 +1,16 @@
 import type { Role } from "@/lib/api/types";
 
-/** Pantallas que puede abrir un jugador (con sus subrutas): su Fantasy y las estadísticas de todos. */
+/**
+ * Pantallas que puede abrir un jugador o una cuenta del Fantasy del cuerpo técnico (con sus
+ * subrutas): su Fantasy y las estadísticas de todos.
+ */
 const PLAYER_SECTIONS = ["/fantasy", "/estadisticas"];
 const PLAYER_HOME = "/fantasy";
 const STAFF_HOME = "/";
 
+/** Cuentas que solo juegan al Fantasy y ven estadísticas: jugadores y cuentas del Fantasy. */
 export function isPlayer(role: Role | undefined): boolean {
-  return role === "player";
+  return role === "player" || role === "fantasy";
 }
 
 /** Adónde va cada rol al entrar en la app o al pedir una pantalla que no le corresponde. */

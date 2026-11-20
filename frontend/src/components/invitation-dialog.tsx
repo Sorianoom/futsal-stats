@@ -33,7 +33,7 @@ export function invitationLink(token: string): string {
 
 type CopyState = "idle" | "copied" | "failed";
 
-function InvitationLink({ invitation }: { invitation: Invitation }) {
+export function InvitationLink({ invitation }: { invitation: Invitation }) {
   const [copy, setCopy] = useState<CopyState>("idle");
   const link = invitationLink(invitation.token);
 

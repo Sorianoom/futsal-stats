@@ -35,10 +35,15 @@ async def add_user(
     password_hash: str,
     role: Role,
     player_id: uuid.UUID | None = None,
+    display_name: str | None = None,
 ) -> User:
     """Guarda un usuario con la contraseña ya validada y hasheada (p. ej. en un hilo aparte)."""
     user = User(
-        email=normalize_email(email), password_hash=password_hash, role=role, player_id=player_id
+        email=normalize_email(email),
+        password_hash=password_hash,
+        role=role,
+        player_id=player_id,
+        display_name=display_name,
     )
     session.add(user)
     await session.flush()

@@ -31,7 +31,7 @@ from app.domain.fantasy.scoring import player_points
 from app.domain.points.callup import Position
 from app.domain.roles import Role
 from app.main import create_app
-from tests.integration.api.conftest import TEST_SETTINGS, Login, MakePlayer, MakeUser
+from tests.integration.api.conftest import TEST_SETTINGS, Join, Login, MakePlayer, MakeUser
 from tests.integration.api.test_stats_api import played_match
 
 SEED = 20261110
@@ -110,33 +110,43 @@ async def _new_match(
 # --- Liga ----------------------------------------------------------------------------------------
 
 
-async def test_the_head_coach_creates_the_league_with_every_active_user(
-    client: AsyncClient, login: Login, make_user: MakeUser, make_player: MakePlayer
+async def test_the_league_takes_every_active_user_who_plays(
+    client: AsyncClient,
+    login: Login,
+    make_user: MakeUser,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     await _field_players(make_player)
-    headers = await login()
+    await join()
+    await join("assistant_coach")
+    await make_user(email="baja@club.es", role=Role.FANTASY, active=False)
+    # Las cuentas de partidos del cuerpo técnico (la de `staff` y esta) solo miran.
     await login(Role.ASSISTANT_COACH)
-    await make_user(email="baja@club.es", role=Role.ASSISTANT_COACH, active=False)
 
-    league = await _create_league(client, headers)
+    league = await _create_league(client, staff)
 
     assert league["participants"] == 2
     assert league["starts_on"] == "2026-10-10"
     uuid.UUID(league["id"])
 
 
-async def test_only_one_league_can_be_active(client: AsyncClient, login: Login) -> None:
-    headers = await login()
-    await _create_league(client, headers)
+async def test_only_one_league_can_be_active(
+    client: AsyncClient, login: Login, join: Join, staff: dict[str, str]
+) -> None:
+    await _create_league(client, staff)
 
-    response = await client.post("/fantasy/league", headers=headers)
+    response = await client.post("/fantasy/league", headers=staff)
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "league_exists"
 
 
 async def test_the_assistant_coach_cannot_create_the_league(
-    client: AsyncClient, login: Login
+    client: AsyncClient,
+    login: Login,
+    join: Join,
 ) -> None:
     headers = await login(Role.ASSISTANT_COACH)
 
@@ -146,27 +156,34 @@ async def test_the_assistant_coach_cannot_create_the_league(
 
 
 async def test_the_league_starts_on_the_madrid_date(
-    client: AsyncClient, login: Login, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     clock.now = datetime(2026, 10, 9, 22, 30, tzinfo=UTC)  # 00:30 del 10 en Madrid
-    headers = await login()
 
-    league = await _create_league(client, headers)
+    league = await _create_league(client, staff)
 
     assert league["starts_on"] == "2026-10-10"
 
 
 async def test_every_active_player_gets_its_copies(
-    client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    session: AsyncSession,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     goalkeeper = await make_player(1, Position.GOALKEEPER)
     field = await make_player(2)
     gone = await make_player(3)
     gone.is_active = False
     await session.flush()
-    headers = await login()
 
-    await _create_league(client, headers)
+    await _create_league(client, staff)
 
     counts = await _copy_counts(session)
     assert counts == {goalkeeper.id: COPIES_PER_GOALKEEPER, field.id: COPIES_PER_FIELD_PLAYER}
@@ -180,19 +197,23 @@ async def _copy_counts(session: AsyncSession) -> dict[uuid.UUID, int]:
 # --- Mi equipo -----------------------------------------------------------------------------------
 
 
-async def test_without_league_me_says_so(client: AsyncClient, login: Login) -> None:
-    headers = await login()
+async def test_without_league_me_says_so(client: AsyncClient, login: Login, join: Join) -> None:
+    headers = await join()
 
     assert await _me(client, headers) == {"league": None}
 
 
 async def test_each_participant_starts_with_two_field_players_and_twenty_millions(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     await make_player(13, Position.GOALKEEPER)
     await _field_players(make_player, 4)
-    headers = await login()
-    league = await _create_league(client, headers)
+    headers = await join()
+    league = await _create_league(client, staff)
 
     me = await _me(client, headers)
 
@@ -217,12 +238,16 @@ async def test_each_participant_starts_with_two_field_players_and_twenty_million
 
 
 async def test_participants_never_share_a_copy(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     await _field_players(make_player)
-    coach = await login()
-    assistant = await login(Role.ASSISTANT_COACH)
-    await _create_league(client, coach)
+    coach = await join()
+    assistant = await join("assistant_coach")
+    await _create_league(client, staff)
 
     first = {c["copy_id"] for c in (await _me(client, coach))["squad"]}
     second = {c["copy_id"] for c in (await _me(client, assistant))["squad"]}
@@ -232,13 +257,17 @@ async def test_participants_never_share_a_copy(
 
 
 async def test_next_round_is_the_next_official_match_not_locked(
-    client: AsyncClient, login: Login, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    headers = await login()
-    await _create_league(client, headers)
-    await _new_match(client, headers, "2026-10-09")  # antes de la liga
-    await _new_match(client, headers, "2026-10-14", official=False)
-    match_id = await _new_match(client, headers, MATCH_DAY)
+    headers = await join()
+    await _create_league(client, staff)
+    await _new_match(client, staff, "2026-10-09")  # antes de la liga
+    await _new_match(client, staff, "2026-10-14", official=False)
+    match_id = await _new_match(client, staff, MATCH_DAY)
 
     me = await _me(client, headers)
 
@@ -253,11 +282,15 @@ async def test_next_round_is_the_next_official_match_not_locked(
 
 
 async def test_a_late_user_joins_on_first_visit(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     await _field_players(make_player)
-    coach = await login()
-    await _create_league(client, coach)
+    coach = await join()
+    await _create_league(client, staff)
     player = await make_player(20, name="Lucas Tardío")
     late = await login(Role.PLAYER, player_id=player.id)
 
@@ -271,12 +304,16 @@ async def test_a_late_user_joins_on_first_visit(
 
 
 async def test_a_late_user_never_gets_a_copy_listed_by_the_bank(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     # Dos de campo: 10 copias, 2 para el entrenador y las 8 libres salen todas en el mercado.
     await _field_players(make_player, 2)
-    coach = await login()
-    await _create_league(client, coach)
+    coach = await join()
+    await _create_league(client, staff)
     listings = (await client.get("/fantasy/market", headers=coach)).json()["data"]["listings"]
     player = await make_player(20, name="Lucas Tardío")
     late = await login(Role.PLAYER, player_id=player.id)
@@ -290,10 +327,15 @@ async def test_a_late_user_never_gets_a_copy_listed_by_the_bank(
 
 
 async def test_a_player_added_after_the_league_gets_copies_on_the_next_visit(
-    client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    session: AsyncSession,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    headers = await login()
-    await _create_league(client, headers)
+    headers = await join()
+    await _create_league(client, staff)
     newcomer = await make_player(30, Position.GOALKEEPER)
 
     await _me(client, headers)
@@ -305,19 +347,23 @@ async def test_a_player_added_after_the_league_gets_copies_on_the_next_visit(
 
 
 async def _league_with_squad(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient, join: Join, staff: dict[str, str], make_player: MakePlayer
 ) -> tuple[dict[str, str], list[str]]:
     await _field_players(make_player)
-    headers = await login()
-    await _create_league(client, headers)
+    headers = await join()
+    await _create_league(client, staff)
     squad = [c["copy_id"] for c in (await _me(client, headers))["squad"]]
     return headers, squad
 
 
 async def test_saving_a_lineup_returns_it_padded_and_me_shows_it(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, squad = await _league_with_squad(client, login, make_player)
+    headers, squad = await _league_with_squad(client, join, staff, make_player)
 
     response = await _put_lineup(client, headers, field=[None, squad[0], squad[1]])
 
@@ -332,9 +378,13 @@ async def test_saving_a_lineup_returns_it_padded_and_me_shows_it(
 
 
 async def test_a_lineup_can_have_a_captain(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, squad = await _league_with_squad(client, login, make_player)
+    headers, squad = await _league_with_squad(client, join, staff, make_player)
 
     response = await _put_lineup(client, headers, field=[squad[0], squad[1]], captain=squad[1])
 
@@ -344,9 +394,13 @@ async def test_a_lineup_can_have_a_captain(
 
 
 async def test_the_captain_must_be_lined_up(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, squad = await _league_with_squad(client, login, make_player)
+    headers, squad = await _league_with_squad(client, join, staff, make_player)
 
     response = await _put_lineup(client, headers, field=[squad[0]], captain=squad[1])
 
@@ -359,8 +413,10 @@ async def test_invalid_lineups_are_rejected(
     login: Login,
     make_player: MakePlayer,
     session: AsyncSession,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, squad = await _league_with_squad(client, login, make_player)
+    headers, squad = await _league_with_squad(client, join, staff, make_player)
     stranger = await session.scalar(
         select(FantasyCopy.id).where(FantasyCopy.owner_id.is_(None)).limit(1)
     )
@@ -379,9 +435,14 @@ async def test_invalid_lineups_are_rejected(
 
 
 async def test_a_goalkeeper_cannot_play_in_the_field(
-    client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    session: AsyncSession,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, _ = await _league_with_squad(client, login, make_player)
+    headers, _ = await _league_with_squad(client, join, staff, make_player)
     me = await _me(client, headers)
     # Sin mercado todavía, el portero se le da a mano desde la banca.
     gk_player = await make_player(12, Position.GOALKEEPER)
@@ -404,8 +465,8 @@ async def test_a_goalkeeper_cannot_play_in_the_field(
     assert in_goal.json()["data"]["goalkeeper_copy_id"] == str(copy.id)
 
 
-async def test_lineup_without_league_is_404(client: AsyncClient, login: Login) -> None:
-    headers = await login()
+async def test_lineup_without_league_is_404(client: AsyncClient, login: Login, join: Join) -> None:
+    headers = await join()
 
     response = await _put_lineup(client, headers)
 
@@ -427,25 +488,32 @@ async def _expected_points(
 
 
 async def _scored_round(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient, join: Join, staff: dict[str, str], make_player: MakePlayer, clock: Clock
 ) -> tuple[dict[str, str], str, dict[str, Any], int]:
     """Liga con una alineación de 2 de campo guardada antes del partido del 17, ya cerrado."""
     players = await _field_players(make_player)
-    headers = await login()
-    await _create_league(client, headers)
+    headers = await join()
+    await _create_league(client, staff)
     me = await _me(client, headers)
     squad = me["squad"]
     await _put_lineup(client, headers, field=[c["copy_id"] for c in squad])
-    match_id, _ = await played_match(client, headers, make_player, players=players)
+    match_id, _ = await played_match(client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
-    expected = await _expected_points(client, headers, match_id, [c["player_id"] for c in squad])
+    expected = await _expected_points(client, staff, match_id, [c["player_id"] for c in squad])
     return headers, match_id, me, sum(expected.values())
 
 
 async def test_a_closed_and_locked_round_is_scored(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, match_id, me, expected_total = await _scored_round(client, login, make_player, clock)
+    headers, match_id, me, expected_total = await _scored_round(
+        client, join, staff, make_player, clock
+    )
 
     standings = (await client.get("/fantasy/standings", headers=headers)).json()["data"]
 
@@ -464,9 +532,16 @@ async def test_a_closed_and_locked_round_is_scored(
 
 
 async def test_round_detail_lists_my_five_slots(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, match_id, me, expected_total = await _scored_round(client, login, make_player, clock)
+    headers, match_id, me, expected_total = await _scored_round(
+        client, join, staff, make_player, clock
+    )
 
     response = await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)
 
@@ -494,17 +569,22 @@ async def test_round_detail_lists_my_five_slots(
 
 
 async def test_a_lineup_saved_after_the_lock_does_not_change_the_round(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     players = await _field_players(make_player)
-    headers = await login()
-    await _create_league(client, headers)
+    headers = await join()
+    await _create_league(client, staff)
     squad = (await _me(client, headers))["squad"]
     clock.now = BEFORE_LOCK
     await _put_lineup(client, headers, field=[c["copy_id"] for c in squad])
     clock.now = AFTER_LOCK
     await _put_lineup(client, headers)  # vacía, ya para la jornada siguiente
-    match_id, _ = await played_match(client, headers, make_player, players=players)
+    match_id, _ = await played_match(client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
 
     detail = (await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)).json()["data"]
@@ -514,15 +594,20 @@ async def test_a_lineup_saved_after_the_lock_does_not_change_the_round(
 
 
 async def test_a_lineup_saved_after_the_lock_is_for_the_next_round(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     players = await _field_players(make_player)
-    headers = await login()
-    await _create_league(client, headers)
+    headers = await join()
+    await _create_league(client, staff)
     squad = (await _me(client, headers))["squad"]
     clock.now = AFTER_LOCK
     await _put_lineup(client, headers, field=[c["copy_id"] for c in squad])
-    match_id, _ = await played_match(client, headers, make_player, players=players)
+    match_id, _ = await played_match(client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
 
     standings = (await client.get("/fantasy/standings", headers=headers)).json()["data"]
@@ -532,14 +617,19 @@ async def test_a_lineup_saved_after_the_lock_is_for_the_next_round(
 
 
 async def test_a_locked_round_of_an_open_match_is_pending(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     players = await _field_players(make_player)
-    headers = await login()
-    await _create_league(client, headers)
-    match_id, _ = await played_match(client, headers, make_player, players=players, finalize=False)
-    next_id = await _new_match(client, headers, "2026-10-24")
-    await _new_match(client, headers, "2026-10-31")
+    headers = await join()
+    await _create_league(client, staff)
+    match_id, _ = await played_match(client, staff, make_player, players=players, finalize=False)
+    next_id = await _new_match(client, staff, "2026-10-24")
+    await _new_match(client, staff, "2026-10-31")
     clock.now = AFTER_MATCH
 
     standings = (await client.get("/fantasy/standings", headers=headers)).json()["data"]
@@ -555,15 +645,20 @@ async def test_a_locked_round_of_an_open_match_is_pending(
 
 
 async def test_rows_are_ranked_by_total(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     players = await _field_players(make_player)
-    coach = await login()
-    assistant = await login(Role.ASSISTANT_COACH)
-    await _create_league(client, coach)
+    coach = await join()
+    assistant = await join("assistant_coach")
+    await _create_league(client, staff)
     squad = (await _me(client, assistant))["squad"]
     await _put_lineup(client, assistant, field=[c["copy_id"] for c in squad])
-    await played_match(client, coach, make_player, players=players)
+    await played_match(client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
 
     rows = (await client.get("/fantasy/standings", headers=coach)).json()["data"]["rows"]
@@ -573,11 +668,16 @@ async def test_rows_are_ranked_by_total(
 
 
 async def test_a_friendly_is_not_a_round(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
 ) -> None:
-    headers, match_id, _, _ = await _scored_round(client, login, make_player, clock)
+    headers, match_id, _, _ = await _scored_round(client, join, staff, make_player, clock)
 
-    await client.patch(f"/matches/{match_id}", json={"is_official": False}, headers=headers)
+    await client.patch(f"/matches/{match_id}", json={"is_official": False}, headers=staff)
 
     standings = (await client.get("/fantasy/standings", headers=headers)).json()["data"]
     detail = await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)
@@ -586,10 +686,12 @@ async def test_a_friendly_is_not_a_round(
     assert detail.status_code == 404
 
 
-async def test_a_match_before_the_league_is_not_a_round(client: AsyncClient, login: Login) -> None:
-    headers = await login()
-    await _create_league(client, headers)
-    before = await _new_match(client, headers, "2026-10-03")
+async def test_a_match_before_the_league_is_not_a_round(
+    client: AsyncClient, login: Login, join: Join, staff: dict[str, str]
+) -> None:
+    headers = await join()
+    await _create_league(client, staff)
+    before = await _new_match(client, staff, "2026-10-03")
 
     response = await client.get(f"/fantasy/rounds/{before}/me", headers=headers)
 
@@ -597,9 +699,11 @@ async def test_a_match_before_the_league_is_not_a_round(client: AsyncClient, log
 
 
 async def test_without_league_standings_are_empty_and_rounds_404(
-    client: AsyncClient, login: Login
+    client: AsyncClient,
+    login: Login,
+    join: Join,
 ) -> None:
-    headers = await login()
+    headers = await join()
 
     standings = await client.get("/fantasy/standings", headers=headers)
     detail = await client.get(f"/fantasy/rounds/{uuid.uuid4()}/me", headers=headers)
@@ -609,11 +713,14 @@ async def test_without_league_standings_are_empty_and_rounds_404(
 
 
 async def test_players_use_the_fantasy(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     await _field_players(make_player)
-    coach = await login()
-    await _create_league(client, coach)
+    await _create_league(client, staff)
     player = await make_player(40, name="Dani")
     headers = await login(Role.PLAYER, player_id=player.id)
     squad = (await _me(client, headers))["squad"]

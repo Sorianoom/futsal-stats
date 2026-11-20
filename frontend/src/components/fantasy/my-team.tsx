@@ -8,7 +8,12 @@ export function MyTeam({ view, onChanged }: { view: FantasyLeagueView; onChanged
     <>
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <LineupEditor squad={view.squad} lineup={view.lineup} lastRound={view.last_round} onSaved={onChanged} />
-        <SquadList squad={view.squad} balance={view.me.balance} onChanged={onChanged} />
+        <SquadList
+          squad={view.squad}
+          balance={view.me.balance}
+          privateSquad={view.me.private_squad === true}
+          onChanged={onChanged}
+        />
       </div>
     </>
   );

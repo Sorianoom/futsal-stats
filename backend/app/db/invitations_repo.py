@@ -1,4 +1,5 @@
-"""Invitaciones de jugadores y su vínculo con las cuentas. Flush aquí; el commit, en el endpoint."""
+"""Invitaciones de jugadores (y de las cuentas del Fantasy del cuerpo técnico) y su vínculo con
+las cuentas. Flush aquí; el commit, en el endpoint."""
 
 import uuid
 from collections.abc import Sequence
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.invitations import INVITATION_TTL
 from app.db.models import Player, PlayerInvitation, User
+from app.domain.roles import Role
 
 
 async def lock_player(session: AsyncSession, player_id: uuid.UUID) -> Player | None:
@@ -103,3 +105,39 @@ async def players_with_active_account(
         return set()
     query = select(User.player_id).where(User.player_id.in_(player_ids), User.is_active.is_(True))
     return {player_id for player_id in (await session.execute(query)).scalars() if player_id}
+
+
+async def create_fantasy_invitation(
+    session: AsyncSession,
+    display_name: str,
+    created_by: uuid.UUID,
+    token_hash: str,
+    now: datetime,
+) -> PlayerInvitation:
+    """Invitación para una cuenta del Fantasy del cuerpo técnico, sin ficha de jugador."""
+    invitation = PlayerInvitation(
+        player_id=None,
+        display_name=display_name,
+        token_hash=token_hash,
+        created_by=created_by,
+        created_at=now,
+        expires_at=now + INVITATION_TTL,
+    )
+    session.add(invitation)
+    await session.flush()
+    return invitation
+
+
+async def active_fantasy_accounts(session: AsyncSession) -> list[User]:
+    """Cuentas activas del Fantasy del cuerpo técnico, por antigüedad."""
+    query = (
+        select(User)
+        .where(User.role == Role.FANTASY, User.is_active.is_(True))
+        .order_by(User.created_at, User.id)
+    )
+    return list((await session.execute(query)).scalars().all())
+
+
+async def get_fantasy_account(session: AsyncSession, user_id: uuid.UUID) -> User | None:
+    query = select(User).where(User.id == user_id, User.role == Role.FANTASY)
+    return (await session.execute(query)).scalar_one_or_none()

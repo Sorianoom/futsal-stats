@@ -28,29 +28,40 @@ const ROUND_MARK: Partial<Record<RoundStatus, { text: string; className: string 
   scored: { text: "Provisional", className: "bg-cta/20 text-foreground" },
 };
 
-function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen: () => void }) {
+/** Cabecera de una jornada: se puede tocar si quien mira tiene equipo (`onOpen`). */
+function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen?: () => void }) {
   const mark = ROUND_MARK[round.status];
+  const content = (
+    <>
+      <span className="text-sm font-extrabold">{round.opponent}</span>
+      <span className="text-xs text-muted-foreground">{formatShortDay(round.held_on)}</span>
+      {mark ? (
+        <span className={cn("mt-0.5 rounded-full px-2 text-xs font-bold", mark.className)}>{mark.text}</span>
+      ) : null}
+    </>
+  );
   return (
     <th scope="col" className="px-1 py-2 text-left align-bottom">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex min-h-11 flex-col items-start rounded-xl px-2 py-1 text-left whitespace-nowrap focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted"
-      >
-        <span className="text-sm font-extrabold">{round.opponent}</span>
-        <span className="text-xs text-muted-foreground">{formatShortDay(round.held_on)}</span>
-        {mark ? (
-          <span className={cn("mt-0.5 rounded-full px-2 text-xs font-bold", mark.className)}>{mark.text}</span>
-        ) : null}
-      </button>
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex min-h-11 flex-col items-start rounded-xl px-2 py-1 text-left whitespace-nowrap focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted"
+        >
+          {content}
+        </button>
+      ) : (
+        <span className="flex min-h-11 flex-col items-start px-2 py-1 whitespace-nowrap">{content}</span>
+      )}
     </th>
   );
 }
 
 interface TableProps {
   standings: FantasyStandings;
-  myId: string;
-  onOpenRound: (round: StandingsRound) => void;
+  /** null: quien mira no juega (cuenta de partidos del cuerpo técnico). */
+  myId: string | null;
+  onOpenRound?: (round: StandingsRound) => void;
 }
 
 function Table({ standings, myId, onOpenRound }: TableProps) {
@@ -63,7 +74,11 @@ function Table({ standings, myId, onOpenRound }: TableProps) {
             <th scope="col" className={cn(HEADER, STICKY)}>Participante</th>
             <th scope="col" className={HEADER}>Total</th>
             {standings.rounds.map((round) => (
-              <RoundHeader key={round.match_id} round={round} onOpen={() => onOpenRound(round)} />
+              <RoundHeader
+                key={round.match_id}
+                round={round}
+                onOpen={onOpenRound ? () => onOpenRound(round) : undefined}
+              />
             ))}
           </tr>
         </thead>
@@ -107,8 +122,11 @@ function Table({ standings, myId, onOpenRound }: TableProps) {
   );
 }
 
-/** Clasificación de la liga. Tocar una jornada abre mi alineación de esa jornada. */
-export function Standings({ myId }: { myId: string }) {
+/**
+ * Clasificación de la liga. Tocar una jornada abre mi alineación de esa jornada; sin `myId` (quien
+ * solo mira, sin equipo) no hay alineación que abrir ni temporada propia.
+ */
+export function Standings({ myId }: { myId: string | null }) {
   const { data: standings, failed, reload } = useApiQuery(fantasyStandingsQuery.key, fantasyStandingsQuery.fetch);
   const [openRound, setOpenRound] = useState<StandingsRound | null>(null);
 
@@ -128,17 +146,18 @@ export function Standings({ myId }: { myId: string }) {
       {standings === null && !failed ? <p className="text-muted-foreground">Cargando clasificación…</p> : null}
       {standings ? (
         <>
-          {standings.rounds.length > 0 ? (
+          {standings.rounds.length > 0 && myId ? (
             <p className="text-sm text-muted-foreground">
               Toca una jornada para ver tu alineación y sus puntos. Las provisionales se congelan al cerrarse la
               jornada.
             </p>
-          ) : (
+          ) : null}
+          {standings.rounds.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aún no se ha jugado ninguna jornada.</p>
-          )}
-          <Podium rows={standings.rows} myId={myId} />
-          <MySeason standings={standings} myId={myId} />
-          <Table standings={standings} myId={myId} onOpenRound={setOpenRound} />
+          ) : null}
+          <Podium rows={standings.rows} myId={myId ?? ""} />
+          {myId ? <MySeason standings={standings} myId={myId} /> : null}
+          <Table standings={standings} myId={myId} onOpenRound={myId ? setOpenRound : undefined} />
         </>
       ) : null}
       <RoundDialog round={openRound} onClose={() => setOpenRound(null)} />

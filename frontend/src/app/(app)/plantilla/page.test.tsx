@@ -40,7 +40,7 @@ afterEach(() => {
 const INVITATION = { token: "tok-123", expires_at: "2026-11-14T18:30:00Z" };
 
 function api(extra: Parameters<typeof mockApi>[0] = {}) {
-  return mockApi({ "GET /players": () => ({ data: roster }), ...extra });
+  return mockApi({ "GET /players": () => ({ data: roster }), "GET /fantasy-accounts": () => ({ data: [] }), ...extra });
 }
 
 describe("PlantillaPage", () => {
@@ -122,7 +122,10 @@ describe("PlantillaPage", () => {
   });
 
   it("avisa si no se puede cargar la plantilla", async () => {
-    mockApi({ "GET /players": { status: 500, error: { code: "internal_error", message: "Error" } } });
+    mockApi({
+      "GET /players": { status: 500, error: { code: "internal_error", message: "Error" } },
+      "GET /fantasy-accounts": () => ({ data: [] }),
+    });
 
     renderWithAuth(<PlantillaPage />);
 
@@ -447,5 +450,54 @@ describe("PlantillaPage", () => {
 
       expect(screen.queryByRole("button", { name: /Invitar/ })).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("Cuentas del Fantasy del cuerpo técnico", () => {
+  it("el entrenador invita a una con su nombre y recibe el enlace", async () => {
+    const server = api({
+      "POST /fantasy-accounts/invitation": {
+        status: 201,
+        data: { token: "tok-bruno", expires_at: "2026-11-27T12:00:00Z" },
+      },
+    });
+    renderWithAuth(<PlantillaPage />);
+    const section = await screen.findByRole("region", { name: "Cuentas del Fantasy del cuerpo técnico" });
+
+    await userEvent.click(within(section).getByRole("button", { name: "Invitar" }));
+    await userEvent.type(screen.getByLabelText("Nombre en la clasificación"), " Bruno ");
+    await userEvent.click(screen.getByRole("button", { name: "Crear enlace" }));
+
+    expect(await screen.findByDisplayValue(/invitacion\/#token=tok-bruno/)).toBeInTheDocument();
+    expect(server.calls.find((c) => c.path === "/fantasy-accounts/invitation")?.body).toEqual({
+      display_name: "Bruno",
+    });
+  });
+
+  it("lista las cuentas y deja quitarlas tras confirmar", async () => {
+    let accounts = [{ id: "u9", email: "bruno@club.es", display_name: "Bruno" }];
+    api({
+      "GET /fantasy-accounts": () => ({ data: accounts }),
+      "DELETE /fantasy-accounts/u9": () => {
+        accounts = [];
+        return { status: 204 };
+      },
+    });
+    renderWithAuth(<PlantillaPage />);
+    const list = await screen.findByRole("list", { name: "Cuentas del Fantasy del cuerpo técnico" });
+
+    await userEvent.click(within(list).getByRole("button", { name: "Quitar" }));
+    await userEvent.click(within(list).getByRole("button", { name: "Quitar a Bruno" }));
+
+    await waitFor(() => expect(screen.getByText("Aún no hay ninguna.")).toBeInTheDocument());
+  });
+
+  it("el segundo entrenador no la ve", async () => {
+    api();
+
+    renderWithAuth(<PlantillaPage />, { user: fakeUser("assistant_coach") });
+
+    await screen.findByText("Luis Prado");
+    expect(screen.queryByText("Cuentas del Fantasy del cuerpo técnico")).not.toBeInTheDocument();
   });
 });

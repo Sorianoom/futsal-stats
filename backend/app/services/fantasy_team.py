@@ -13,6 +13,7 @@ from app.db import fantasy_money_repo as money
 from app.db import fantasy_repo, photos_repo
 from app.db.fantasy_repo import SquadCopy
 from app.db.models import FantasyListing, User
+from app.domain.fantasy.access import has_private_squad, plays_fantasy
 from app.domain.fantasy.calendar import Round, is_locked, lock_time, next_open_round
 from app.domain.fantasy.clauses import protected_until
 from app.domain.fantasy.lineup import Lineup, latest_lineup
@@ -25,10 +26,11 @@ from app.schemas.fantasy import (
     MyTeamOut,
     NextRoundOut,
     ParticipantOut,
+    SpectatorOut,
     SquadCopyOut,
     SquadListingOut,
 )
-from app.services.fantasy import enter, lineup_out
+from app.services.fantasy import enter, lineup_out, watch
 from app.services.fantasy_results import recent_points, rounds_of, scored_results
 
 
@@ -108,8 +110,14 @@ async def _last_scored(
 
 async def my_team(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
-) -> MyTeamOut | None:
-    """Mi participante, plantilla, alineación vigente y siguiente jornada; None sin liga."""
+) -> MyTeamOut | SpectatorOut | None:
+    """Mi participante, plantilla, alineación vigente y siguiente jornada; None sin liga. Una
+    cuenta que solo mira recibe la liga sin equipo."""
+    if not plays_fantasy(user.role):
+        league = await watch(db, now, rng)
+        if league is None:
+            return None
+        return SpectatorOut(league=LeagueOut(id=league.id, starts_on=league.starts_on))
     membership = await enter(db, user, now, rng)
     if membership is None:
         return None
@@ -136,6 +144,7 @@ async def my_team(
             balance=participant.balance,
             squad_limit=SQUAD_LIMIT,
             team_value=sum(c.value for c in squad),
+            private_squad=has_private_squad(user.role),
         ),
         squad=squad,
         lineup=lineup_out(lineup),

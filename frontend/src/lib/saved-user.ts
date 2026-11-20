@@ -1,7 +1,7 @@
 import type { Role, User } from "@/lib/api/types";
 
 const KEY = "futsal-stats:user";
-const ROLES: readonly Role[] = ["head_coach", "assistant_coach", "player"];
+const ROLES: readonly Role[] = ["head_coach", "assistant_coach", "player", "fantasy"];
 
 function isRole(value: unknown): value is Role {
   return ROLES.some((role) => role === value);

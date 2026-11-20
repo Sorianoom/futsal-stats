@@ -1,4 +1,5 @@
-export type Role = "head_coach" | "assistant_coach" | "player";
+/** `fantasy`: cuenta del cuerpo técnico solo para jugar al Fantasy, con la plantilla privada. */
+export type Role = "head_coach" | "assistant_coach" | "player" | "fantasy";
 export type Position = "field" | "goalkeeper";
 export type PlayerStatus = "available" | "injured";
 

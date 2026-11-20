@@ -101,3 +101,33 @@ async def player_headers(login: Login, make_player: MakePlayer) -> dict[str, str
     """Cabeceras de un usuario con rol `player` vinculado a un jugador (dorsal 99)."""
     player = await make_player(PLAYER_ACCOUNT_DORSAL)
     return await login(Role.PLAYER, player_id=player.id)
+
+
+Join = Callable[..., Awaitable[dict[str, str]]]
+# Dorsales de las fichas de quienes juegan al Fantasy en los tests: lejos de los de la plantilla.
+_JOIN_FIRST_DORSAL = 70
+
+
+@pytest.fixture
+def join(login: Login, session: AsyncSession) -> Join:
+    """Cabeceras de alguien que juega al Fantasy con la plantilla pública y sin copias propias.
+
+    Las cuentas de partidos del cuerpo técnico no juegan y las del Fantasy del cuerpo técnico son
+    privadas: se usa una cuenta de jugador vinculada a una ficha de baja (sin copias en la liga) y
+    con `name` como nombre, que es el que sale en el Fantasy.
+    """
+    dorsals = iter(range(_JOIN_FIRST_DORSAL, PLAYER_ACCOUNT_DORSAL))
+
+    async def _join(name: str = "head_coach") -> dict[str, str]:
+        player = Player(name=name, dorsal=next(dorsals), position=Position.FIELD, is_active=False)
+        session.add(player)
+        await session.flush()
+        return await login(Role.PLAYER, email=f"{name}.juega@club.es", player_id=player.id)
+
+    return _join
+
+
+@pytest.fixture
+async def staff(login: Login) -> dict[str, str]:
+    """Cabeceras del entrenador principal (crea la liga y los partidos; en el Fantasy solo mira)."""
+    return await login()

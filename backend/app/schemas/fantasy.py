@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,6 +34,8 @@ class ParticipantOut(BaseModel):
     squad_limit: int
     # Suma del valor actual de su plantilla.
     team_value: int
+    # Cuenta del Fantasy del cuerpo técnico: su plantilla no se ve y no clausula ni la clausulan.
+    private_squad: bool = False
 
 
 class SquadListingOut(BaseModel):
@@ -100,6 +103,14 @@ class NoLeagueOut(BaseModel):
     """Respuesta de `GET /fantasy/me` cuando aún no hay liga: solo `league: null`."""
 
     league: None = None
+
+
+class SpectatorOut(BaseModel):
+    """`GET /fantasy/me` de una cuenta de partidos del cuerpo técnico: no tiene equipo, solo mira
+    la clasificación."""
+
+    league: LeagueOut
+    spectator: Literal[True] = True
 
 
 class MyTeamOut(BaseModel):

@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.envelope import failure
 from app.api.security_headers import SECURITY_HEADERS
+from app.domain.fantasy.access import SpectatorError
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,13 @@ async def _handle_api_error(_: Request, error: Exception) -> JSONResponse:
     return _json(error.status_code, error.code, error.message, error.headers)
 
 
+async def _handle_spectator(_: Request, error: Exception) -> JSONResponse:
+    assert isinstance(error, SpectatorError)
+    return _json(
+        403, "spectator", "Esta cuenta solo mira el Fantasy: juega con tu cuenta del Fantasy"
+    )
+
+
 async def _handle_http_error(_: Request, error: Exception) -> JSONResponse:
     assert isinstance(error, StarletteHTTPException)
     code = STATUS_CODES.get(error.status_code, "error")
@@ -77,6 +85,7 @@ async def _handle_unexpected(request: Request, error: Exception) -> JSONResponse
 
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, _handle_api_error)
+    app.add_exception_handler(SpectatorError, _handle_spectator)
     app.add_exception_handler(StarletteHTTPException, _handle_http_error)
     app.add_exception_handler(RequestValidationError, _handle_validation_error)
     app.add_exception_handler(Exception, _handle_unexpected)

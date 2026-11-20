@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { FantasyAccountsSection } from "@/components/fantasy-accounts-section";
 import { InvitationDialog } from "@/components/invitation-dialog";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerFormDialog } from "@/components/player-form-dialog";
@@ -180,6 +181,8 @@ export default function PlantillaPage() {
           </li>
         ))}
       </ul>
+
+      {canEdit ? <FantasyAccountsSection /> : null}
 
       <PlayerFormDialog
         player={editing === "new" ? null : editing}

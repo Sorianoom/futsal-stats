@@ -5,8 +5,17 @@ nombre en el código para poder ajustarlos.
 
 ## Participantes y cuentas
 
-- Participan jugadores y entrenadores, en la misma clasificación y sin restricciones (unos 15
-  participantes y unos 14 jugadores reales).
+- Participan jugadores y entrenadores, en la misma clasificación (unos 15 participantes y unos
+  14 jugadores reales).
+- Entrenadores (decidido el 2026-11-20, migración 0013): juegan con una **cuenta del Fantasy**
+  aparte (rol `fantasy`), que el entrenador principal invita desde Plantilla con un nombre. Su
+  plantilla es **privada**, para que no se vea a quién fichan:
+  - sus copias no salen en Cláusulas y nadie se las puede clausular;
+  - ellos tampoco pagan ni suben cláusulas (fichan en el mercado);
+  - en el historial de fichajes no salen los movimientos en que participan;
+  - si venden en el mercado, el vendedor sale como «Anónimo» (con un id fijo, no el suyo).
+  - Con su cuenta de partidos solo ven la clasificación: no tienen equipo y no cuentan como
+    participantes. La 0013 devolvió a la banca las copias que ya tenían esas cuentas.
 - Cuentas de jugador: las crea el entrenador principal con una invitación de un solo uso desde la
   ficha del jugador; el jugador elige su contraseña. Sin registro abierto.
 - Los jugadores solo ven el Fantasy y las estadísticas (partidos, temporada y notas). No ven puntos

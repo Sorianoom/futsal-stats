@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import fantasy_money_repo, fantasy_repo
 from app.db.models import FantasyLeague, FantasyParticipant, User
+from app.domain.fantasy.access import SpectatorError, plays_fantasy
 from app.domain.fantasy.calendar import madrid_date
 from app.domain.fantasy.copies import deal_copies, missing_copies
 from app.domain.fantasy.lineup import Lineup, build_lineup
@@ -38,7 +39,8 @@ class Membership:
 async def create_league(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
 ) -> LeagueCreatedOut:
-    """Liga con todos los usuarios activos: 20 M y 2 jugadores de campo al azar cada uno."""
+    """Liga con todos los que juegan (jugadores y cuentas del Fantasy del cuerpo técnico): 20 M y 2
+    jugadores de campo al azar cada uno. Las cuentas de partidos del cuerpo técnico solo miran."""
     if await fantasy_repo.get_active_league(db) is not None:
         raise LeagueExistsError
     league = await fantasy_repo.create_league(db, madrid_date(now), user.id, now)
@@ -86,7 +88,9 @@ async def enter(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
 ) -> Membership | None:
     """Liga activa y participante del usuario, tras poner al día todo lo pendiente (el alta y
-    luego lo vencido del mercado y las jornadas)."""
+    luego lo vencido del mercado y las jornadas). Lanza `SpectatorError` si la cuenta no juega."""
+    if not plays_fantasy(user.role):
+        raise SpectatorError
     membership = await _join(db, user, now, rng)
     if membership is None:
         return None
@@ -124,6 +128,12 @@ async def _join(
         await _deal_initial_copies(db, league.id, [participant], now, rng)
     await db.commit()
     return Membership(league, participant)
+
+
+async def watch(db: AsyncSession, now: datetime, rng: random.Random) -> FantasyLeague | None:
+    """Liga activa puesta al día, sin dar de alta a nadie: para las cuentas que solo miran."""
+    await catch_up(db, now, rng)
+    return await fantasy_repo.get_active_league(db)
 
 
 async def require_membership(

@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import fantasy_market_repo as market_repo
 from app.db import fantasy_money_repo as money
-from app.db import photos_repo
+from app.db import fantasy_repo, photos_repo
 from app.db.models import User
+from app.domain.fantasy.access import PrivateSquadError, has_private_squad
 from app.domain.fantasy.calendar import madrid_date
 from app.domain.fantasy.clauses import (
     check_clause_buy,
@@ -41,7 +42,12 @@ async def clauses(db: AsyncSession, user: User, now: datetime, rng: random.Rando
     league, me = membership.league, membership.participant.id
     values = await money.player_values(db, league.id)
     names = await participant_names(db, league.id)
-    owned = await market_repo.owned_copies(db, league.id)
+    private = await fantasy_repo.private_participant_ids(db, league.id) - {me}
+    owned = [
+        (copy, player)
+        for copy, player in await market_repo.owned_copies(db, league.id)
+        if copy.owner_id not in private
+    ]
     photos = await photos_repo.photo_urls(db, [player.id for _, player in owned])
     rounds = await rounds_of(db, league)
     recent = await recent_points(db, rounds, now, [player.id for _, player in owned])
@@ -75,11 +81,14 @@ async def buy_clause(
     db: AsyncSession, user: User, now: datetime, rng: random.Random, copy_id: uuid.UUID
 ) -> BankSaleOut:
     """Clausulazo: pago la cláusula al dueño y la copia es mía al momento. Si estaba a la venta,
-    se anula. Lanza `NotFoundError` o `ClauseError`."""
+    se anula. Lanza `NotFoundError`, `ClauseError` o `PrivateSquadError`."""
+    if has_private_squad(user.role):
+        raise PrivateSquadError
     locked = await lock(db, user, now, rng)
     league, me = locked.league, locked.participant.id
     row = await market_repo.owned_copy_in_league(db, league.id, copy_id)
-    if row is None:
+    # Las copias de una plantilla privada no se ven ni se clausulan: como si no existieran.
+    if row is None or row[0].owner_id in await fantasy_repo.private_participant_ids(db, league.id):
         raise NotFoundError
     copy, player = row
     seller = copy.owner_id
@@ -114,7 +123,10 @@ async def raise_clause(
     copy_id: uuid.UUID,
     new_clause: int,
 ) -> ClauseRaiseOut:
-    """Subo la cláusula de una copia mía pagando la mitad de la subida."""
+    """Subo la cláusula de una copia mía pagando la mitad de la subida. Una plantilla privada no
+    puede (`PrivateSquadError`): nadie se la va a clausular."""
+    if has_private_squad(user.role):
+        raise PrivateSquadError
     locked = await lock(db, user, now, rng)
     participant = locked.participant
     owned = await market_repo.owned_copy(db, participant.id, copy_id)

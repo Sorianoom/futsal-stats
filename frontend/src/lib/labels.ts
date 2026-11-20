@@ -15,6 +15,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   head_coach: "Entrenador",
   assistant_coach: "Segundo entrenador",
   player: "Jugador",
+  fantasy: "Fantasy",
 };
 
 export const POSITION_LABEL: Record<Position, string> = {

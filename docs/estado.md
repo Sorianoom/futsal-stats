@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-19 (Fantasy pasos 3, 4 y 5 subidos a `main`; migraciones 0008, 0009 y 0010 aplicadas en Neon).
+Última actualización: 2026-11-20 (cuentas del Fantasy del cuerpo técnico, migración 0013; sin subir junto con la 0012 y el diseño D).
 
 ## Hecho y en producción
 
@@ -78,6 +78,20 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   - Sin comprobar todavía en un partido real.
 
 ## En curso
+
+- **Cuentas del Fantasy del cuerpo técnico** (sin subir: **lleva la migración 0013**, aplicarla en
+  Neon después de la 0012 y antes del push). Reglas en `docs/fantasy.md`, «Participantes y cuentas».
+  - Rol `fantasy` (sin ficha). Plantilla → «Cuentas del Fantasy del cuerpo técnico»: invitar con
+    un nombre (`POST /fantasy-accounts/invitation`), listar y quitar. La invitación usa la misma
+    tabla y la misma página `/invitacion` (`player_invitations.player_id` pasa a admitir NULL, con
+    `display_name`).
+  - Las cuentas de partidos del cuerpo técnico solo miran: `GET /fantasy/me` devuelve
+    `{league, spectator: true}`, la clasificación funciona y el resto da 403 `spectator`. La 0013
+    devuelve a la banca sus copias y las saca de la liga (su historial cae en cascada).
+  - Plantilla privada: fuera de Cláusulas (404 al clausularlas), 403 `private_squad` si clausulan o
+    suben cláusula, fichajes ocultos a los demás y vendedor «Anónimo» en el mercado.
+  - Probado en el navegador contra la API local: invitar a «Bruno», crear la cuenta, plantilla
+    privada y la cuenta del entrenador viendo solo la clasificación.
 
 - **Diseño D del Fantasy, colores del club** (sin subir, sin migración; va detrás de la 0012).
   Prototipos y elección en https://claude.ai/artifact/UPKR81LBEVNWziBKReaZDP (fila D) y prototipo

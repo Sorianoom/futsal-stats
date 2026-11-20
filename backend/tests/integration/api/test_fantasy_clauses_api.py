@@ -13,8 +13,7 @@ from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.fantasy.rules import CLAUSE_PROTECTION_DAYS, INITIAL_BALANCE, INITIAL_PLAYER_VALUE
-from app.domain.roles import Role
-from tests.integration.api.conftest import Login, MakePlayer
+from tests.integration.api.conftest import Join, Login, MakePlayer
 from tests.integration.api.fantasy_support import (
     LEAGUE_DAY,
     Clock,
@@ -45,13 +44,13 @@ async def client(session: AsyncSession, clock: Clock) -> AsyncIterator[AsyncClie
 
 
 async def _league(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient, join: Join, staff: Headers, make_player: MakePlayer, clock: Clock
 ) -> tuple[Headers, Headers]:
     """Liga del 10/10 con dos participantes; el reloj pasa al 20/10."""
     await field_players(make_player)
-    coach = await login()
-    assistant = await login(Role.ASSISTANT_COACH)
-    await create_league(client, coach)
+    coach = await join()
+    assistant = await join("assistant_coach")
+    await create_league(client, staff)
     await me(client, assistant)
     clock.now = FREE_DAY
     return coach, assistant
@@ -87,9 +86,14 @@ def _error(response: Response) -> tuple[int, str]:
 
 
 async def test_my_squad_shows_the_clause_and_the_protection_end(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _league(client, login, make_player, clock)
+    coach, _ = await _league(client, join, staff, make_player, clock)
 
     squad = (await me(client, coach))["squad"]
 
@@ -99,9 +103,14 @@ async def test_my_squad_shows_the_clause_and_the_protection_end(
 
 
 async def test_the_clause_list_has_every_owned_copy_with_its_owner(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     mine = {c["copy_id"] for c in (await me(client, coach))["squad"]}
     theirs = {c["copy_id"] for c in (await me(client, assistant))["squad"]}
 
@@ -127,9 +136,14 @@ async def test_the_clause_list_has_every_owned_copy_with_its_owner(
 
 
 async def test_a_clause_buy_moves_the_copy_and_the_money_at_once(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     target = await _target(client, coach, assistant)
 
     response = await _buy(client, coach, target["copy_id"])
@@ -156,9 +170,14 @@ async def test_a_clause_buy_moves_the_copy_and_the_money_at_once(
 
 
 async def test_a_copy_is_protected_for_seven_days_after_it_arrives(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     target = await _target(client, coach, assistant)
     clock.now = LEAGUE_DAY + timedelta(days=CLAUSE_PROTECTION_DAYS) - timedelta(minutes=1)
 
@@ -166,9 +185,14 @@ async def test_a_copy_is_protected_for_seven_days_after_it_arrives(
 
 
 async def test_a_bought_copy_is_protected_again_for_the_new_owner(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     target = await _target(client, coach, assistant)
     await _buy(client, coach, target["copy_id"])
 
@@ -176,11 +200,16 @@ async def test_a_bought_copy_is_protected_again_for_the_new_owner(
 
 
 async def test_no_clause_buys_on_a_match_day(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     await client.post(
-        "/matches", json={"held_on": "2026-10-20", "opponent": "Rival FS"}, headers=coach
+        "/matches", json={"held_on": "2026-10-20", "opponent": "Rival FS"}, headers=staff
     )
     target = await _target(client, coach, assistant)
 
@@ -189,27 +218,42 @@ async def test_no_clause_buys_on_a_match_day(
 
 
 async def test_my_own_copy_cannot_be_bought(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _league(client, login, make_player, clock)
+    coach, _ = await _league(client, join, staff, make_player, clock)
     mine = (await me(client, coach))["squad"][0]
 
     assert _error(await _buy(client, coach, mine["copy_id"])) == (409, "own_copy")
 
 
 async def test_a_bank_copy_has_no_clause_to_pay(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _league(client, login, make_player, clock)
+    coach, _ = await _league(client, join, staff, make_player, clock)
     bank = next(x for x in await market(client, coach) if x["seller"] is None)
 
     assert _error(await _buy(client, coach, bank["copy_id"])) == (404, "not_found")
 
 
 async def test_a_clause_buy_needs_balance_for_the_whole_clause(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     target = await _target(client, coach, assistant)
     await _raise(client, assistant, target["copy_id"], INITIAL_BALANCE + 1000)
 
@@ -219,9 +263,14 @@ async def test_a_clause_buy_needs_balance_for_the_whole_clause(
 
 
 async def test_a_clause_buy_cancels_the_sellers_listing(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     target = await _target(client, coach, assistant)
     await client.post(f"/fantasy/copies/{target['copy_id']}/listing", json={}, headers=assistant)
 
@@ -234,9 +283,14 @@ async def test_a_clause_buy_cancels_the_sellers_listing(
 
 
 async def test_raising_my_clause_costs_half_of_the_increase(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _league(client, login, make_player, clock)
+    coach, _ = await _league(client, join, staff, make_player, clock)
     mine = (await me(client, coach))["squad"][0]
 
     response = await _raise(client, coach, mine["copy_id"], INITIAL_CLAUSE + 2001)
@@ -254,9 +308,14 @@ async def test_raising_my_clause_costs_half_of_the_increase(
 
 
 async def test_a_clause_cannot_be_lowered(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _league(client, login, make_player, clock)
+    coach, _ = await _league(client, join, staff, make_player, clock)
     mine = (await me(client, coach))["squad"][0]
 
     response = await _raise(client, coach, mine["copy_id"], INITIAL_CLAUSE)
@@ -265,9 +324,14 @@ async def test_a_clause_cannot_be_lowered(
 
 
 async def test_only_the_owner_can_raise_a_clause(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _league(client, login, make_player, clock)
+    coach, assistant = await _league(client, join, staff, make_player, clock)
     theirs = (await me(client, assistant))["squad"][0]
 
     response = await _raise(client, coach, theirs["copy_id"], INITIAL_CLAUSE + 1000)
@@ -276,9 +340,14 @@ async def test_only_the_owner_can_raise_a_clause(
 
 
 async def test_raising_needs_balance_for_the_cost(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _league(client, login, make_player, clock)
+    coach, _ = await _league(client, join, staff, make_player, clock)
     mine = (await me(client, coach))["squad"][0]
 
     response = await _raise(

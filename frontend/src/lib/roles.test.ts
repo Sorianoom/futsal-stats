@@ -20,6 +20,12 @@ describe("roles", () => {
     },
   );
 
+  it("la cuenta del Fantasy del cuerpo técnico va como la de un jugador", () => {
+    expect(homeFor("fantasy")).toBe("/fantasy");
+    expect(canVisit("fantasy", "/estadisticas")).toBe(true);
+    expect(canVisit("fantasy", "/plantilla")).toBe(false);
+  });
+
   it("los entrenadores pueden ver cualquier pantalla de la app", () => {
     expect(canVisit("head_coach", "/puntos")).toBe(true);
     expect(canVisit("assistant_coach", "/partido")).toBe(true);

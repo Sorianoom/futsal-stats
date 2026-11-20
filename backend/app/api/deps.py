@@ -90,3 +90,5 @@ def require_roles(*roles: Role) -> Callable[[User], Awaitable[User]]:
 
 CurrentUser = Annotated[User, Depends(require_roles(*STAFF_ROLES))]
 HeadCoach = Annotated[User, Depends(require_roles(Role.HEAD_COACH))]
+# Cuentas sin ficha de jugador, que eligen su nombre visible: el personal técnico y las del Fantasy.
+NamedUser = Annotated[User, Depends(require_roles(*STAFF_ROLES, Role.FANTASY))]

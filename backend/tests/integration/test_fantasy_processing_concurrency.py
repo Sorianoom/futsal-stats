@@ -41,7 +41,7 @@ class CommittedLeague:
 
 
 async def _user(db: AsyncSession) -> User:
-    return await create_user(db, f"{uuid.uuid4().hex[:10]}@club.es", "x" * 12, Role.HEAD_COACH)
+    return await create_user(db, f"{uuid.uuid4().hex[:10]}@club.es", "x" * 12, Role.FANTASY)
 
 
 async def _setup(db: AsyncSession, user: User) -> CommittedLeague:

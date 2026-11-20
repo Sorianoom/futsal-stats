@@ -9,6 +9,7 @@ from app.api.routes import (
     auth,
     callup,
     fantasy,
+    fantasy_accounts,
     fantasy_clauses,
     fantasy_market,
     matches,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
         fantasy.router,
         fantasy_market.router,
         fantasy_clauses.router,
+        fantasy_accounts.router,
     ):
         app.include_router(router, prefix=settings.api_prefix)
 

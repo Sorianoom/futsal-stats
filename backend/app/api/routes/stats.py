@@ -13,7 +13,7 @@ from app.db.models import Player, StintRow
 from app.domain.points.callup import Position
 from app.domain.rating import player_rating
 from app.domain.rating.match import goal_events, rating_input
-from app.domain.roles import Role
+from app.domain.roles import STAFF_ROLES
 from app.domain.stints.events import (
     EventError,
     EventKind,
@@ -104,7 +104,7 @@ async def match_stats(
 
     players = await _match_players(db, seconds, counts, segments, covered_goals)
     warnings = _warning(uncovered) if stints else []
-    if user.role == Role.PLAYER:
+    if user.role not in STAFF_ROLES:
         quintets, warnings = [], []
 
     return ok(

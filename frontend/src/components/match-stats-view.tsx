@@ -12,6 +12,7 @@ import type { MatchStats } from "@/lib/api/stats-types";
 import { matchesQuery, matchStatsQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
 import { formatShortDay } from "@/lib/weeks";
+import { isPlayer as isPlayerRole } from "@/lib/roles";
 
 const BACK_LINK =
   "inline-flex min-h-12 items-center rounded-2xl border-2 bg-card px-5 font-bold [@media(hover:hover)]:hover:bg-muted";
@@ -119,7 +120,7 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
 
   const { stats } = result;
   // Las valoraciones de quintetos y los avisos son del cuerpo técnico; al jugador no le llegan.
-  const isPlayer = user?.role === "player";
+  const isPlayer = isPlayerRole(user?.role);
   const match = matches?.find((m) => m.id === matchId) ?? null;
   const names = new Map(stats.players.map((player) => [player.player_id, player.name]));
   const nameOf = (playerId: string) => names.get(playerId) ?? "Jugador desconocido";

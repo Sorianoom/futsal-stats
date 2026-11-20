@@ -19,6 +19,7 @@ from app.schemas.fantasy import (
     MyTeamOut,
     NoLeagueOut,
     RoundDetailOut,
+    SpectatorOut,
     StandingsOut,
 )
 from app.services import fantasy, fantasy_scoring, fantasy_team
@@ -40,10 +41,10 @@ async def create_league(
         raise ApiError(409, "league_exists", "Ya hay una liga activa") from error
 
 
-@router.get("/me", response_model=Envelope[MyTeamOut | NoLeagueOut])
+@router.get("/me", response_model=Envelope[MyTeamOut | SpectatorOut | NoLeagueOut])
 async def my_team(
     db: SessionDep, user: AnyUser, now: NowDep, rng: RngDep
-) -> Envelope[MyTeamOut | NoLeagueOut]:
+) -> Envelope[MyTeamOut | SpectatorOut | NoLeagueOut]:
     team = await fantasy_team.my_team(db, user, now, rng)
     return ok(team if team is not None else NoLeagueOut())
 

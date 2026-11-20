@@ -20,7 +20,7 @@ from app.domain.fantasy.rules import (
     SQUAD_LIMIT,
 )
 from app.domain.roles import Role
-from tests.integration.api.conftest import Login, MakePlayer
+from tests.integration.api.conftest import Join, Login, MakePlayer
 from tests.integration.api.fantasy_support import (
     FIRST_MARKET_CLOSES,
     LEAGUE_DAY,
@@ -53,12 +53,12 @@ async def client(session: AsyncSession, clock: Clock) -> AsyncIterator[AsyncClie
 
 
 async def _two_participants(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient, join: Join, staff: Headers, make_player: MakePlayer
 ) -> tuple[Headers, Headers]:
     await field_players(make_player)
-    coach = await login()
-    assistant = await login(Role.ASSISTANT_COACH)
-    await create_league(client, coach)
+    coach = await join()
+    assistant = await join("assistant_coach")
+    await create_league(client, staff)
     return coach, assistant
 
 
@@ -66,9 +66,13 @@ async def _two_participants(
 
 
 async def test_the_first_market_has_fifteen_bank_copies_until_midnight(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
 
     listings = await market(client, coach)
 
@@ -88,9 +92,13 @@ async def test_the_first_market_has_fifteen_bank_copies_until_midnight(
 
 
 async def test_the_bank_never_lists_owned_copies(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
 
     listings = await market(client, coach)
 
@@ -99,9 +107,14 @@ async def test_the_bank_never_lists_owned_copies(
 
 
 async def test_the_market_is_created_once_a_day(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     first = {x["listing_id"] for x in await market(client, coach)}
 
     again = {x["listing_id"] for x in await market(client, assistant)}
@@ -114,9 +127,14 @@ async def test_the_market_is_created_once_a_day(
 
 
 async def test_after_the_first_week_the_market_has_eight_copies(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
 
     clock.now = LEAGUE_DAY + timedelta(days=7)
 
@@ -124,9 +142,14 @@ async def test_after_the_first_week_the_market_has_eight_copies(
 
 
 async def test_a_day_without_visits_has_no_market(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     await market(client, coach)
 
     clock.now = LEAGUE_DAY + timedelta(days=3)
@@ -140,9 +163,13 @@ async def test_a_day_without_visits_has_no_market(
 
 
 async def test_a_bid_can_be_placed_changed_and_withdrawn(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     target = buyable(await market(client, coach), await me(client, coach))[0]
     listing_id = target["listing_id"]
 
@@ -160,8 +187,10 @@ async def test_a_bid_can_be_placed_changed_and_withdrawn(
     assert mine[listing_id]["my_bid"] is None
 
 
-async def test_bids_are_sealed(client: AsyncClient, login: Login, make_player: MakePlayer) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+async def test_bids_are_sealed(
+    client: AsyncClient, login: Login, make_player: MakePlayer, join: Join, staff: dict[str, str]
+) -> None:
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     target = buyable(await market(client, coach), await me(client, coach))[0]
     await bid(client, coach, target["listing_id"], 6000)
 
@@ -187,8 +216,10 @@ async def test_invalid_bid_amounts_are_rejected(
     amount: int,
     status: int,
     code: str,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     target = buyable(await market(client, coach), await me(client, coach))[0]
 
     response = await bid(client, coach, target["listing_id"], amount)
@@ -198,9 +229,13 @@ async def test_invalid_bid_amounts_are_rejected(
 
 
 async def test_bid_body_rejects_unknown_fields(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     target = (await market(client, coach))[0]
 
     response = await client.put(
@@ -213,9 +248,14 @@ async def test_bid_body_rejects_unknown_fields(
 
 
 async def test_bidding_on_an_unknown_or_closed_listing_is_404(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     target = (await market(client, coach))[0]
 
     unknown = await bid(client, coach, str(uuid.uuid4()), 5000)
@@ -228,9 +268,14 @@ async def test_bidding_on_an_unknown_or_closed_listing_is_404(
 
 
 async def test_a_full_squad_cannot_bid(
-    client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    session: AsyncSession,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     mine = await me(client, coach)
     await give_copies(session, mine["me"]["participant_id"], SQUAD_LIMIT - 2, LEAGUE_DAY)
     # Cualquier venta de la banca: la plantilla llena se comprueba antes que el jugador repetido,
@@ -244,9 +289,13 @@ async def test_a_full_squad_cannot_bid(
 
 
 async def test_a_copy_of_a_player_i_have_cannot_be_bid_for(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     coach_team, assistant_team = await me(client, coach), await me(client, assistant)
     listings = await market(client, coach)
     mine = {c["player_id"] for c in coach_team["squad"]}
@@ -266,9 +315,14 @@ async def test_a_copy_of_a_player_i_have_cannot_be_bid_for(
 
 
 async def test_bidding_on_a_listing_whose_copy_changed_owner_is_404(
-    client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    session: AsyncSession,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     # Un jugador que no tiene ninguno de los dos: si no, chocaría con la copia única por dueño.
     squads = (await me(client, coach), await me(client, assistant))
     target = buyable(await market(client, coach), *squads)[0]
@@ -289,9 +343,14 @@ async def test_bidding_on_a_listing_whose_copy_changed_owner_is_404(
 
 
 async def test_the_highest_bid_wins_when_the_listing_closes(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     coach_team, assistant_team = await me(client, coach), await me(client, assistant)
     target = buyable(await market(client, coach), coach_team, assistant_team)[0]
     await bid(client, coach, target["listing_id"], 4500)
@@ -320,9 +379,14 @@ async def test_the_highest_bid_wins_when_the_listing_closes(
 
 
 async def test_on_a_tie_the_oldest_bid_wins_and_changing_a_bid_loses_seniority(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     coach_team, assistant_team = await me(client, coach), await me(client, assistant)
     first, second = buyable(await market(client, coach), coach_team, assistant_team)[:2]
     await bid(client, coach, first["listing_id"], 5000)
@@ -347,8 +411,10 @@ async def test_bids_of_full_squads_are_skipped_at_the_close(
     make_player: MakePlayer,
     clock: Clock,
     session: AsyncSession,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     coach_team, assistant_team = await me(client, coach), await me(client, assistant)
     target = buyable(await market(client, coach), coach_team, assistant_team)[0]
     await bid(client, coach, target["listing_id"], 9000)
@@ -363,9 +429,14 @@ async def test_bids_of_full_squads_are_skipped_at_the_close(
 
 
 async def test_bids_may_leave_the_balance_negative(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     first, second = buyable(await market(client, coach), await me(client, coach))[:2]
     await bid(client, coach, first["listing_id"], 15000)
     await bid(client, coach, second["listing_id"], 15000)
@@ -381,9 +452,14 @@ async def test_bids_may_leave_the_balance_negative(
 
 
 async def test_a_participant_lists_a_copy_and_the_best_bidder_pays_him(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     coach_team, assistant_team = await me(client, coach), await me(client, assistant)
     theirs = {c["player_id"] for c in assistant_team["squad"]}
     copy = next(c for c in coach_team["squad"] if c["player_id"] not in theirs)
@@ -423,9 +499,13 @@ async def test_a_participant_lists_a_copy_and_the_best_bidder_pays_him(
 
 
 async def test_a_listed_copy_can_still_be_lined_up(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     copy = (await me(client, coach))["squad"][0]
     await client.post(f"/fantasy/copies/{copy['copy_id']}/listing", json={}, headers=coach)
 
@@ -437,9 +517,14 @@ async def test_a_listed_copy_can_still_be_lined_up(
 
 
 async def test_a_listing_without_bids_keeps_the_copy(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
     copy = (await me(client, coach))["squad"][0]
     await client.post(
         f"/fantasy/copies/{copy['copy_id']}/listing", json={"min_price": None}, headers=coach
@@ -453,8 +538,10 @@ async def test_a_listing_without_bids_keeps_the_copy(
     assert await transfers(client, coach) == []
 
 
-async def test_listing_errors(client: AsyncClient, login: Login, make_player: MakePlayer) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+async def test_listing_errors(
+    client: AsyncClient, login: Login, make_player: MakePlayer, join: Join, staff: dict[str, str]
+) -> None:
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     copy = (await me(client, coach))["squad"][0]
     path = f"/fantasy/copies/{copy['copy_id']}/listing"
     await client.post(path, json={}, headers=coach)
@@ -475,9 +562,14 @@ async def test_listing_errors(client: AsyncClient, login: Login, make_player: Ma
 
 
 async def test_withdrawing_a_listing_voids_its_bids(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     coach_team, assistant_team = await me(client, coach), await me(client, assistant)
     theirs = {c["player_id"] for c in assistant_team["squad"]}
     copy = next(c for c in coach_team["squad"] if c["player_id"] not in theirs)
@@ -501,9 +593,13 @@ async def test_withdrawing_a_listing_voids_its_bids(
 
 
 async def test_selling_to_the_bank_pays_seventy_percent_at_once(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     team = await me(client, coach)
     copy = team["squad"][0]
     await client.put("/fantasy/lineup", json={"field_copy_ids": [copy["copy_id"]]}, headers=coach)
@@ -525,9 +621,13 @@ async def test_selling_to_the_bank_pays_seventy_percent_at_once(
 
 
 async def test_selling_a_copy_that_is_not_mine_is_404(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, assistant = await _two_participants(client, login, make_player)
+    coach, assistant = await _two_participants(client, join, staff, make_player)
     copy = (await me(client, assistant))["squad"][0]
 
     response = await client.post(f"/fantasy/copies/{copy['copy_id']}/sell", headers=coach)
@@ -539,9 +639,13 @@ async def test_selling_a_copy_that_is_not_mine_is_404(
 
 
 async def test_me_shows_values_limit_and_team_value(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
 
     team = await me(client, coach)
 
@@ -556,8 +660,10 @@ async def test_me_shows_values_limit_and_team_value(
 # --- Sin liga y transferencias -------------------------------------------------------------------
 
 
-async def test_without_league_the_market_routes_are_404(client: AsyncClient, login: Login) -> None:
-    headers = await login()
+async def test_without_league_the_market_routes_are_404(
+    client: AsyncClient, login: Login, join: Join
+) -> None:
+    headers = await join()
     some = str(uuid.uuid4())
 
     responses = [
@@ -575,19 +681,28 @@ async def test_without_league_the_market_routes_are_404(client: AsyncClient, log
 
 
 async def test_the_initial_deal_is_not_a_transfer(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, login, make_player)
+    coach, _ = await _two_participants(client, join, staff, make_player)
 
     assert await transfers(client, coach) == []
 
 
 async def test_players_use_the_market(
-    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
 ) -> None:
     await field_players(make_player)
-    coach = await login()
-    await create_league(client, coach)
+    await join()
+    await create_league(client, staff)
     player = await make_player(40, name="Dani")
     headers = await login(Role.PLAYER, player_id=player.id)
     team = await me(client, headers)

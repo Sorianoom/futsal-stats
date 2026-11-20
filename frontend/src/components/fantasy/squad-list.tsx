@@ -20,7 +20,8 @@ interface RowProps {
   copy: SquadCopy;
   onList: () => void;
   onSell: () => void;
-  onRaise: () => void;
+  /** null: plantilla privada, sin cláusulas que subir. */
+  onRaise: (() => void) | null;
   onChanged: () => void;
 }
 
@@ -42,7 +43,9 @@ function SquadRow({ copy, onList, onSell, onRaise, onChanged }: RowProps) {
         <span className="flex flex-col items-end">
           <span className="font-extrabold tabular-nums">{formatMoney(copy.value)}</span>
           <ValueChange change={copy.value_change} />
-          <span className="text-sm text-muted-foreground tabular-nums">{`Cláusula ${formatMoney(copy.clause)}`}</span>
+          {onRaise ? (
+            <span className="text-sm text-muted-foreground tabular-nums">{`Cláusula ${formatMoney(copy.clause)}`}</span>
+          ) : null}
         </span>
       </div>
       {copy.listing ? (
@@ -54,9 +57,11 @@ function SquadRow({ copy, onList, onSell, onRaise, onChanged }: RowProps) {
             Poner a la venta
           </Button>
         )}
-        <Button variant="outline" className="rounded-xl" onClick={onRaise}>
-          Subir cláusula
-        </Button>
+        {onRaise ? (
+          <Button variant="outline" className="rounded-xl" onClick={onRaise}>
+            Subir cláusula
+          </Button>
+        ) : null}
         <Button variant="ghost" className="rounded-xl" onClick={onSell}>
           Vender a la banca
         </Button>
@@ -68,11 +73,13 @@ function SquadRow({ copy, onList, onSell, onRaise, onChanged }: RowProps) {
 interface SquadListProps {
   squad: readonly SquadCopy[];
   balance: number;
+  /** Cuenta del Fantasy del cuerpo técnico: nadie la ve ni la clausula, así que no hay cláusulas. */
+  privateSquad?: boolean;
   onChanged: () => void;
 }
 
 /** Mi plantilla: valor, cambio y cláusula de cada jugador, y sus ventas (mercado o banca). */
-export function SquadList({ squad, balance, onChanged }: SquadListProps) {
+export function SquadList({ squad, balance, privateSquad = false, onChanged }: SquadListProps) {
   const [listing, setListing] = useState<SquadCopy | null>(null);
   const [raising, setRaising] = useState<SquadCopy | null>(null);
   const [selling, setSelling] = useState<SquadCopy | null>(null);
@@ -93,6 +100,11 @@ export function SquadList({ squad, balance, onChanged }: SquadListProps) {
           {sold}
         </p>
       ) : null}
+      {privateSquad ? (
+        <p className="text-sm text-muted-foreground">
+          Plantilla privada: nadie ve tus jugadores ni te los puede clausular.
+        </p>
+      ) : null}
       {squad.length === 0 ? <p className="text-muted-foreground">Tu plantilla está vacía.</p> : null}
       <ul aria-label="Mi plantilla" className="divide-y">
         {squad.map((copy) => (
@@ -107,10 +119,14 @@ export function SquadList({ squad, balance, onChanged }: SquadListProps) {
               setSold(null);
               setSelling(copy);
             }}
-            onRaise={() => {
-              setSold(null);
-              setRaising(copy);
-            }}
+            onRaise={
+              privateSquad
+                ? null
+                : () => {
+                    setSold(null);
+                    setRaising(copy);
+                  }
+            }
             onChanged={onChanged}
           />
         ))}

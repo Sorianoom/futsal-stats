@@ -16,6 +16,7 @@ import {
   sessionsQuery,
   type Query,
 } from "@/lib/queries";
+import { isPlayer } from "@/lib/roles";
 import { currentWeekStart } from "@/lib/weeks";
 
 /** Pide y guarda una lectura. Es un adelanto: si falla, la pantalla volverá a pedirla y avisará. */
@@ -42,7 +43,7 @@ export function CacheWarmer() {
     // Todos los roles leen el Fantasy: son dos lecturas pequeñas.
     const fantasy: Query<unknown>[] = [fantasyMeQuery, fantasyStandingsQuery];
     // El jugador solo puede leer partidos, estadísticas y Fantasy: pedir más le daría 403.
-    if (role === "player") {
+    if (isPlayer(role)) {
       [matchesQuery, seasonStatsQuery, ...fantasy].forEach(warm);
       return;
     }

@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from app.api.deps import AnyUser, NowDep, RngDep, SessionDep
 from app.api.envelope import Envelope, ok
 from app.api.errors import ApiError
+from app.domain.fantasy.access import PrivateSquadError
 from app.domain.fantasy.clauses import ClauseError, ClauseRejection
 from app.schemas.fantasy import BankSaleOut, ClauseIn, ClauseRaiseOut, ClausesOut
 from app.services import fantasy_clauses
@@ -46,6 +47,12 @@ def _clause_error(error: ClauseError) -> ApiError:
     return ApiError(CLAUSE_STATUS[reason], reason.value, CLAUSE_MESSAGES[reason])
 
 
+def _private_squad() -> ApiError:
+    return ApiError(
+        403, "private_squad", "Las cuentas del cuerpo técnico no pagan ni suben cláusulas"
+    )
+
+
 @router.get("/clauses", response_model=Envelope[ClausesOut])
 async def clauses(db: SessionDep, user: AnyUser, now: NowDep, rng: RngDep) -> Envelope[ClausesOut]:
     try:
@@ -64,6 +71,8 @@ async def buy_clause(
         raise ApiError(404, "not_found", "Copia no encontrada") from error
     except ClauseError as error:
         raise _clause_error(error) from error
+    except PrivateSquadError as error:
+        raise _private_squad() from error
 
 
 @router.put("/copies/{copy_id}/clause", response_model=Envelope[ClauseRaiseOut])
@@ -81,3 +90,5 @@ async def raise_clause(
         raise ApiError(404, "not_found", "La copia no es tuya") from error
     except ClauseError as error:
         raise _clause_error(error) from error
+    except PrivateSquadError as error:
+        raise _private_squad() from error

@@ -15,12 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import fantasy_money_repo as money
 from app.db import fantasy_repo
 from app.db.models import FantasyLeague, FantasyParticipant, FantasyRoundScore, User
+from app.domain.fantasy.access import plays_fantasy
 from app.domain.fantasy.calendar import Round, RoundStatus, is_locked, visible_rounds
 from app.domain.fantasy.lineup import EMPTY_LINEUP, latest_lineup
 from app.domain.fantasy.scoring import SlotScore, score_lineup
 from app.domain.fantasy.standings import StandingRow, display_name, rank
 from app.schemas.fantasy import RoundDetailOut, RoundOut, SlotOut, StandingRowOut, StandingsOut
-from app.services.fantasy import NoLeagueError, enter, require_membership
+from app.services.fantasy import NoLeagueError, enter, require_membership, watch
 from app.services.fantasy_results import Results, rounds_of, scored_results
 from app.services.fantasy_settlement import (
     ScoringContext,
@@ -72,10 +73,13 @@ async def standings(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
 ) -> StandingsOut:
     """Jornadas bloqueadas y la próxima, y la suma de puntos de las puntuadas por participante."""
-    membership = await enter(db, user, now, rng)
-    if membership is None:
+    if plays_fantasy(user.role):
+        membership = await enter(db, user, now, rng)
+        league = membership.league if membership else None
+    else:
+        league = await watch(db, now, rng)
+    if league is None:
         return StandingsOut(rounds=[], rows=[])
-    league = membership.league
     rounds = visible_rounds(await rounds_of(db, league), now)
     settled, results = await _round_data(db, league, rounds, now)
     scored = [r for r in rounds if r.match_id in settled or r.match_id in results]

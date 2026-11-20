@@ -188,3 +188,28 @@ describe("Fichajes", () => {
     expect(within(list).getByText(/Clausulazo/)).toBeInTheDocument();
   });
 });
+
+describe("Plantilla privada (cuenta del Fantasy del cuerpo técnico)", () => {
+  const PRIVATE_ME = { ...ME, me: { ...ME.me, private_squad: true } };
+
+  it("ve las cláusulas de los demás pero no puede clausular", async () => {
+    api({ "GET /fantasy/me": { data: PRIVATE_ME } });
+
+    const list = await openClauses();
+
+    expect(screen.getByText(/Tu cuenta es privada/)).toBeInTheDocument();
+    expect(within(list).getByText("Iván Ros")).toBeInTheDocument();
+    expect(within(list).queryByRole("button", { name: "Clausular" })).not.toBeInTheDocument();
+  });
+
+  it("en su plantilla no hay cláusulas que subir", async () => {
+    api({ "GET /fantasy/me": { data: PRIVATE_ME } });
+
+    renderWithAuth(<FantasyPage />);
+    const squad = await screen.findByRole("list", { name: "Mi plantilla" });
+
+    expect(screen.getByText(/Plantilla privada/)).toBeInTheDocument();
+    expect(within(squad).queryByRole("button", { name: "Subir cláusula" })).not.toBeInTheDocument();
+    expect(within(squad).queryByText(/Cláusula/)).not.toBeInTheDocument();
+  });
+});

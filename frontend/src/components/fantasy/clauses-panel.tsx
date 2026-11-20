@@ -22,7 +22,8 @@ interface RowProps {
   copy: ClauseCopy;
   /** Por qué no se puede clausular ahora; null si se puede. */
   block: ClauseBlock | null;
-  onBuy: () => void;
+  /** null: no puedo clausular (plantilla privada). */
+  onBuy: (() => void) | null;
 }
 
 function ClauseRow({ copy, block, onBuy }: RowProps) {
@@ -55,7 +56,7 @@ function ClauseRow({ copy, block, onBuy }: RowProps) {
       <div className="flex flex-wrap items-center gap-2">
         <span className={FIGURE}>{`Valor ${formatMoney(copy.value)}`}</span>
         <span className={FIGURE}>{`Cláusula ${formatMoney(copy.clause)}`}</span>
-        {block === null ? (
+        {block === null && onBuy ? (
           <Button variant="cta" className="rounded-xl" onClick={onBuy}>
             Clausular
           </Button>
@@ -69,11 +70,13 @@ interface ClausesPanelProps {
   balance: number;
   /** Mi plantilla no tiene hueco: no puedo fichar a nadie. */
   squadFull: boolean;
+  /** Cuenta del Fantasy del cuerpo técnico: ve las cláusulas pero no las paga. */
+  privateSquad?: boolean;
   onChanged: () => void;
 }
 
 /** Las copias de los demás con su cláusula; se pagan para fichar al momento (clausulazo). */
-export function ClausesPanel({ balance, squadFull, onChanged }: ClausesPanelProps) {
+export function ClausesPanel({ balance, squadFull, privateSquad = false, onChanged }: ClausesPanelProps) {
   const { data, failed, reload } = useApiQuery(fantasyClausesQuery.key, fantasyClausesQuery.fetch);
   const now = useNow();
   const [buying, setBuying] = useState<ClauseCopy | null>(null);
@@ -95,10 +98,15 @@ export function ClausesPanel({ balance, squadFull, onChanged }: ClausesPanelProp
           {bought}
         </p>
       ) : null}
-      {data?.match_day ? (
+      {privateSquad ? (
+        <p className="rounded-xl bg-muted p-3 font-semibold">
+          Tu cuenta es privada: nadie te puede clausular y tú tampoco clausulas. Ficha en el mercado.
+        </p>
+      ) : null}
+      {data?.match_day && !privateSquad ? (
         <p className="rounded-xl bg-muted p-3 font-semibold">Hoy hay partido: no se puede clausular hasta mañana.</p>
       ) : null}
-      {data && !data.match_day && squadFull ? (
+      {data && !data.match_day && squadFull && !privateSquad ? (
         <p className="rounded-xl bg-muted p-3 font-semibold">
           Tu plantilla está llena: vende a alguien para poder clausular.
         </p>
@@ -124,10 +132,14 @@ export function ClausesPanel({ balance, squadFull, onChanged }: ClausesPanelProp
                 key={copy.copy_id}
                 copy={copy}
                 block={block}
-                onBuy={() => {
-                  setBought(null);
-                  setBuying(copy);
-                }}
+                onBuy={
+                  privateSquad
+                    ? null
+                    : () => {
+                        setBought(null);
+                        setBuying(copy);
+                      }
+                }
               />
             );
           })}

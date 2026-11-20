@@ -47,7 +47,7 @@ function Shell({ children }: { children: ReactNode }) {
         <div className="space-y-1">
           <h1 className="text-3xl font-extrabold tracking-tight">Crea tu cuenta</h1>
           <p className="text-muted-foreground">
-            El entrenador te ha invitado a ver las estadísticas del equipo.
+            El entrenador te ha invitado a la app del equipo: el Fantasy y las estadísticas.
           </p>
         </div>
         {children}

@@ -6,7 +6,7 @@ escritura que toque el mismo saldo o la misma copia.
 
 import random
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -17,6 +17,7 @@ from app.db import fantasy_money_repo as money
 from app.db import fantasy_repo, photos_repo
 from app.db.fantasy_market_repo import ListingRow
 from app.db.models import FantasyLeague, FantasyParticipant, User
+from app.domain.fantasy.access import ANONYMOUS_NAME
 from app.domain.fantasy.market import LedgerKind, TransferKind, check_bid, min_bid
 from app.domain.fantasy.rules import (
     FANTASY_TIMEZONE,
@@ -62,14 +63,30 @@ async def lock(db: AsyncSession, user: User, now: datetime, rng: random.Random) 
     return Locked(league, participant)
 
 
+# Ni el id real: con él se cruzaría con la clasificación.
+ANONYMOUS_PARTICIPANT_ID = uuid.UUID(int=0)
+
+
 def _ref(
-    participant_id: uuid.UUID | None, names: Mapping[uuid.UUID, str]
+    participant_id: uuid.UUID | None,
+    names: Mapping[uuid.UUID, str],
+    hidden: Collection[uuid.UUID] = (),
 ) -> ParticipantRefOut | None:
+    """Referencia a un participante (None = la banca). Los de `hidden` salen como «Anónimo»."""
     if participant_id is None:
         return None
+    if participant_id in hidden:
+        return ParticipantRefOut(
+            participant_id=ANONYMOUS_PARTICIPANT_ID, display_name=ANONYMOUS_NAME
+        )
     return ParticipantRefOut(
         participant_id=participant_id, display_name=names.get(participant_id, "")
     )
+
+
+async def _hidden(db: AsyncSession, league_id: uuid.UUID, me: uuid.UUID) -> set[uuid.UUID]:
+    """Plantillas privadas que no son la mía: no se ve quién vende ni qué ficha."""
+    return await fantasy_repo.private_participant_ids(db, league_id) - {me}
 
 
 async def _listings_out(
@@ -82,6 +99,7 @@ async def _listings_out(
     league_id = league.id
     values = await money.player_values(db, league_id)
     names = await participant_names(db, league_id)
+    hidden = await _hidden(db, league_id, me)
     bids = await market_repo.my_bids(db, me, [r.listing.id for r in rows])
     photos = await photos_repo.photo_urls(db, [r.player.id for r in rows])
     recent = await recent_points(db, await rounds_of(db, league), now, [r.player.id for r in rows])
@@ -99,7 +117,7 @@ async def _listings_out(
                 position=player.position,
                 value=value,
                 min_bid=min_bid(value, listing.min_price),
-                seller=_ref(listing.seller_participant_id, names),
+                seller=_ref(listing.seller_participant_id, names, hidden),
                 closes_at=listing.closes_at.astimezone(FANTASY_TIMEZONE),
                 my_bid=bids.get(listing.id),
                 mine=listing.seller_participant_id == me,
@@ -228,9 +246,12 @@ async def sell_to_bank(
 async def transfer_history(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
 ) -> TransfersOut:
-    """Últimos movimientos del mercado, ventas a la banca y clausulazos (sin el reparto inicial)."""
+    """Últimos movimientos del mercado, ventas a la banca y clausulazos (sin el reparto inicial).
+
+    Sin los de las plantillas privadas ajenas: se vería qué fichan."""
     membership = await require_membership(db, user, now, rng)
     league_id = membership.league.id
+    hidden = await _hidden(db, league_id, membership.participant.id)
     rows = await money.recent_transfers(
         db,
         league_id,
@@ -250,5 +271,7 @@ async def transfer_history(
                 price=r.transfer.price,
             )
             for r in rows
+            if r.transfer.from_participant_id not in hidden
+            and r.transfer.to_participant_id not in hidden
         ]
     )

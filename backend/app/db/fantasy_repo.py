@@ -35,6 +35,7 @@ from app.domain.fantasy.lineup import Lineup, SavedLineup
 from app.domain.fantasy.market import TransferKind
 from app.domain.fantasy.rules import INITIAL_PLAYER_VALUE
 from app.domain.points.callup import Position
+from app.domain.roles import FANTASY_PLAYER_ROLES, Role
 
 ONE_ACTIVE_LEAGUE_INDEX = "ux_fantasy_leagues_one_active"
 
@@ -93,7 +94,12 @@ async def create_league(
 
 
 async def active_user_ids(db: AsyncSession) -> list[uuid.UUID]:
-    query = select(User.id).where(User.is_active.is_(True)).order_by(User.created_at, User.id)
+    """Usuarios activos que juegan al Fantasy (no las cuentas de partidos del cuerpo técnico)."""
+    query = (
+        select(User.id)
+        .where(User.is_active.is_(True), User.role.in_(FANTASY_PLAYER_ROLES))
+        .order_by(User.created_at, User.id)
+    )
     return list((await db.execute(query)).scalars().all())
 
 
@@ -344,3 +350,13 @@ async def goalkeeper_ids(db: AsyncSession, player_ids: Iterable[str]) -> set[str
         return set()
     query = select(Player.id).where(Player.id.in_(ids), Player.position == Position.GOALKEEPER)
     return {str(pid) for pid in (await db.execute(query)).scalars().all()}
+
+
+async def private_participant_ids(db: AsyncSession, league_id: uuid.UUID) -> set[uuid.UUID]:
+    """Participantes con la plantilla privada (cuentas del Fantasy del cuerpo técnico)."""
+    query = (
+        select(FantasyParticipant.id)
+        .join(User, User.id == FantasyParticipant.user_id)
+        .where(FantasyParticipant.league_id == league_id, User.role == Role.FANTASY)
+    )
+    return set((await db.execute(query)).scalars().all())

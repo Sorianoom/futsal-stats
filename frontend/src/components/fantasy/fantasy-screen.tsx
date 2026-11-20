@@ -15,7 +15,7 @@ import { TeamSummary } from "@/components/fantasy/team-summary";
 import { ThemeToggle } from "@/components/fantasy/theme-toggle";
 import { TransfersPanel } from "@/components/fantasy/transfers-panel";
 import { Button } from "@/components/ui/button";
-import type { FantasyLeagueView } from "@/lib/api/fantasy-types";
+import { isSpectatorView, type FantasyLeagueView } from "@/lib/api/fantasy-types";
 import { useFantasyTheme } from "@/lib/fantasy/theme";
 import { fantasyMeQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -69,8 +69,9 @@ const ICONS = {
 
 function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () => void }) {
   const { user } = useAuth();
-  // Un jugador sale con el nombre de su ficha; los entrenadores eligen el suyo.
+  // Un jugador sale con el nombre de su ficha; las cuentas del cuerpo técnico eligen el suyo.
   const canRename = user !== null && user.role !== "player";
+  const privateSquad = view.me.private_squad === true;
   const tabs: FantasyTab[] = [
     { id: "team", label: "Mi equipo", short: "Equipo", icon: ICONS.team, render: () => <MyTeam view={view} onChanged={onChanged} /> },
     {
@@ -95,6 +96,7 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
         <ClausesPanel
           balance={view.me.balance}
           squadFull={view.squad.length >= view.me.squad_limit}
+          privateSquad={privateSquad}
           onChanged={onChanged}
         />
       ),
@@ -122,6 +124,18 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
   );
 }
 
+/** Cuenta de partidos del cuerpo técnico: sin equipo, solo la clasificación. */
+function Spectator() {
+  return (
+    <>
+      <p className="rounded-2xl border bg-card p-4">
+        Con esta cuenta solo ves la clasificación. Para jugar, entra con tu cuenta del Fantasy.
+      </p>
+      <Standings myId={null} />
+    </>
+  );
+}
+
 export function FantasyScreen() {
   const { user } = useAuth();
   const { data, failed, reload } = useApiQuery(fantasyMeQuery.key, fantasyMeQuery.fetch);
@@ -145,7 +159,8 @@ export function FantasyScreen() {
       {data && data.league === null ? (
         <NoLeague canCreate={user?.role === "head_coach"} onCreated={reload} />
       ) : null}
-      {data && data.league !== null ? <League view={data} onChanged={reload} /> : null}
+      {data && data.league !== null && isSpectatorView(data) ? <Spectator /> : null}
+      {data && data.league !== null && !isSpectatorView(data) ? <League view={data} onChanged={reload} /> : null}
     </div>
   );
 }

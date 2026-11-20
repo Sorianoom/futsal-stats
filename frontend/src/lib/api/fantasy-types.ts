@@ -18,6 +18,8 @@ export interface FantasyParticipant {
   squad_limit: number;
   /** Suma del valor de mi plantilla. */
   team_value: number;
+  /** Cuenta del Fantasy del cuerpo técnico: nadie ve su plantilla, no clausula ni la clausulan. */
+  private_squad?: boolean;
 }
 
 /** Venta abierta de una de mis copias. */
@@ -84,7 +86,17 @@ export interface LastRound {
   held_on: string;
 }
 
-export type FantasyMe = { league: null } | FantasyLeagueView;
+/** Cuenta de partidos del cuerpo técnico: no tiene equipo, solo mira la clasificación. */
+export interface FantasySpectatorView {
+  league: FantasyLeague;
+  spectator: true;
+}
+
+export type FantasyMe = { league: null } | FantasySpectatorView | FantasyLeagueView;
+
+export function isSpectatorView(me: FantasyMe): me is FantasySpectatorView {
+  return "spectator" in me && me.spectator === true;
+}
 
 /** pending: sin puntos; scored: provisional (sin cerrar la jornada); settled: cerrada y congelada. */
 export type RoundStatus = "pending" | "scored" | "settled";

@@ -5,7 +5,7 @@ from typing import Any
 from httpx import AsyncClient
 
 from app.domain.roles import Role
-from tests.integration.api.conftest import Login, MakePlayer
+from tests.integration.api.conftest import Join, Login, MakePlayer
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 200
 WEBP = b"RIFF\x00\x00\x00\x00WEBPVP8 " + b"\x00" * 200
@@ -140,13 +140,14 @@ async def test_unknown_player_or_link_is_not_found(client: AsyncClient, login: L
 
 
 async def test_the_fantasy_shows_each_player_photo(
-    client: AsyncClient, login: Login, make_player: MakePlayer
+    client: AsyncClient, login: Login, join: Join, make_player: MakePlayer
 ) -> None:
-    headers = await login(Role.HEAD_COACH)
+    coach = await login(Role.HEAD_COACH)
+    headers = await join()
     players = [await make_player(n) for n in range(1, 7)]
     for player in players:
-        await upload(client, headers, player.id)
-    created = await client.post("/fantasy/league", headers=headers)
+        await upload(client, coach, player.id)
+    created = await client.post("/fantasy/league", headers=coach)
     assert created.status_code == 201, created.text
 
     me = (await client.get("/fantasy/me", headers=headers)).json()["data"]

@@ -132,18 +132,25 @@ class User(Base):
 
 
 class PlayerInvitation(Base):
-    """Invitación de un solo uso para que un jugador cree su cuenta.
+    """Invitación de un solo uso para crear una cuenta: la de un jugador (con `player_id`) o una
+    del Fantasy del cuerpo técnico (sin ficha, con el nombre que puso el entrenador).
 
     Solo se guarda el sha256 del token: quien lea la BD no puede usar una invitación pendiente.
     """
 
     __tablename__ = "player_invitations"
-    __table_args__ = (CheckConstraint("expires_at > created_at", name="expires_after_creation"),)
+    __table_args__ = (
+        CheckConstraint("expires_at > created_at", name="expires_after_creation"),
+        CheckConstraint(
+            "(player_id IS NULL) = (display_name IS NOT NULL)", name="player_or_fantasy"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    player_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("players.id", ondelete="CASCADE"), index=True
+    player_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("players.id", ondelete="CASCADE"), index=True, nullable=True
     )
+    display_name: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
