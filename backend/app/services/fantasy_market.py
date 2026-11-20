@@ -33,6 +33,7 @@ from app.schemas.fantasy import (
     TransfersOut,
 )
 from app.services.fantasy import NoLeagueError, participant_names, require_membership
+from app.services.fantasy_results import recent_points, rounds_of
 
 
 class NotFoundError(Exception):
@@ -72,12 +73,18 @@ def _ref(
 
 
 async def _listings_out(
-    db: AsyncSession, league_id: uuid.UUID, me: uuid.UUID, rows: Sequence[ListingRow]
+    db: AsyncSession,
+    league: FantasyLeague,
+    me: uuid.UUID,
+    rows: Sequence[ListingRow],
+    now: datetime,
 ) -> list[MarketListingOut]:
+    league_id = league.id
     values = await money.player_values(db, league_id)
     names = await participant_names(db, league_id)
     bids = await market_repo.my_bids(db, me, [r.listing.id for r in rows])
     photos = await photos_repo.photo_urls(db, [r.player.id for r in rows])
+    recent = await recent_points(db, await rounds_of(db, league), now, [r.player.id for r in rows])
     out = []
     for row in rows:
         listing, player = row.listing, row.player
@@ -97,6 +104,7 @@ async def _listings_out(
                 my_bid=bids.get(listing.id),
                 mine=listing.seller_participant_id == me,
                 photo_url=photos.get(player.id),
+                recent_points=recent.get(player.id, []),
             )
         )
     return out
@@ -107,7 +115,8 @@ async def market(db: AsyncSession, user: User, now: datetime, rng: random.Random
     membership = await require_membership(db, user, now, rng)
     league_id = membership.league.id
     rows = await market_repo.open_listings(db, league_id, now)
-    return MarketOut(listings=await _listings_out(db, league_id, membership.participant.id, rows))
+    listings = await _listings_out(db, membership.league, membership.participant.id, rows, now)
+    return MarketOut(listings=listings)
 
 
 async def place_bid(
@@ -136,7 +145,7 @@ async def place_bid(
         seller_id=str(seller) if seller is not None else None,
     )
     await market_repo.place_bid(db, row.listing.id, me, amount, now)
-    [out] = await _listings_out(db, league_id, me, [row])
+    [out] = await _listings_out(db, locked.league, me, [row], now)
     await db.commit()
     return out
 
@@ -176,7 +185,8 @@ async def list_copy(
         opened_at=now,
         closes_at=now + timedelta(hours=LISTING_DURATION_HOURS),
     )
-    [out] = await _listings_out(db, locked.league.id, me, [ListingRow(listing, copy, player)])
+    row = ListingRow(listing, copy, player)
+    [out] = await _listings_out(db, locked.league, me, [row], now)
     await db.commit()
     return out
 

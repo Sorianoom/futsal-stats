@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { RoundDialog } from "@/components/fantasy/round-dialog";
+import { MySeason, Podium, positionOf } from "@/components/fantasy/standings-highlights";
 import { FANTASY_HEADING } from "@/components/fantasy/styles";
 import { Button } from "@/components/ui/button";
 import type { FantasyStandings, RoundStatus, StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
@@ -15,11 +16,6 @@ const HEADER = "px-3 py-3 text-left text-xs font-extrabold tracking-wider text-m
 const CELL = "px-3 py-3 text-base tabular-nums";
 /** Primera columna fija al desplazar en el móvil. */
 const STICKY = "sticky left-0 z-10 bg-inherit";
-
-/** Puesto con empates: el mismo total comparte puesto (1, 1, 3…). */
-function positionOf(rows: readonly StandingsRow[], row: StandingsRow): number {
-  return 1 + rows.filter((other) => other.total > row.total).length;
-}
 
 function roundCell(round: StandingsRound, row: StandingsRow): string {
   if (round.status === "pending") return "—";
@@ -78,7 +74,7 @@ function Table({ standings, myId, onOpenRound }: TableProps) {
               <tr
                 key={row.participant_id}
                 aria-current={mine ? "true" : undefined}
-                className={cn("border-t bg-card", mine && "bg-primary/10")}
+                className={cn("border-t bg-card", mine && "bg-gold/15 shadow-[inset_4px_0_0_var(--gold)]")}
               >
                 <td className={`${CELL} font-bold text-muted-foreground`}>{positionOf(standings.rows, row)}</td>
                 <th scope="row" className={cn(CELL, STICKY, "text-left font-bold whitespace-nowrap")}>
@@ -140,6 +136,8 @@ export function Standings({ myId }: { myId: string }) {
           ) : (
             <p className="text-sm text-muted-foreground">Aún no se ha jugado ninguna jornada.</p>
           )}
+          <Podium rows={standings.rows} myId={myId} />
+          <MySeason standings={standings} myId={myId} />
           <Table standings={standings} myId={myId} onOpenRound={setOpenRound} />
         </>
       ) : null}

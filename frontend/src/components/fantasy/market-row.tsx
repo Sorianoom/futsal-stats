@@ -1,7 +1,9 @@
 import { Button } from "@/components/ui/button";
+import { Spark } from "@/components/fantasy/spark";
 import { PlayerAvatar } from "@/components/player-avatar";
 import type { MarketListing } from "@/lib/api/fantasy-types";
 import { formatMoment, formatMoney } from "@/lib/fantasy/format";
+import { tierOf } from "@/lib/fantasy/form";
 import { closingIn } from "@/lib/fantasy/market";
 import { POSITION_LABEL } from "@/lib/labels";
 
@@ -18,13 +20,13 @@ interface MarketRowProps {
 /** Una venta abierta: jugador, quién la vende, cifras, cierre y mi puja. */
 export function MarketRow({ listing, now, owned, onBid }: MarketRowProps) {
   return (
-    <li className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
+    <li className="flex flex-col gap-3 rounded-2xl border bg-card p-3 md:flex-row md:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <PlayerAvatar
           name={listing.name}
           dorsal={listing.dorsal}
           photoUrl={listing.photo_url}
-          className="size-10 rounded-xl bg-primary/10 text-primary tabular-nums"
+          className={`tier-${tierOf(listing.recent_points?.at(-1) ?? null)} size-12 rounded-2xl text-lg tabular-nums`}
         />
         <span className="min-w-0">
           <span className="block truncate font-bold">{listing.name}</span>
@@ -36,6 +38,7 @@ export function MarketRow({ listing, now, owned, onBid }: MarketRowProps) {
             <time dateTime={listing.closes_at}>{formatMoment(listing.closes_at)}</time>
             {` · en ${closingIn(listing.closes_at, now)}`}
           </span>
+          <Spark points={listing.recent_points ?? []} className="mt-1" />
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">

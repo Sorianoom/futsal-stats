@@ -77,7 +77,7 @@ async def test_the_first_market_has_fifteen_bank_copies_until_midnight(
     first = listings[0]
     assert set(first) == {
         "listing_id", "copy_id", "player_id", "name", "dorsal", "position", "value",
-        "min_bid", "seller", "closes_at", "my_bid", "mine", "photo_url",
+        "min_bid", "seller", "closes_at", "my_bid", "mine", "photo_url", "recent_points",
     }  # fmt: skip
     assert all(x["seller"] is None and x["mine"] is False for x in listings)
     assert all(x["my_bid"] is None for x in listings)

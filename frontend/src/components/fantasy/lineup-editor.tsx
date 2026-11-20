@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { FANTASY_CARD, FANTASY_HEADING } from "@/components/fantasy/styles";
+import { Spark } from "@/components/fantasy/spark";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,6 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import { saveLineup } from "@/lib/api/fantasy";
 import type { FantasyLineup, LastRound, SquadCopy } from "@/lib/api/fantasy-types";
 import { formatMoney } from "@/lib/fantasy/format";
+import { tierOf } from "@/lib/fantasy/form";
 import {
   assignSlot,
   copyIn,
@@ -36,21 +38,18 @@ function errorMessage(failure: unknown): string {
   return clientError ? failure.message : SAVE_ERROR;
 }
 
-const GOOD_POINTS = 8;
-const POOR_POINTS = 4;
+const POINTS_BADGE = { good: "bg-gold text-[#0a1633]", mid: "bg-white text-[#0a1633]", poor: "bg-[#8a97b8] text-[#0a1633]" } as const;
 
-/** Color de la ficha según sus puntos de la última jornada: buena, normal o floja. */
-function cardTone(points: number | null): string {
-  if (points !== null && points >= GOOD_POINTS) return "bg-linear-to-br from-orange-300 via-cta to-orange-600 text-stone-900";
-  if (points !== null && points <= POOR_POINTS) return "bg-linear-to-br from-slate-200 to-slate-300 text-slate-900";
-  return "bg-linear-to-br from-white to-blue-100 text-slate-900";
-}
-
-function pointsTone(points: number): string {
-  if (points >= GOOD_POINTS) return "bg-green-600 text-white";
-  if (points <= POOR_POINTS) return "bg-red-600 text-white";
-  return "bg-slate-900 text-white";
-}
+/** Sitio de cada hueco en la media pista: pívot arriba, alas, cierre y portero abajo. */
+const SPOT: Record<string, { left: string; top: number }> = {
+  Pívot: { left: "50%", top: 22 },
+  "Ala izquierda": { left: "21%", top: 104 },
+  "Ala derecha": { left: "79%", top: 104 },
+  Cierre: { left: "50%", top: 190 },
+  Portero: { left: "50%", top: 284 },
+};
+/** Nombre corto del puesto bajo la ficha. */
+const SHORT_ROLE: Record<string, string> = { "Ala izquierda": "Ala", "Ala derecha": "Ala" };
 
 interface CourtCardProps {
   label: string;
@@ -60,66 +59,69 @@ interface CourtCardProps {
   onOpen: () => void;
 }
 
-/** Un hueco de la pista: la ficha del jugador (o un hueco vacío). Al tocarlo se abre la hoja. */
+/** Un puesto de la pista: foto (o dorsal), puntos de la última jornada, capitán y nombre. */
 function CourtCard({ label, copy, captain, disabled, onOpen }: CourtCardProps) {
   const name = copy ? `${label}: ${copy.name}${captain ? ", capitán" : ""}` : `${label}: vacío`;
+  const spot = SPOT[label];
+  const tier = tierOf(copy?.last_points ?? null);
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <button
-        type="button"
-        aria-label={name}
-        disabled={disabled}
-        onClick={onOpen}
-        className={cn(
-          "relative flex h-32 w-24 flex-col items-center justify-center gap-1 rounded-2xl p-2 shadow-lg transition-transform outline-none focus-visible:ring-3 focus-visible:ring-white/80 active:scale-95",
-          copy ? cardTone(copy.last_points) : "border-2 border-dashed border-white/70 text-white shadow-none",
-          captain && "ring-3 ring-yellow-300 ring-offset-2 ring-offset-[#1D3B8F]",
-        )}
-      >
+    <button
+      type="button"
+      aria-label={name}
+      disabled={disabled}
+      onClick={onOpen}
+      style={{ left: spot.left, top: spot.top }}
+      className="group absolute flex -translate-x-1/2 flex-col items-center rounded-2xl text-white outline-none focus-visible:ring-3 focus-visible:ring-gold"
+    >
+      <span className="relative">
         {copy ? (
-          <>
-            {captain ? (
-              <span className="absolute top-1.5 left-1.5 rounded-full bg-yellow-300 px-1.5 text-[11px] font-extrabold text-slate-900">
-                C ×2
-              </span>
-            ) : null}
-            {copy.last_points !== null ? (
-              <span
-                aria-label={`${copy.name}: ${copy.last_points} puntos en la última jornada`}
-                className={cn(
-                  "absolute top-1.5 right-1.5 rounded-full px-1.5 text-[11px] font-extrabold tabular-nums",
-                  pointsTone(copy.last_points),
-                )}
-              >
-                {copy.last_points}
-              </span>
-            ) : null}
-            <PlayerAvatar
-              name={copy.name}
-              dorsal={copy.dorsal}
-              photoUrl={copy.photo_url}
-              className="mt-3 size-14 bg-white/70 text-2xl text-slate-900"
-            />
-            <span className="w-full truncate text-center text-xs font-extrabold">{copy.name}</span>
-          </>
+          <PlayerAvatar
+            name={copy.name}
+            dorsal={copy.dorsal}
+            photoUrl={copy.photo_url}
+            className={cn(
+              `tier-${tier} size-14 border-3 text-2xl shadow-lg transition-transform group-active:scale-95`,
+              captain ? "border-gold" : "border-white",
+            )}
+          />
         ) : (
-          <>
-            <span aria-hidden="true" className="text-3xl leading-none">
-              +
-            </span>
-            <span className="text-xs font-extrabold">{label}</span>
-          </>
+          <span className="flex size-14 items-center justify-center rounded-full border-2 border-dashed border-white/75 bg-white/10 text-3xl">
+            <span aria-hidden="true">+</span>
+          </span>
         )}
-      </button>
-      {copy ? null : (
-        <span className="rounded-lg bg-slate-900/85 px-2 py-0.5 text-xs font-extrabold text-white">{EMPTY_SLOT}</span>
-      )}
-    </div>
+        {copy && copy.last_points !== null ? (
+          <span
+            aria-label={`${copy.name}: ${copy.last_points} puntos en la última jornada`}
+            className={cn(
+              "absolute -top-1 -right-3 grid h-5 min-w-6 place-items-center rounded-full border-2 border-[#0a1633] px-1 text-[11px] font-extrabold tabular-nums",
+              POINTS_BADGE[tier],
+            )}
+          >
+            {copy.last_points}
+          </span>
+        ) : null}
+        {captain ? (
+          <span
+            aria-hidden="true"
+            className="absolute -top-1 -left-2.5 grid size-5 place-items-center rounded-full border-2 border-[#0a1633] bg-gold text-[11px] font-extrabold text-[#0a1633]"
+          >
+            C
+          </span>
+        ) : null}
+      </span>
+      <span className="mt-1 max-w-28 truncate rounded-full bg-[#0a1633]/75 px-2 py-px text-xs font-bold">
+        {copy ? copy.name.split(" ")[0] : EMPTY_SLOT}
+      </span>
+      <span className="text-[10px] font-extrabold tracking-widest text-white/75 uppercase">
+        {SHORT_ROLE[label] ?? label}
+      </span>
+    </button>
   );
 }
 
 /** Una ficha grande de la hoja: foto o dorsal, puntos de la última jornada, nombre y valor. */
 function PickCard({ copy, here, onPick }: { copy: SquadCopy; here: boolean; onPick: () => void }) {
+  const tier = tierOf(copy.last_points);
   return (
     <button
       type="button"
@@ -127,30 +129,32 @@ function PickCard({ copy, here, onPick }: { copy: SquadCopy; here: boolean; onPi
       aria-current={here ? "true" : undefined}
       onClick={onPick}
       className={cn(
-        "flex min-h-36 w-full flex-col gap-2 rounded-2xl p-3 text-left shadow-md transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/60 active:scale-95",
-        cardTone(copy.last_points),
-        here ? "ring-3 ring-slate-900" : "ring-1 ring-slate-900/10",
+        "relative flex w-full flex-col gap-2 rounded-2xl border bg-muted/60 p-2.5 text-left transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/60 active:scale-95",
+        here && "border-2 border-gold",
       )}
     >
-      <span className="flex items-start justify-between gap-2">
-        <PlayerAvatar
-          name={copy.name}
-          dorsal={copy.dorsal}
-          photoUrl={copy.photo_url}
-          className="size-14 bg-white/70 text-2xl text-slate-900"
-        />
-        {copy.last_points !== null ? (
-          <span className="flex flex-col items-end leading-none">
-            <span className="text-2xl font-extrabold tabular-nums">{copy.last_points}</span>
-            <span className="text-[10px] font-extrabold tracking-widest uppercase opacity-75">puntos</span>
-          </span>
-        ) : null}
-      </span>
+      <PlayerAvatar
+        name={copy.name}
+        dorsal={copy.dorsal}
+        photoUrl={copy.photo_url}
+        className={`tier-${tier} h-24 w-full rounded-xl text-4xl`}
+      />
+      {copy.last_points !== null ? (
+        <span
+          className={cn(
+            "absolute top-4 right-4 rounded-full px-2 py-0.5 text-xs font-extrabold tabular-nums",
+            POINTS_BADGE[tier],
+          )}
+        >
+          {`${copy.last_points} pts`}
+        </span>
+      ) : null}
       <span className="text-base leading-tight font-extrabold">{copy.name}</span>
-      <span className="mt-auto flex justify-between text-xs font-bold opacity-80">
-        <span>{`Dorsal ${copy.dorsal}`}</span>
+      <span className="flex items-center justify-between gap-2 text-xs font-bold text-muted-foreground">
+        <span>{here ? "Aquí" : `Dorsal ${copy.dorsal}`}</span>
         <span>{formatMoney(copy.value)}</span>
       </span>
+      <Spark points={copy.recent_points ?? []} />
     </button>
   );
 }
@@ -286,30 +290,33 @@ export function LineupEditor({ squad, lineup, lastRound, onSaved }: LineupEditor
       />
     );
   });
-  const [goalkeeper, ...field] = cards;
-
   return (
     <section aria-labelledby="lineup-heading" className={`${FANTASY_CARD} space-y-3`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="lineup-heading" className={FANTASY_HEADING}>
           Alineación
         </h2>
-        <p className="text-sm font-semibold text-muted-foreground">Toca un hueco para elegir jugador o capitán.</p>
+        <p className="text-sm font-semibold text-muted-foreground">Toca un puesto para elegir jugador o capitán.</p>
       </div>
       {lastRound ? (
         <p className="text-sm font-semibold text-muted-foreground">{`Puntos de la última jornada, vs ${lastRound.opponent}`}</p>
       ) : null}
-      <div className="relative overflow-hidden rounded-3xl bg-[radial-gradient(circle_at_50%_45%,#2563eb,#1D3B8F_75%)] px-3 pt-6 pb-5">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-2xl border-2 border-white/20" />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-[46%] border-t-2 border-white/20" />
+      <div className="fantasy-pitch relative mx-auto h-[392px] max-w-md overflow-hidden rounded-3xl shadow-lg">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-b-2xl border-2 border-t-0 border-white/20" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-3 border-t-2 border-white/35" />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-[46%] left-1/2 size-24 -translate-1/2 rounded-full border-2 border-white/20"
+          className="pointer-events-none absolute top-3 left-1/2 h-11 w-24 -translate-x-1/2 rounded-b-full border-2 border-t-0 border-white/20"
         />
-        <div className="relative mx-auto grid max-w-80 grid-cols-2 justify-items-center gap-x-3 gap-y-5">
-          {field}
-          <div className="col-span-2">{goalkeeper}</div>
-        </div>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-3 left-1/2 h-16 w-40 -translate-x-1/2 rounded-t-full border-2 border-b-0 border-white/20"
+        />
+        <div aria-hidden="true" className="pointer-events-none absolute bottom-3 left-1/2 h-1.5 w-11 -translate-x-1/2 rounded-t bg-gold" />
+        <span aria-hidden="true" className="absolute top-4 left-5 text-[10px] font-extrabold tracking-widest text-gold">
+          1-2-1
+        </span>
+        {cards}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Button

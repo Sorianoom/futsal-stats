@@ -197,6 +197,23 @@ async def test_me_shows_each_copys_points_in_the_last_scored_round(
         assert points == {c["player_id"]: _points(rows, c["player_id"]) for c in team["squad"]}
 
 
+async def test_recent_points_list_each_player_last_scored_rounds(
+    client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
+) -> None:
+    headers, match_id, team = await _round_with_lineup(client, login, make_player)
+    before = await me(client, headers)
+    clock.now = MATCH_EVENING
+    rows = await _stats(client, headers, match_id)
+
+    view = await me(client, headers)
+    listings = await market(client, headers)
+    clauses = (await get_data(client, "/fantasy/clauses", headers))["copies"]
+
+    assert {tuple(c["recent_points"]) for c in before["squad"]} == {()}
+    for entry in [*view["squad"], *listings, *clauses]:
+        assert entry["recent_points"] == [_points(rows, entry["player_id"])]
+
+
 async def test_values_change_when_the_round_settles(
     client: AsyncClient, login: Login, make_player: MakePlayer, clock: Clock
 ) -> None:
@@ -223,7 +240,8 @@ async def test_values_change_when_the_round_settles(
 
 
 def _without_last_points(view: dict[str, Any]) -> dict[str, Any]:
-    squad = [{k: v for k, v in c.items() if k != "last_points"} for c in view["squad"]]
+    live = {"last_points", "recent_points"}  # informativos: se calculan al momento
+    squad = [{k: v for k, v in c.items() if k not in live} for c in view["squad"]]
     return {**{k: v for k, v in view.items() if k != "last_round"}, "squad": squad}
 
 

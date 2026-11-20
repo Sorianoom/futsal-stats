@@ -48,6 +48,8 @@ export interface SquadCopy {
   last_points: number | null;
   /** Ruta de la foto del jugador, relativa a la API. Ver `photoSrc`. */
   photo_url?: string | null;
+  /** Puntos en sus últimas jornadas puntuadas, de la más antigua a la más reciente. */
+  recent_points?: number[];
 }
 
 /** 1 portero y 4 de campo; null es un hueco vacío, que puntúa 0. */
@@ -154,6 +156,8 @@ export interface MarketListing {
   mine: boolean;
   /** Ruta de la foto del jugador, relativa a la API. Ver `photoSrc`. */
   photo_url?: string | null;
+  /** Puntos en sus últimas jornadas puntuadas, de la más antigua a la más reciente. */
+  recent_points?: number[];
 }
 
 export interface FantasyMarket {
@@ -199,6 +203,8 @@ export interface ClauseCopy {
   mine: boolean;
   /** Ruta de la foto del jugador, relativa a la API. Ver `photoSrc`. */
   photo_url?: string | null;
+  /** Puntos en sus últimas jornadas puntuadas, de la más antigua a la más reciente. */
+  recent_points?: number[];
 }
 
 export interface FantasyClauses {

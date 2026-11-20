@@ -179,3 +179,96 @@
   .pack-card { animation: pack-card-in 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
   .pack-flash { animation: pack-flash 0.8s ease-out forwards; }
 }
+
+/*
+ * Fantasy con los colores del C.F. Ogíjares 89 (propuesta D): azul y amarillo a rayas del escudo.
+ * Mientras se ve el Fantasy, <html> lleva la clase `fantasy` (y `dark` en modo oscuro): toda la
+ * página, diálogos incluidos, toma esta paleta. Fuera del Fantasy la app sigue con la suya.
+ */
+@theme inline {
+  --color-gold: var(--gold);
+  --color-gold-text: var(--gold-text);
+  --color-club: var(--club);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+}
+
+:root {
+  --gold: #f5c518;
+  --gold-text: #7a5800;
+  --club: #1f4fbf;
+  --good: #15803d;
+  --bad: #b91c1c;
+}
+
+html.fantasy {
+  --background: #eef2fa;
+  --foreground: #0a1633;
+  --card: #ffffff;
+  --card-foreground: #0a1633;
+  --popover: #ffffff;
+  --popover-foreground: #0a1633;
+  --primary: #1f4fbf;
+  --primary-foreground: #ffffff;
+  --secondary: #e6ecf8;
+  --secondary-foreground: #1f4fbf;
+  --muted: #e9eef8;
+  --muted-foreground: #55618a;
+  --accent: #e6ecf8;
+  --accent-foreground: #0a1633;
+  --cta: #f5c518;
+  --cta-foreground: #0a1633;
+  --border: #dfe5f2;
+  --ring: #1f4fbf;
+}
+
+html.fantasy.dark {
+  --background: #0a1633;
+  --foreground: #eef2ff;
+  --card: #101f45;
+  --card-foreground: #eef2ff;
+  --popover: #0f1e46;
+  --popover-foreground: #eef2ff;
+  --primary: #8fb0ff;
+  --primary-foreground: #0a1633;
+  --secondary: #1a2d63;
+  --secondary-foreground: #d6e0ff;
+  --muted: #16295a;
+  --muted-foreground: #9fb0dd;
+  --accent: #1a2d63;
+  --accent-foreground: #eef2ff;
+  --destructive: #fca5a5;
+  --cta: #f5c518;
+  --cta-foreground: #0a1633;
+  --success: #12341f;
+  --success-foreground: #8fe0a9;
+  --warning: #3a2c06;
+  --warning-foreground: #ffd27a;
+  --border: #22346b;
+  --input: #6f7f9b;
+  --ring: #f5c518;
+  --gold-text: #f5c518;
+  --good: #4ade80;
+  --bad: #fca5a5;
+  color-scheme: dark;
+}
+
+/* Rayas del escudo: franja de arriba y marca de la pestaña activa. */
+.club-stripes {
+  background: repeating-linear-gradient(90deg, var(--gold) 0 14px, var(--club) 14px 28px);
+}
+.club-stripes-fine {
+  background: repeating-linear-gradient(90deg, var(--gold) 0 5px, var(--club) 5px 10px);
+}
+
+/* Pista del Fantasy: azul del club en los dos modos, con rayas de césped. */
+.fantasy-pitch {
+  background:
+    repeating-linear-gradient(180deg, rgb(255 255 255 / 0.04) 0 30px, transparent 30px 60px),
+    linear-gradient(180deg, #1f4fbf, #17409e 60%, #12317a);
+}
+
+/* Fondo de las fotos (o del dorsal si aún no hay foto) según cómo va el jugador. */
+.tier-good { background: linear-gradient(165deg, #f5c518, #b8860b); color: #0a1633; }
+.tier-mid { background: linear-gradient(165deg, #5b86ff, #1f4fbf); color: #ffffff; }
+.tier-poor { background: linear-gradient(165deg, #8a97b8, #3b4668); color: #ffffff; }

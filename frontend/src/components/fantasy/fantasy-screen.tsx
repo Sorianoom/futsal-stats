@@ -8,12 +8,15 @@ import { MarketPanel } from "@/components/fantasy/market-panel";
 import { MyTeam } from "@/components/fantasy/my-team";
 import { NoLeague } from "@/components/fantasy/no-league";
 import { PackOpening } from "@/components/fantasy/pack-opening";
+import { RoundTicker } from "@/components/fantasy/round-ticker";
 import { RulesDialog } from "@/components/fantasy/rules-dialog";
 import { Standings } from "@/components/fantasy/standings-table";
 import { TeamSummary } from "@/components/fantasy/team-summary";
+import { ThemeToggle } from "@/components/fantasy/theme-toggle";
 import { TransfersPanel } from "@/components/fantasy/transfers-panel";
 import { Button } from "@/components/ui/button";
 import type { FantasyLeagueView } from "@/lib/api/fantasy-types";
+import { useFantasyTheme } from "@/lib/fantasy/theme";
 import { fantasyMeQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
 
@@ -108,11 +111,12 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
   return (
     <>
       <PackOpening participantId={view.me.participant_id} squad={view.squad} />
+      <RoundTicker round={view.next_round} />
+      <TeamSummary view={view} />
       <div className="flex flex-wrap justify-end gap-2">
         {canRename ? <DisplayNameDialog current={view.me.display_name} onChanged={onChanged} /> : null}
         <RulesDialog squadLimit={view.me.squad_limit} />
       </div>
-      <TeamSummary view={view} />
       <FantasyTabs tabs={tabs} label="Secciones del Fantasy" />
     </>
   );
@@ -121,10 +125,14 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
 export function FantasyScreen() {
   const { user } = useAuth();
   const { data, failed, reload } = useApiQuery(fantasyMeQuery.key, fantasyMeQuery.fetch);
+  const { mode, toggle } = useFantasyTheme();
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <h1 className="text-4xl font-extrabold tracking-tight">Fantasy</h1>
+    <div className="mx-auto max-w-6xl space-y-5">
+      <div className="flex items-end justify-between gap-3">
+        <h1 className="text-4xl font-extrabold tracking-tight">Fantasy</h1>
+        <ThemeToggle mode={mode} onToggle={toggle} />
+      </div>
       {failed ? (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border p-4">
           <p>No se pudo cargar el Fantasy</p>

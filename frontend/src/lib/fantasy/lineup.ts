@@ -49,13 +49,16 @@ export function isLinedUp(lineup: FantasyLineup, copyId: string): boolean {
   return lineup.goalkeeper_copy_id === copyId || lineup.field_copy_ids.includes(copyId);
 }
 
-/** Los cinco huecos en orden: portero y luego los de campo. */
+/** Puestos de los 4 de campo en el 1-2-1, por índice: pívot, alas y cierre. */
+export const FIELD_ROLES = ["Pívot", "Ala izquierda", "Ala derecha", "Cierre"] as const;
+
+/** Los cinco huecos en orden: portero y luego los de campo, con el nombre de su puesto. */
 export function lineupSlots(): { slot: LineupSlot; label: string }[] {
   return [
     { slot: { kind: "goalkeeper" }, label: "Portero" },
     ...Array.from({ length: FIELD_SLOTS }, (_, index) => ({
       slot: { kind: "field", index } as LineupSlot,
-      label: `Campo ${index + 1}`,
+      label: FIELD_ROLES[index],
     })),
   ];
 }

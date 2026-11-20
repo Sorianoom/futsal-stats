@@ -79,6 +79,17 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
+- **Diseño D del Fantasy, colores del club** (sin subir, sin migración; va detrás de la 0012).
+  Prototipos y elección en https://claude.ai/artifact/UPKR81LBEVNWziBKReaZDP (fila D) y prototipo
+  funcional en https://claude.ai/artifact/224cNNKTBaoRyQ3FfJQMQK.
+  - Mientras se ve el Fantasy, `<html>` lleva `fantasy` (y `dark` en oscuro): paleta azul y
+    amarillo en `globals.css` (`html.fantasy`, `html.fantasy.dark`). Modo: el del móvil o el
+    botón sol/luna (`useFantasyTheme`, guardado en `futsal:fantasy:theme`).
+  - Franja a rayas del escudo con la próxima jornada (`RoundTicker`), pista 1-2-1 (pívot, alas,
+    cierre y portero: `FIELD_ROLES`), fichas con color según la forma, barritas de las últimas
+    jornadas (`Spark`), «en racha» arriba del mercado (más puntos en 3 jornadas), filtros del
+    mercado, podio y gráfica de la temporada en la Liga.
+  - API: `recent_points` (últimas 5 jornadas puntuadas) en plantilla, mercado y cláusulas.
 - **Nombre de los entrenadores en el Fantasy** (sin subir: **lleva la migración 0012**, aplicarla
   en Neon antes del push; sin ella falla el login porque `users.display_name` no existe).
   - `users.display_name` (40 caracteres, opcional). `PATCH /auth/me` lo pone o quita; solo el

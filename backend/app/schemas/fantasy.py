@@ -60,6 +60,8 @@ class SquadCopyOut(BaseModel):
     last_points: int | None
     # Ruta pública de la foto del jugador, relativa a la API (null si no tiene).
     photo_url: str | None = None
+    # Puntos del jugador en sus últimas jornadas puntuadas, de la más antigua a la más reciente.
+    recent_points: list[int] = []
 
 
 class LineupOut(BaseModel):
@@ -177,6 +179,8 @@ class MarketListingOut(BaseModel):
     mine: bool
     # Ruta pública de la foto del jugador, relativa a la API (null si no tiene).
     photo_url: str | None = None
+    # Puntos del jugador en sus últimas jornadas puntuadas, de la más antigua a la más reciente.
+    recent_points: list[int] = []
 
 
 class MarketOut(BaseModel):
@@ -215,6 +219,8 @@ class ClauseCopyOut(BaseModel):
     mine: bool
     # Ruta pública de la foto del jugador, relativa a la API (null si no tiene).
     photo_url: str | None = None
+    # Puntos del jugador en sus últimas jornadas puntuadas, de la más antigua a la más reciente.
+    recent_points: list[int] = []
 
 
 class ClausesOut(BaseModel):

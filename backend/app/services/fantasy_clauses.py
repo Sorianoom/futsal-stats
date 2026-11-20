@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import fantasy_market_repo as market_repo
 from app.db import fantasy_money_repo as money
 from app.db import photos_repo
-from app.db.models import FantasyLeague, User
+from app.db.models import User
 from app.domain.fantasy.calendar import madrid_date
 from app.domain.fantasy.clauses import (
     check_clause_buy,
@@ -32,12 +32,7 @@ from app.schemas.fantasy import (
 )
 from app.services.fantasy import participant_names, require_membership
 from app.services.fantasy_market import NotFoundError, lock
-from app.services.fantasy_results import rounds_of
-
-
-async def _is_match_day(db: AsyncSession, league: FantasyLeague, now: datetime) -> bool:
-    today = madrid_date(now)
-    return any(r.held_on == today for r in await rounds_of(db, league))
+from app.services.fantasy_results import recent_points, rounds_of
 
 
 async def clauses(db: AsyncSession, user: User, now: datetime, rng: random.Random) -> ClausesOut:
@@ -48,6 +43,8 @@ async def clauses(db: AsyncSession, user: User, now: datetime, rng: random.Rando
     names = await participant_names(db, league.id)
     owned = await market_repo.owned_copies(db, league.id)
     photos = await photos_repo.photo_urls(db, [player.id for _, player in owned])
+    rounds = await rounds_of(db, league)
+    recent = await recent_points(db, rounds, now, [player.id for _, player in owned])
     copies = []
     for copy, player in owned:
         assert copy.owner_id is not None and copy.clause is not None
@@ -66,9 +63,12 @@ async def clauses(db: AsyncSession, user: User, now: datetime, rng: random.Rando
                 protected_until=protected_until(copy.acquired_at).astimezone(FANTASY_TIMEZONE),
                 mine=copy.owner_id == me,
                 photo_url=photos.get(player.id),
+                recent_points=recent.get(player.id, []),
             )
         )
-    return ClausesOut(match_day=await _is_match_day(db, league, now), copies=copies)
+    today = madrid_date(now)
+    match_day = any(r.held_on == today for r in rounds)
+    return ClausesOut(match_day=match_day, copies=copies)
 
 
 async def buy_clause(

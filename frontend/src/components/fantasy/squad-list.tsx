@@ -9,9 +9,11 @@ import { SellCopyDialog } from "@/components/fantasy/sell-copy-dialog";
 import { FANTASY_CARD, FANTASY_HEADING } from "@/components/fantasy/styles";
 import { ValueChange } from "@/components/fantasy/value-change";
 import { Button } from "@/components/ui/button";
+import { Spark } from "@/components/fantasy/spark";
 import { PlayerAvatar } from "@/components/player-avatar";
 import type { SquadCopy } from "@/lib/api/fantasy-types";
 import { formatMoney } from "@/lib/fantasy/format";
+import { tierOf } from "@/lib/fantasy/form";
 import { POSITION_LABEL } from "@/lib/labels";
 
 interface RowProps {
@@ -30,11 +32,12 @@ function SquadRow({ copy, onList, onSell, onRaise, onChanged }: RowProps) {
           name={copy.name}
           dorsal={copy.dorsal}
           photoUrl={copy.photo_url}
-          className="size-10 rounded-xl bg-primary/10 text-primary tabular-nums"
+          className={`tier-${tierOf(copy.last_points)} size-12 rounded-2xl text-lg tabular-nums`}
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-bold">{copy.name}</span>
           <span className="block text-sm text-muted-foreground">{POSITION_LABEL[copy.position]}</span>
+          <Spark points={copy.recent_points ?? []} className="mt-1" />
         </span>
         <span className="flex flex-col items-end">
           <span className="font-extrabold tabular-nums">{formatMoney(copy.value)}</span>

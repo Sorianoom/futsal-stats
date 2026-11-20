@@ -7,9 +7,9 @@ const NEGATIVE_WARNING =
 
 function Figure({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-0.5 rounded-2xl bg-white/10 px-3 py-2.5">
-      <dt className="text-[11px] font-extrabold tracking-widest text-slate-300 uppercase">{label}</dt>
-      <dd className="text-lg font-extrabold tabular-nums">{value}</dd>
+    <div className="space-y-0.5 text-right">
+      <dt className="text-[11px] font-bold text-muted-foreground">{label}</dt>
+      <dd className="text-xl font-extrabold tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -20,14 +20,19 @@ export function TeamSummary({ view }: { view: FantasyLeagueView }) {
   const negative = balance < 0;
   return (
     <section aria-label="Resumen" className="space-y-3">
-      <dl className="grid gap-4 rounded-3xl bg-foreground p-5 text-background md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] md:items-end">
+      <dl className="flex flex-wrap items-end justify-between gap-4 rounded-3xl border bg-card p-5">
         <div className="space-y-1">
-          <dt className="text-xs font-extrabold tracking-widest text-cta uppercase">Saldo</dt>
-          <dd className={cn("text-5xl leading-none font-extrabold tabular-nums", negative && "text-red-300")}>
+          <dt className="text-xs font-bold text-muted-foreground">Saldo</dt>
+          <dd
+            className={cn(
+              "text-5xl leading-[0.9] font-black tracking-tight tabular-nums",
+              negative ? "text-bad" : "text-foreground dark:text-gold",
+            )}
+          >
             {formatMoney(balance)}
           </dd>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
           <Figure label="Valor del equipo" value={formatMoney(view.me.team_value)} />
           <Figure label="Plazas" value={`${view.squad.length}/${view.me.squad_limit}`} />
         </div>

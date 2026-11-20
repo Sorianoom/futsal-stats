@@ -29,7 +29,7 @@ from app.schemas.fantasy import (
     SquadListingOut,
 )
 from app.services.fantasy import enter, lineup_out
-from app.services.fantasy_results import rounds_of, scored_results
+from app.services.fantasy_results import recent_points, rounds_of, scored_results
 
 
 def owned_only(lineup: Lineup, owned: set[str]) -> Lineup:
@@ -60,6 +60,7 @@ def _squad_out(
     listings: Mapping[uuid.UUID, FantasyListing],
     last_points: Mapping[str, int] | None,
     photos: Mapping[uuid.UUID, str],
+    recent: Mapping[uuid.UUID, list[int]],
 ) -> list[SquadCopyOut]:
     return [
         SquadCopyOut(
@@ -75,6 +76,7 @@ def _squad_out(
             protected_until=protected_until(c.copy.acquired_at).astimezone(FANTASY_TIMEZONE),
             last_points=last_points.get(str(c.player.id), 0) if last_points is not None else None,
             photo_url=photos.get(c.player.id),
+            recent_points=recent.get(c.player.id, []),
         )
         for c in copies
     ]
@@ -119,7 +121,8 @@ async def my_team(
     rounds = await rounds_of(db, league)
     last = await _last_scored(db, rounds, now)
     photos = await photos_repo.photo_urls(db, [c.player.id for c in copies])
-    squad = _squad_out(copies, values, changes, listings, last[1] if last else None, photos)
+    recent = await recent_points(db, rounds, now, [c.player.id for c in copies])
+    squad = _squad_out(copies, values, changes, listings, last[1] if last else None, photos, recent)
     history = await fantasy_repo.lineup_history(db, [participant.id])
     lineup = owned_only(
         latest_lineup(history.get(participant.id, [])), {str(c.copy.id) for c in copies}

@@ -206,7 +206,7 @@ async def test_each_participant_starts_with_two_field_players_and_twenty_million
     assert {c["value"] for c in squad} == {INITIAL_PLAYER_VALUE}
     assert set(squad[0]) == {
         "copy_id", "player_id", "name", "dorsal", "position", "value", "value_change", "listing",
-        "clause", "protected_until", "last_points", "photo_url",
+        "clause", "protected_until", "last_points", "photo_url", "recent_points",
     }  # fmt: skip
     assert me["lineup"] == {
         "goalkeeper_copy_id": None,

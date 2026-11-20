@@ -5,10 +5,12 @@ import { useState } from "react";
 import { BuyClauseDialog } from "@/components/fantasy/buy-clause-dialog";
 import { FANTASY_CARD, FANTASY_HEADING } from "@/components/fantasy/styles";
 import { Button } from "@/components/ui/button";
+import { Spark } from "@/components/fantasy/spark";
 import { PlayerAvatar } from "@/components/player-avatar";
 import type { ClauseCopy } from "@/lib/api/fantasy-types";
 import { clauseBlock, type ClauseBlock } from "@/lib/fantasy/clauses";
 import { formatMoment, formatMoney } from "@/lib/fantasy/format";
+import { tierOf } from "@/lib/fantasy/form";
 import { POSITION_LABEL } from "@/lib/labels";
 import { fantasyClausesQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -31,13 +33,14 @@ function ClauseRow({ copy, block, onBuy }: RowProps) {
           name={copy.name}
           dorsal={copy.dorsal}
           photoUrl={copy.photo_url}
-          className="size-10 rounded-xl bg-primary/10 text-primary tabular-nums"
+          className={`tier-${tierOf(copy.recent_points?.at(-1) ?? null)} size-12 rounded-2xl text-lg tabular-nums`}
         />
         <span className="min-w-0">
           <span className="block truncate font-bold">{copy.name}</span>
           <span className="block text-sm text-muted-foreground">
             {`${POSITION_LABEL[copy.position]} · De ${copy.owner.display_name}`}
           </span>
+          <Spark points={copy.recent_points ?? []} className="mt-1" />
           {block === "protected" ? (
             <span className="block text-sm text-muted-foreground">
               {"Protegida hasta "}

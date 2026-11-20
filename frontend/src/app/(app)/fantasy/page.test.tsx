@@ -117,7 +117,7 @@ describe("Fantasy con liga", () => {
     const editor = await screen.findByRole("region", { name: "Alineación" });
     expect(within(editor).getAllByText("Vacío · 0 puntos")).toHaveLength(3);
     expect(within(editor).getByRole("button", { name: "Portero: vacío" })).toBeInTheDocument();
-    expect(within(editor).getByRole("button", { name: "Campo 1: Ana Ruiz" })).toBeInTheDocument();
+    expect(within(editor).getByRole("button", { name: "Pívot: Ana Ruiz" })).toBeInTheDocument();
   });
 
   it("el jugador edita y guarda su alineación", async () => {
@@ -130,8 +130,8 @@ describe("Fantasy con liga", () => {
     expect(save).toBeDisabled();
 
     await pick(editor, "Portero: vacío", "Elena Paz");
-    await pick(editor, "Campo 3: vacío", "Dani Gil");
-    expect(within(editor).getByRole("button", { name: "Campo 3: Dani Gil" })).toBeInTheDocument();
+    await pick(editor, "Ala derecha: vacío", "Dani Gil");
+    expect(within(editor).getByRole("button", { name: "Ala derecha: Dani Gil" })).toBeInTheDocument();
     await userEvent.click(save);
 
     expect(await within(editor).findByRole("status")).toHaveTextContent("Alineación guardada");
@@ -171,15 +171,15 @@ describe("Fantasy con liga", () => {
     const server = api({ "PUT /fantasy/lineup": (request) => ({ data: request.body }) });
     renderWithAuth(<FantasyPage />, { user: fakeUser("player") });
     const editor = await screen.findByRole("region", { name: "Alineación" });
-    await userEvent.click(within(editor).getByRole("button", { name: "Campo 2: Bea Soto" }));
-    const sheet = screen.getByRole("dialog", { name: "Campo 2" });
+    await userEvent.click(within(editor).getByRole("button", { name: "Ala izquierda: Bea Soto" }));
+    const sheet = screen.getByRole("dialog", { name: "Ala izquierda" });
     const captain = within(sheet).getByRole("button", { name: "Capitán: Bea Soto" });
     expect(captain).toHaveAttribute("aria-pressed", "false");
 
     await userEvent.click(captain);
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
-    expect(within(editor).getByRole("button", { name: "Campo 2: Bea Soto, capitán" })).toBeInTheDocument();
+    expect(within(editor).getByRole("button", { name: "Ala izquierda: Bea Soto, capitán" })).toBeInTheDocument();
     expect(await within(editor).findByRole("status")).toHaveTextContent("Alineación guardada");
     expect(server.calls.find((call) => call.method === "PUT")?.body).toMatchObject({ captain_copy_id: "c2" });
   });
@@ -193,7 +193,7 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    const photo = within(within(editor).getByRole("button", { name: "Campo 1: Ana Ruiz" })).getByRole("img", {
+    const photo = within(within(editor).getByRole("button", { name: "Pívot: Ana Ruiz" })).getByRole("img", {
       name: "Ana Ruiz",
     });
 
@@ -205,10 +205,10 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    await userEvent.click(within(editor).getByRole("button", { name: "Campo 1: Ana Ruiz" }));
+    await userEvent.click(within(editor).getByRole("button", { name: "Pívot: Ana Ruiz" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Dejar vacío" }));
 
-    expect(within(editor).getByRole("button", { name: "Campo 1: vacío" })).toBeInTheDocument();
+    expect(within(editor).getByRole("button", { name: "Pívot: vacío" })).toBeInTheDocument();
     expect(within(editor).getByRole("button", { name: "Guardar alineación" })).toBeEnabled();
   });
 
@@ -217,8 +217,8 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    await userEvent.click(within(editor).getByRole("button", { name: "Campo 3: vacío" }));
-    const sheet = screen.getByRole("dialog", { name: "Campo 3" });
+    await userEvent.click(within(editor).getByRole("button", { name: "Ala derecha: vacío" }));
+    const sheet = screen.getByRole("dialog", { name: "Ala derecha" });
     const cards = within(within(sheet).getByRole("list", { name: "Jugadores para este hueco" })).getAllByRole("button");
 
     expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual(["Dani Gil"]);
@@ -232,11 +232,11 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    await pick(editor, "Campo 3: vacío", "Dani Gil");
+    await pick(editor, "Ala derecha: vacío", "Dani Gil");
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
     expect(await within(editor).findByRole("alert")).toHaveTextContent("La alineación no es válida");
-    expect(within(editor).getByRole("button", { name: "Campo 3: Dani Gil" })).toBeInTheDocument();
+    expect(within(editor).getByRole("button", { name: "Ala derecha: Dani Gil" })).toBeInTheDocument();
   });
 
   it("avisa de un fallo de red al guardar", async () => {
@@ -244,7 +244,7 @@ describe("Fantasy con liga", () => {
     renderWithAuth(<FantasyPage />);
     const editor = await screen.findByRole("region", { name: "Alineación" });
 
-    await pick(editor, "Campo 3: vacío", "Dani Gil");
+    await pick(editor, "Ala derecha: vacío", "Dani Gil");
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
     expect(await within(editor).findByRole("alert")).toHaveTextContent("No se pudo guardar");
@@ -324,7 +324,7 @@ describe("Fantasy con liga", () => {
     const editor = await screen.findByRole("region", { name: "Alineación" });
     const before = server.count("GET", "/fantasy/me");
 
-    await pick(editor, "Campo 3: vacío", "Dani Gil");
+    await pick(editor, "Ala derecha: vacío", "Dani Gil");
     await userEvent.click(within(editor).getByRole("button", { name: "Guardar alineación" }));
 
     await waitFor(() => expect(server.count("GET", "/fantasy/me")).toBeGreaterThan(before));

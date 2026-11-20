@@ -41,6 +41,41 @@ async function bidWith(list: HTMLElement, name: string, amount: string, button: 
 }
 
 describe("Mercado", () => {
+  it("destaca arriba al que más puntos suma en sus 3 últimas jornadas", async () => {
+    const withForm: FantasyMarket = {
+      listings: MARKET.listings.map((listing, index) => ({ ...listing, recent_points: [[4, 5, 6], [9, 9, 9], [1, 1, 1]][index] })),
+    };
+    api({ "GET /fantasy/market": { data: withForm } });
+
+    await openMarket();
+
+    const hot = screen.getByRole("region", { name: /^En racha:/ });
+    expect(hot).toHaveAccessibleName(`En racha: ${MARKET.listings[1].name}`);
+    expect(hot).toHaveTextContent("27 pts en 3 jornadas");
+  });
+
+  it("sin jornadas puntuadas no hay destacado", async () => {
+    api();
+
+    await openMarket();
+
+    expect(screen.queryByRole("region", { name: /^En racha:/ })).not.toBeInTheDocument();
+  });
+
+  it("filtra por puesto y por mis pujas", async () => {
+    api();
+    await openMarket();
+    const filters = screen.getByRole("group", { name: "Filtrar el mercado" });
+
+    await userEvent.click(within(filters).getByRole("button", { name: "Porteros" }));
+    const goalkeepers = screen.getByRole("list", { name: "Ventas abiertas" });
+    expect(within(goalkeepers).getAllByRole("listitem").every((row) => row.textContent?.includes("Portero"))).toBe(true);
+
+    await userEvent.click(within(filters).getByRole("button", { name: "Mis pujas" }));
+    const mine = screen.getByRole("list", { name: "Ventas abiertas" });
+    expect(within(mine).getAllByRole("listitem").every((row) => row.textContent?.includes("Tu puja"))).toBe(true);
+  });
+
   it("en un jugador que ya tengo pone «Ya lo tienes» en vez de dejar pujar", async () => {
     const hugo = { ...ME.squad[0], copy_id: "c9", player_id: "p7", name: "Hugo Mar" };
     api({ "GET /fantasy/me": { data: { ...ME, squad: [...ME.squad, hugo] } } });
