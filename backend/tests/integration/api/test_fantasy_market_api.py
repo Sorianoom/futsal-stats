@@ -53,9 +53,9 @@ async def client(session: AsyncSession, clock: Clock) -> AsyncIterator[AsyncClie
 
 
 async def _two_participants(
-    client: AsyncClient, join: Join, staff: Headers, make_player: MakePlayer
+    client: AsyncClient, join: Join, staff: Headers, make_player: MakePlayer, players: int = 8
 ) -> tuple[Headers, Headers]:
-    await field_players(make_player)
+    await field_players(make_player, players)
     coach = await join()
     assistant = await join("assistant_coach")
     await create_league(client, staff)
@@ -275,7 +275,9 @@ async def test_a_full_squad_cannot_bid(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    coach, _ = await _two_participants(client, join, staff, make_player)
+    # Con 8 jugadores, el sorteo del mercado puede poner a la venta todas las copias libres de
+    # alguno y no quedar 5 jugadores con copia libre que dar: con 14 siempre quedan.
+    coach, _ = await _two_participants(client, join, staff, make_player, players=14)
     mine = await me(client, coach)
     await give_copies(session, mine["me"]["participant_id"], SQUAD_LIMIT - 2, LEAGUE_DAY)
     # Cualquier venta de la banca: la plantilla llena se comprueba antes que el jugador repetido,
