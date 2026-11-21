@@ -241,3 +241,25 @@ async def test_the_moves_of_a_private_squad_are_hidden_from_the_rest(
     assert sold.status_code == 200, sold.text
     assert await transfers(client, player) == []
     assert len(await transfers(client, bruno)) == 1
+
+
+async def test_a_private_squad_is_hidden_when_opened_from_the_standings(
+    client: AsyncClient, staff: Headers, join: Join, make_player: MakePlayer, clock: Clock
+) -> None:
+    player, bruno = await _private_league(client, staff, join, make_player, clock)
+    bruno_id = (await me(client, bruno))["me"]["participant_id"]
+
+    seen = await get_data(client, f"/fantasy/participants/{bruno_id}", player)
+    own = await get_data(client, f"/fantasy/participants/{bruno_id}", bruno)
+
+    assert seen == {
+        "participant_id": bruno_id,
+        "display_name": "Bruno",
+        "private_squad": True,
+        "team_value": None,
+        "squad": [],
+        "last_round": None,
+        "last_lineup": None,
+    }
+    assert own["private_squad"] is True
+    assert len(own["squad"]) > 0

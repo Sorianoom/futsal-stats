@@ -730,3 +730,75 @@ async def test_players_use_the_fantasy(
 
     assert lineup.status_code == 200
     assert standings.status_code == 200
+
+
+# --- Equipo de otro participante -----------------------------------------------------------------
+
+
+async def _team(client: AsyncClient, headers: dict[str, str], participant_id: str) -> Any:
+    return await client.get(f"/fantasy/participants/{participant_id}", headers=headers)
+
+
+async def test_anyone_sees_a_rivals_squad_and_scored_lineup(
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
+) -> None:
+    headers, match_id, me, expected_total = await _scored_round(
+        client, join, staff, make_player, clock
+    )
+    rival = await join("Lucas")
+    assistant = await login(Role.ASSISTANT_COACH)
+
+    for viewer in (rival, assistant):
+        response = await _team(client, viewer, me["me"]["participant_id"])
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        assert data["display_name"] == "head_coach"
+        assert data["private_squad"] is False
+        assert {c["copy_id"] for c in data["squad"]} == {c["copy_id"] for c in me["squad"]}
+        assert data["team_value"] == sum(c["value"] for c in data["squad"])
+        assert data["last_round"] == {
+            "match_id": match_id,
+            "opponent": "Rival FS",
+            "held_on": MATCH_DAY,
+        }
+        assert data["last_lineup"]["total"] == expected_total
+        filled = [s["copy_id"] for s in data["last_lineup"]["slots"] if s["copy_id"]]
+        assert filled == [c["copy_id"] for c in me["squad"]]
+
+
+async def test_the_lineup_of_an_open_round_is_not_shown(
+    client: AsyncClient, make_player: MakePlayer, clock: Clock, staff: dict[str, str], join: Join
+) -> None:
+    await _field_players(make_player)
+    headers = await join()
+    await _create_league(client, staff)
+    me = await _me(client, headers)
+    await _put_lineup(client, headers, field=[c["copy_id"] for c in me["squad"]])
+    await _new_match(client, staff, MATCH_DAY)
+    clock.now = BEFORE_LOCK
+    rival = await join("Lucas")
+
+    data = (await _team(client, rival, me["me"]["participant_id"])).json()["data"]
+
+    assert len(data["squad"]) == len(me["squad"])
+    assert data["last_round"] is None
+    assert data["last_lineup"] is None
+
+
+async def test_an_unknown_participant_is_404(
+    client: AsyncClient, make_player: MakePlayer, staff: dict[str, str], join: Join
+) -> None:
+    await _field_players(make_player)
+    headers = await join()
+
+    without_league = await _team(client, headers, str(uuid.uuid4()))
+    await _create_league(client, staff)
+    unknown = await _team(client, headers, str(uuid.uuid4()))
+
+    assert without_league.status_code == 404
+    assert unknown.status_code == 404

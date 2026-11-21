@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ParticipantDialog } from "@/components/fantasy/participant-dialog";
 import { RoundDialog } from "@/components/fantasy/round-dialog";
 import { MySeason, Podium, positionOf } from "@/components/fantasy/standings-highlights";
 import { FANTASY_HEADING } from "@/components/fantasy/styles";
@@ -62,9 +63,10 @@ interface TableProps {
   /** null: quien mira no juega (cuenta de partidos del cuerpo técnico). */
   myId: string | null;
   onOpenRound?: (round: StandingsRound) => void;
+  onOpenParticipant: (row: StandingsRow) => void;
 }
 
-function Table({ standings, myId, onOpenRound }: TableProps) {
+function Table({ standings, myId, onOpenRound, onOpenParticipant }: TableProps) {
   return (
     <div role="region" aria-label="Tabla de clasificación" tabIndex={0} className="overflow-x-auto rounded-3xl border bg-card">
       <table aria-label="Clasificación" className="w-full border-collapse bg-card">
@@ -93,7 +95,13 @@ function Table({ standings, myId, onOpenRound }: TableProps) {
               >
                 <td className={`${CELL} font-bold text-muted-foreground`}>{positionOf(standings.rows, row)}</td>
                 <th scope="row" className={cn(CELL, STICKY, "text-left font-bold whitespace-nowrap")}>
-                  {row.display_name}
+                  <button
+                    type="button"
+                    onClick={() => onOpenParticipant(row)}
+                    className="-mx-2 min-h-11 rounded-xl px-2 text-left font-bold underline decoration-muted-foreground/40 underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted"
+                  >
+                    {row.display_name}
+                  </button>
                   {mine ? (
                     <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs font-extrabold text-primary-foreground">
                       Tú
@@ -123,12 +131,14 @@ function Table({ standings, myId, onOpenRound }: TableProps) {
 }
 
 /**
- * Clasificación de la liga. Tocar una jornada abre mi alineación de esa jornada; sin `myId` (quien
- * solo mira, sin equipo) no hay alineación que abrir ni temporada propia.
+ * Clasificación de la liga. Tocar una jornada abre mi alineación de esa jornada y tocar un nombre,
+ * el equipo de ese participante; sin `myId` (quien solo mira, sin equipo) no hay alineación propia
+ * que abrir ni temporada propia.
  */
 export function Standings({ myId }: { myId: string | null }) {
   const { data: standings, failed, reload } = useApiQuery(fantasyStandingsQuery.key, fantasyStandingsQuery.fetch);
   const [openRound, setOpenRound] = useState<StandingsRound | null>(null);
+  const [openRow, setOpenRow] = useState<StandingsRow | null>(null);
 
   return (
     <section aria-labelledby="standings-heading" className="space-y-3">
@@ -146,21 +156,26 @@ export function Standings({ myId }: { myId: string | null }) {
       {standings === null && !failed ? <p className="text-muted-foreground">Cargando clasificación…</p> : null}
       {standings ? (
         <>
-          {standings.rounds.length > 0 && myId ? (
-            <p className="text-sm text-muted-foreground">
-              Toca una jornada para ver tu alineación y sus puntos. Las provisionales se congelan al cerrarse la
-              jornada.
-            </p>
-          ) : null}
+          <p className="text-sm text-muted-foreground">
+            {standings.rounds.length > 0 && myId
+              ? "Toca una jornada para ver tu alineación y sus puntos, o un nombre para ver su equipo. Las provisionales se congelan al cerrarse la jornada."
+              : "Toca un nombre para ver su equipo."}
+          </p>
           {standings.rounds.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aún no se ha jugado ninguna jornada.</p>
           ) : null}
           <Podium rows={standings.rows} myId={myId ?? ""} />
           {myId ? <MySeason standings={standings} myId={myId} /> : null}
-          <Table standings={standings} myId={myId} onOpenRound={myId ? setOpenRound : undefined} />
+          <Table
+            standings={standings}
+            myId={myId}
+            onOpenRound={myId ? setOpenRound : undefined}
+            onOpenParticipant={setOpenRow}
+          />
         </>
       ) : null}
       <RoundDialog round={openRound} onClose={() => setOpenRound(null)} />
+      <ParticipantDialog row={openRow} onClose={() => setOpenRow(null)} />
     </section>
   );
 }

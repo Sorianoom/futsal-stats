@@ -28,6 +28,7 @@ describe("Cómo se juega", () => {
       "0,1 M por punto",
       "70 %",
       "1,5 ×",
+      "1,25 × lo que pagaste",
       "7 días",
       "7 jugadores",
     ]) {

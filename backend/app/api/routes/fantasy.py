@@ -18,11 +18,12 @@ from app.schemas.fantasy import (
     LineupOut,
     MyTeamOut,
     NoLeagueOut,
+    ParticipantTeamOut,
     RoundDetailOut,
     SpectatorOut,
     StandingsOut,
 )
-from app.services import fantasy, fantasy_scoring, fantasy_team
+from app.services import fantasy, fantasy_rivals, fantasy_scoring, fantasy_team
 
 router = APIRouter(prefix="/fantasy", tags=["fantasy"])
 
@@ -80,3 +81,13 @@ async def my_round(
         return ok(await fantasy_scoring.my_round(db, user, now, rng, match_id))
     except fantasy_scoring.NotARoundError as error:
         raise ApiError(404, "not_found", "Jornada no encontrada") from error
+
+
+@router.get("/participants/{participant_id}", response_model=Envelope[ParticipantTeamOut])
+async def participant_team(
+    participant_id: uuid.UUID, db: SessionDep, user: AnyUser, now: NowDep, rng: RngDep
+) -> Envelope[ParticipantTeamOut]:
+    try:
+        return ok(await fantasy_rivals.participant_team(db, user, now, rng, participant_id))
+    except fantasy_rivals.ParticipantNotFoundError as error:
+        raise ApiError(404, "not_found", "Participante no encontrado") from error

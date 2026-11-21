@@ -164,6 +164,20 @@ class RoundDetailOut(BaseModel):
     slots: list[SlotOut]
 
 
+class ParticipantTeamOut(BaseModel):
+    """Equipo de un participante visto desde la clasificación. Si su plantilla es privada (y no es
+    la mía), solo sale el nombre: ni jugadores, ni valor, ni alineación."""
+
+    participant_id: uuid.UUID
+    display_name: str
+    private_squad: bool
+    team_value: int | None
+    squad: list[SquadCopyOut]
+    # Última jornada con la alineación ya bloqueada y cómo puntuó (la de la próxima no se ve).
+    last_round: LastRoundOut | None
+    last_lineup: RoundDetailOut | None
+
+
 # --- Mercado -------------------------------------------------------------------------------------
 
 

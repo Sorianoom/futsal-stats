@@ -132,6 +132,18 @@ async def my_round(
     round_ = next((r for r in await rounds_of(db, league) if r.match_id == str(match_id)), None)
     if round_ is None:
         raise NotARoundError
+    return await participant_round(db, league, participant, round_, now)
+
+
+async def participant_round(
+    db: AsyncSession,
+    league: FantasyLeague,
+    participant: FantasyParticipant,
+    round_: Round,
+    now: datetime,
+) -> RoundDetailOut:
+    """Alineación de un participante en una jornada, con la nota, los goles y los puntos."""
+    match_id = uuid.UUID(round_.match_id)
     frozen = (await money.round_scores(db, league.id, [round_.match_id])).get(
         (round_.match_id, participant.id)
     )

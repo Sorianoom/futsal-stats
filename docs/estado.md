@@ -79,8 +79,13 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
-- **Cuentas del Fantasy del cuerpo técnico** (sin subir: **lleva la migración 0013**, aplicarla en
-  Neon después de la 0012 y antes del push). Reglas en `docs/fantasy.md`, «Participantes y cuentas».
+- **Cláusula tras una compra cara** (sin migración): al fichar en el mercado o por clausulazo,
+  la cláusula es max(1,5 × valor, 1,25 × lo pagado). La **migración 0014** (solo datos) sube a esa
+  regla las copias ya fichadas, según su último fichaje a su dueño actual; nunca baja una cláusula.
+- **Equipo de los demás desde la clasificación** (sin migración): tocar un nombre abre su
+  plantilla y su alineación de la última jornada bloqueada. Ver `docs/fantasy.md`.
+- **Cuentas del Fantasy del cuerpo técnico** (subido; 0012 y 0013 aplicadas en Neon el
+  2026-11-20, después del push: el login dio 500 hasta aplicarlas). Reglas en `docs/fantasy.md`, «Participantes y cuentas».
   - Rol `fantasy` (sin ficha). Plantilla → «Cuentas del Fantasy del cuerpo técnico»: invitar con
     un nombre (`POST /fantasy-accounts/invitation`), listar y quitar. La invitación usa la misma
     tabla y la misma página `/invitacion` (`player_invitations.player_id` pasa a admitir NULL, con

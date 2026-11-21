@@ -378,6 +378,27 @@ async def test_the_highest_bid_wins_when_the_listing_closes(
     assert parse(move["at"]) == FIRST_MARKET_CLOSES
 
 
+async def test_the_clause_of_a_copy_bought_dear_is_above_what_was_paid(
+    client: AsyncClient,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
+) -> None:
+    coach, assistant = await _two_participants(client, join, staff, make_player)
+    coach_team, assistant_team = await me(client, coach), await me(client, assistant)
+    target = buyable(await market(client, coach), coach_team, assistant_team)[0]
+    await bid(client, coach, target["listing_id"], 8000)
+
+    clock.now = NEXT_DAY
+    bought = next(
+        c for c in (await me(client, coach))["squad"] if c["copy_id"] == target["copy_id"]
+    )
+
+    assert bought["value"] * 3 // 2 < 8000
+    assert bought["clause"] == 10000  # 1,25 × 8 M, no 1,5 × su valor
+
+
 async def test_on_a_tie_the_oldest_bid_wins_and_changing_a_bid_loses_seniority(
     client: AsyncClient,
     login: Login,

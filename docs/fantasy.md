@@ -52,6 +52,11 @@ nombre en el código para poder ajustarlos.
 - Huecos de la alineación (falta portero o jugadores de campo): puntúan **0**.
 - Saldo negativo al bloquearse la alineación: la jornada puntúa **0**.
 - Clasificación: suma de puntos de todas las jornadas.
+- Equipo de los demás (2026-11-20): en la clasificación, tocar un nombre abre su equipo
+  (`GET /fantasy/participants/{id}`): valor, plantilla (lo mismo que ya enseña Cláusulas) y la
+  alineación de la última jornada **bloqueada** con sus puntos. La de la próxima no se ve, para
+  que nadie copie una alineación aún abierta; lo cobrado tampoco. Una plantilla privada solo
+  enseña el nombre (salvo a su dueño). Lo pueden abrir todos, también las cuentas que solo miran.
 
 ## Mercado
 
@@ -101,7 +106,9 @@ Acordados con el usuario el 2026-11-19. Contrato de la API: `docs/fantasy-api-pa
 
 - Las copias que ya tenían dueño al activar las cláusulas empiezan con **1,5 × su valor de ese
   momento**. Cada vez que una copia cambia de dueño (mercado, clausulazo), la cláusula vuelve a ser
-  1,5 × el valor actual (redondeo hacia abajo). En la banca no hay cláusula.
+  1,5 × el valor actual o, si es mayor, **1,25 × lo pagado** (2026-11-21: antes, quien pagaba
+  8 M por un jugador de 4 M se quedaba con una cláusula de 6 M). Redondeo hacia abajo y con el
+  tope de dinero. En la banca no hay cláusula.
 - La **protección de 7 días** cuenta para toda copia recién llegada a su dueño: reparto inicial,
   mercado o clausulazo.
 - **Día del partido**: de 00:00 a 23:59 (hora de Madrid) del día de un partido oficial de la liga.

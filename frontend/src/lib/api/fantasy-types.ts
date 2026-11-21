@@ -144,6 +144,21 @@ export interface FantasyRound {
   negative_balance: boolean;
 }
 
+/**
+ * Equipo de otro participante, abierto desde la clasificación. Con la plantilla privada (y si no
+ * es el mío) solo llega el nombre: `squad` vacío y sin valor ni alineación.
+ */
+export interface ParticipantTeam {
+  participant_id: string;
+  display_name: string;
+  private_squad: boolean;
+  team_value: number | null;
+  squad: SquadCopy[];
+  /** Última jornada con la alineación ya bloqueada; la de la próxima no se enseña. */
+  last_round: LastRound | null;
+  last_lineup: FantasyRound | null;
+}
+
 /** Otro participante (vendedor, comprador…). null en su lugar significa la banca. */
 export interface ParticipantRef {
   participant_id: string;

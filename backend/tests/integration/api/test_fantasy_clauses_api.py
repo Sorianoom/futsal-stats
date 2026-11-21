@@ -155,7 +155,8 @@ async def test_a_clause_buy_moves_the_copy_and_the_money_at_once(
     }
     buyer = await me(client, coach)
     bought = next(c for c in buyer["squad"] if c["copy_id"] == target["copy_id"])
-    assert bought["clause"] == INITIAL_CLAUSE  # 1,5 × el valor actual
+    # Pagó la cláusula entera: la nueva es 1,25 × lo pagado, por encima de 1,5 × el valor.
+    assert bought["clause"] == INITIAL_CLAUSE * 5 // 4
     assert parse(bought["protected_until"]) == FREE_DAY + timedelta(days=CLAUSE_PROTECTION_DAYS)
     seller = await me(client, assistant)
     assert target["copy_id"] not in {c["copy_id"] for c in seller["squad"]}

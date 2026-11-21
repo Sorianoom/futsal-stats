@@ -34,7 +34,7 @@ function SlotRow({ slot }: { slot: RoundSlot }) {
 const NOTICE = "rounded-xl border p-3";
 
 /** Por qué los puntos aún no son definitivos, o por qué la jornada puntuó 0. */
-function RoundNotice({ round }: { round: FantasyRound }) {
+function RoundNotice({ round, mine }: { round: FantasyRound; mine: boolean }) {
   if (round.status === "pending") {
     return (
       <p className={`${NOTICE} text-muted-foreground`}>
@@ -52,7 +52,9 @@ function RoundNotice({ round }: { round: FantasyRound }) {
   if (!round.negative_balance) return null;
   return (
     <p className={`${NOTICE} border-destructive/40 font-semibold text-destructive`}>
-      Puntuó 0: tenías saldo negativo al bloquearse la alineación.
+      {mine
+        ? "Puntuó 0: tenías saldo negativo al bloquearse la alineación."
+        : "Puntuó 0: tenía saldo negativo al bloquearse la alineación."}
     </p>
   );
 }
@@ -73,11 +75,23 @@ function RoundBody({ matchId }: { matchId: string }) {
   }
   if (round === null) return <p className="text-muted-foreground">Cargando…</p>;
 
+  return <RoundLineup round={round} label="Mi alineación" mine />;
+}
+
+interface RoundLineupProps {
+  round: FantasyRound;
+  label: string;
+  /** Es mi alineación: cambia cómo se explica el saldo negativo. */
+  mine?: boolean;
+}
+
+/** Alineación de una jornada con la nota, los goles y los puntos de cada hueco. */
+export function RoundLineup({ round, label, mine = false }: RoundLineupProps) {
   return (
     <div className="space-y-3">
-      <RoundNotice round={round} />
+      <RoundNotice round={round} mine={mine} />
       <div className="overflow-x-auto">
-        <table aria-label="Mi alineación" className="w-full border-collapse">
+        <table aria-label={label} className="w-full border-collapse">
           <thead>
             <tr>
               <th scope="col" className={HEADER}>Puesto</th>
@@ -95,7 +109,7 @@ function RoundBody({ matchId }: { matchId: string }) {
         </table>
       </div>
       <p className="text-lg font-extrabold">{`Total: ${formatPoints(round.total)}`}</p>
-      {round.status === "settled" ? <p className="font-semibold">{`Cobrado: ${formatMoney(round.payout)}`}</p> : null}
+      {mine && round.status === "settled" ? <p className="font-semibold">{`Cobrado: ${formatMoney(round.payout)}`}</p> : null}
       <p className="text-sm text-muted-foreground">Puntos = nota redondeada + 2 por gol. Sin nota, 0.</p>
     </div>
   );

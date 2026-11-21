@@ -29,7 +29,7 @@ from app.db.models import (
     StintRow,
     TeamSession,
 )
-from app.domain.fantasy.clauses import initial_clause
+from app.domain.fantasy.clauses import clause_after_purchase
 from app.domain.fantasy.market import LedgerKind, TransferKind
 from app.domain.fantasy.rules import INITIAL_PLAYER_VALUE
 from app.domain.fantasy.settlement import LedgerEntry, Transfer
@@ -105,10 +105,10 @@ async def record_transfer(
     at: datetime,
 ) -> None:
     """Cambia el dueño de la copia y lo apunta en el historial. El nuevo dueño estrena cláusula
-    (1,5 × el valor actual); en la banca no hay cláusula."""
+    (1,5 × el valor actual, o 1,25 × lo pagado si es más); en la banca no hay cláusula."""
     # La cláusula se calcula antes de tocar la copia: la consulta haría flush a medias.
     clause = (
-        initial_clause(await player_value(db, copy.league_id, copy.player_id))
+        clause_after_purchase(await player_value(db, copy.league_id, copy.player_id), price)
         if to_participant_id is not None
         else None
     )

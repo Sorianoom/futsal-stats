@@ -9,6 +9,7 @@ from app.domain.fantasy.clauses import (
     ClauseRejection,
     check_clause_buy,
     check_clause_raise,
+    clause_after_purchase,
     initial_clause,
     raise_cost,
 )
@@ -58,6 +59,27 @@ def test_initial_clause_is_one_and_a_half_times_the_value_rounded_down(
     value: int, expected: int
 ) -> None:
     assert initial_clause(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "price", "expected"),
+    [
+        (4000, 8000, 10000),  # pagó 8 M por un jugador de 4 M: 1,25 × 8 M, no 6 M
+        (4000, 4000, 6000),  # pagó su valor: manda 1,5 × el valor
+        (4000, 4900, 6125),  # 1,25 × 4,9 M ya supera a 1,5 × 4 M
+        (4000, 0, 6000),
+        (4000, 333, 6000),
+        (500, 999, 1248),  # redondeo hacia abajo
+    ],
+)
+def test_after_a_purchase_the_clause_is_above_the_price_paid(
+    value: int, price: int, expected: int
+) -> None:
+    assert clause_after_purchase(value, price) == expected
+
+
+def test_the_clause_after_a_purchase_is_capped() -> None:
+    assert clause_after_purchase(1000, MAX_MONEY_AMOUNT) == MAX_MONEY_AMOUNT
 
 
 @pytest.mark.parametrize(("current", "new", "expected"), [(6000, 8000, 1000), (6000, 6001, 1)])

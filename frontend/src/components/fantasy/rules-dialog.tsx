@@ -42,7 +42,7 @@ const SECTIONS = [
   {
     title: "Cláusulas",
     items: [
-      "Cada jugador fichado tiene una cláusula de 1,5 × su valor. Puedes subirla pagando la mitad de la subida.",
+      "Cada jugador fichado tiene una cláusula de 1,5 × su valor, o de 1,25 × lo que pagaste por él si es más. Puedes subirla pagando la mitad de la subida.",
       "Cualquiera puede pagar tu cláusula y llevárselo al momento, salvo los 7 días tras ficharlo y el día del partido.",
     ],
   },

@@ -55,7 +55,7 @@ def _listing_out(listing: FantasyListing | None) -> SquadListingOut | None:
     )
 
 
-def _squad_out(
+def squad_out(
     copies: Sequence[SquadCopy],
     values: Mapping[str, int],
     changes: Mapping[str, int],
@@ -95,7 +95,7 @@ def _next_round_out(upcoming: Round | None) -> NextRoundOut | None:
     )
 
 
-async def _last_scored(
+async def last_scored(
     db: AsyncSession, rounds: Sequence[Round], now: datetime
 ) -> tuple[Round, dict[str, int]] | None:
     """La última jornada bloqueada que ya puntúa y los puntos de cada jugador en ella (sin
@@ -127,10 +127,10 @@ async def my_team(
     changes = await money.last_value_changes(db, league.id)
     listings = await market_repo.open_listings_of_copies(db, [c.copy.id for c in copies])
     rounds = await rounds_of(db, league)
-    last = await _last_scored(db, rounds, now)
+    last = await last_scored(db, rounds, now)
     photos = await photos_repo.photo_urls(db, [c.player.id for c in copies])
     recent = await recent_points(db, rounds, now, [c.player.id for c in copies])
-    squad = _squad_out(copies, values, changes, listings, last[1] if last else None, photos, recent)
+    squad = squad_out(copies, values, changes, listings, last[1] if last else None, photos, recent)
     history = await fantasy_repo.lineup_history(db, [participant.id])
     lineup = owned_only(
         latest_lineup(history.get(participant.id, [])), {str(c.copy.id) for c in copies}

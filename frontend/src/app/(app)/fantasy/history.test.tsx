@@ -90,6 +90,60 @@ describe("Clasificación", () => {
   });
 });
 
+describe("Equipo de otro participante", () => {
+  const TEAM = {
+    participant_id: "pa2",
+    display_name: "Carla Ruiz",
+    private_squad: false,
+    team_value: 9000,
+    squad: [{ ...ME.squad[0], copy_id: "z1", name: "Iker Sanz" }],
+    last_round: { match_id: "m1", opponent: "Betis", held_on: "2026-11-01" },
+    last_lineup: ROUND,
+  };
+
+  async function openParticipant(name: string, extra: Record<string, MockHandler> = {}) {
+    api({ "GET /fantasy/participants/pa2": { data: TEAM }, ...extra });
+    await openTab("Clasificación");
+    const table = await screen.findByRole("table", { name: "Clasificación" });
+    await userEvent.click(within(table).getByRole("button", { name }));
+    return screen.findByRole("dialog");
+  }
+
+  it("tocar su nombre abre su alineación con los puntos y su plantilla", async () => {
+    const dialog = await openParticipant("Carla Ruiz");
+
+    expect(within(dialog).getByRole("heading", { name: "Carla Ruiz" })).toBeInTheDocument();
+    const lineup = await within(dialog).findByRole("table", { name: "Alineación de Carla Ruiz" });
+    expect(lineup).toHaveTextContent("Ana Ruiz");
+    expect(dialog).toHaveTextContent("Alineación vs Betis");
+    expect(dialog).toHaveTextContent("Total: 25");
+    expect(dialog).not.toHaveTextContent("Cobrado");
+    const squad = within(dialog).getByRole("list", { name: "Plantilla de Carla Ruiz" });
+    expect(within(squad).getAllByRole("listitem")).toHaveLength(1);
+    expect(squad).toHaveTextContent("Iker Sanz");
+  });
+
+  it("sin jornada bloqueada aún no enseña su alineación", async () => {
+    const dialog = await openParticipant("Carla Ruiz", {
+      "GET /fantasy/participants/pa2": { data: { ...TEAM, last_round: null, last_lineup: null } },
+    });
+
+    expect(await within(dialog).findByText(/Aún no hay ninguna jornada bloqueada/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("una plantilla privada no enseña nada", async () => {
+    const dialog = await openParticipant("Carla Ruiz", {
+      "GET /fantasy/participants/pa2": {
+        data: { ...TEAM, private_squad: true, team_value: null, squad: [], last_round: null, last_lineup: null },
+      },
+    });
+
+    expect(await within(dialog).findByText(/Plantilla privada/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("list")).not.toBeInTheDocument();
+  });
+});
+
 describe("Fichajes", () => {
   it("lista los movimientos con la banca donde no hay participante", async () => {
     api();

@@ -17,6 +17,8 @@ from app.domain.fantasy.rules import (
     CLAUSE_PROTECTION_DAYS,
     CLAUSE_RAISE_COST_DIVISOR,
     MAX_MONEY_AMOUNT,
+    PAID_CLAUSE_DENOMINATOR,
+    PAID_CLAUSE_NUMERATOR,
     SQUAD_LIMIT,
 )
 
@@ -41,6 +43,13 @@ class ClauseError(ValueError):
 def initial_clause(value: int) -> int:
     """Cláusula al fichar: 1,5 × el valor de mercado, en miles enteros hacia abajo."""
     return value * CLAUSE_NUMERATOR // CLAUSE_DENOMINATOR
+
+
+def clause_after_purchase(value: int, price: int) -> int:
+    """Cláusula tras comprar la copia por `price`: la de fichar (1,5 × valor) o, si es mayor,
+    1,25 × lo pagado, para que nadie se la lleve por menos de lo que costó. Con tope."""
+    paid = price * PAID_CLAUSE_NUMERATOR // PAID_CLAUSE_DENOMINATOR
+    return min(max(initial_clause(value), paid), MAX_MONEY_AMOUNT)
 
 
 def raise_cost(current: int, new: int) -> int:

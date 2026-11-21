@@ -55,5 +55,9 @@ FANTASY_TIMEZONE = ZoneInfo("Europe/Madrid")
 CLAUSE_NUMERATOR = 3
 CLAUSE_DENOMINATOR = 2
 CLAUSE_RAISE_COST_DIVISOR = 2
+# Al comprar una copia (mercado o clausulazo), la cláusula nunca queda por debajo de lo pagado:
+# como poco, 1,25 × el precio (redondeo hacia abajo).
+PAID_CLAUSE_NUMERATOR = 5
+PAID_CLAUSE_DENOMINATOR = 4
 # No se puede clausular una copia durante estos días desde que llegó a su dueño actual.
 CLAUSE_PROTECTION_DAYS = 7

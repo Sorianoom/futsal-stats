@@ -332,14 +332,15 @@ describe("Fantasy con liga", () => {
 });
 
 describe("Cuenta de partidos del cuerpo técnico", () => {
-  it("solo ve la clasificación, sin equipo ni jornadas que abrir", async () => {
+  it("solo ve la clasificación, sin equipo ni jornadas que abrir, pero sí el equipo de cada uno", async () => {
     api({ "GET /fantasy/me": { data: { league: ME.league, spectator: true } } });
 
     renderWithAuth(<FantasyPage />, { user: fakeUser("assistant_coach") });
 
     expect(await screen.findByText(/solo ves la clasificación/)).toBeInTheDocument();
     const table = await screen.findByRole("table", { name: "Clasificación" });
-    expect(within(table).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(table).queryByRole("button", { name: /Betis|Almería|Cádiz/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "Carla Ruiz" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Mercado" })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Mi plantilla" })).not.toBeInTheDocument();
   });

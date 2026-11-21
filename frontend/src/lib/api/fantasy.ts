@@ -13,6 +13,7 @@ import type {
   FantasyMe,
   FantasyRound,
   FantasyStandings,
+  ParticipantTeam,
 } from "./fantasy-types";
 
 /** Claves de caché del Fantasy (las usan las consultas de `lib/queries.ts`). */
@@ -25,12 +26,16 @@ const FANTASY_ROUND_PREFIX = "fantasy:round:";
 export function fantasyRoundKey(matchId: string): string {
   return `${FANTASY_ROUND_PREFIX}${matchId}`;
 }
+const FANTASY_PARTICIPANT_PREFIX = "fantasy:participant:";
+export function fantasyParticipantKey(participantId: string): string {
+  return `${FANTASY_PARTICIPANT_PREFIX}${participantId}`;
+}
 
 /**
  * Lo que cambia la liga entera (crearla, que un partido pase a contar o deje de contar como
  * jornada), mi alineación, el mercado o las cláusulas (pujas, ventas, clausulazos, que al
  * escribir se procesen cierres vencidos o jornadas) deja viejas mi vista, la clasificación, el
- * mercado, los fichajes, las cláusulas y el detalle de cualquier jornada.
+ * mercado, los fichajes, las cláusulas, el detalle de cualquier jornada y el equipo de los demás.
  */
 export function invalidateFantasy(): void {
   queryCache.invalidate(FANTASY_ME_KEY);
@@ -39,6 +44,7 @@ export function invalidateFantasy(): void {
   queryCache.invalidate(FANTASY_TRANSFERS_KEY);
   queryCache.invalidate(FANTASY_CLAUSES_KEY);
   queryCache.invalidatePrefix(FANTASY_ROUND_PREFIX);
+  queryCache.invalidatePrefix(FANTASY_PARTICIPANT_PREFIX);
 }
 
 export function getFantasyMe(): Promise<FantasyMe> {
@@ -51,6 +57,10 @@ export function getStandings(): Promise<FantasyStandings> {
 
 export function getMyRound(matchId: string): Promise<FantasyRound> {
   return apiData<FantasyRound>(`/fantasy/rounds/${encodeURIComponent(matchId)}/me`);
+}
+
+export function getParticipantTeam(participantId: string): Promise<ParticipantTeam> {
+  return apiData<ParticipantTeam>(`/fantasy/participants/${encodeURIComponent(participantId)}`);
 }
 
 export function createLeague(): Promise<CreatedLeague> {
