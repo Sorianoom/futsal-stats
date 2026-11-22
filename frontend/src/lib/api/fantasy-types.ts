@@ -78,6 +78,8 @@ export interface FantasyLeagueView {
   next_round: NextRound | null;
   /** Última jornada que ya puntúa (provisional o cerrada); null si aún no hay ninguna. */
   last_round: LastRound | null;
+  /** Jornada ya bloqueada con el partido aún sin cerrar (normalmente, la de hoy). */
+  live_round?: LastRound | null;
 }
 
 export interface LastRound {

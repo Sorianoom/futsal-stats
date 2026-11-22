@@ -108,6 +108,28 @@ async def last_scored(
     return None
 
 
+async def live_round(
+    db: AsyncSession, league_id: uuid.UUID, rounds: Sequence[Round], now: datetime
+) -> Round | None:
+    """La última jornada bloqueada si su partido aún no ha cerrado (no puntúa todavía). Una
+    jornada ya cerrada no vuelve a estar en juego aunque se reabra su partido para corregirlo."""
+    locked = [r for r in rounds if is_locked(r, now)]
+    if not locked:
+        return None
+    latest = max(locked, key=lambda r: (r.held_on, r.match_id))
+    if latest.match_id in await money.settled_round_ids(db, league_id):
+        return None
+    return None if latest.match_id in await scored_results(db, [latest], now) else latest
+
+
+def _round_ref(round_: Round | None) -> LastRoundOut | None:
+    if round_ is None:
+        return None
+    return LastRoundOut(
+        match_id=uuid.UUID(round_.match_id), opponent=round_.opponent, held_on=round_.held_on
+    )
+
+
 async def my_team(
     db: AsyncSession, user: User, now: datetime, rng: random.Random
 ) -> MyTeamOut | SpectatorOut | None:
@@ -149,13 +171,6 @@ async def my_team(
         squad=squad,
         lineup=lineup_out(lineup),
         next_round=_next_round_out(next_open_round(rounds, now)),
-        last_round=(
-            LastRoundOut(
-                match_id=uuid.UUID(last[0].match_id),
-                opponent=last[0].opponent,
-                held_on=last[0].held_on,
-            )
-            if last
-            else None
-        ),
+        last_round=_round_ref(last[0] if last else None),
+        live_round=_round_ref(await live_round(db, league.id, rounds, now)),
     )

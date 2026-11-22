@@ -79,6 +79,15 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
+- **Móvil y jornada en juego** (sin migración, 2026-11-22):
+  - `GET /fantasy/me` trae `live_round`: la última jornada bloqueada con el partido sin cerrar
+    (la de hoy). La franja la enseña como «En juego» encima de la próxima.
+  - Pestaña **Jornadas** en el Fantasy: mis puntos por jornada; tocar una abre mi alineación.
+  - Cabecera: en el móvil, con más de 3 secciones (entrenadores) van en un menú desplegable;
+    cerrar sesión es un icono. Aviso «Instalar» (Chrome, `beforeinstallprompt`) o los pasos de
+    Safari en iPhone/iPad; «Ahora no» lo calla 14 días.
+  - Manifiesto con `orientation: any` (antes forzaba horizontal en los móviles), `id` e icono
+    maskable; iconos regenerados desde `src/app/icon.svg` (el de 512 estaba descentrado).
 - **Cláusula tras una compra cara** (sin migración): al fichar en el mercado o por clausulazo,
   la cláusula es max(1,5 × valor, 1,25 × lo pagado). La **migración 0014** (solo datos) sube a esa
   regla las copias ya fichadas, según su último fichaje a su dueño actual; nunca baja una cláusula.

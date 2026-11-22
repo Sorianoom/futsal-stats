@@ -79,6 +79,27 @@ describe("AppShell", () => {
     expect(logo).not.toHaveAttribute("aria-current");
   });
 
+  it("en el móvil, con muchas secciones, las abre en un menú desde la sección actual", async () => {
+    navigation.pathname = "/plantilla";
+    renderWithAuth(<AppShell>contenido</AppShell>);
+    const toggle = screen.getByRole("button", { name: /Plantilla.*abrir el menú/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await userEvent.click(toggle);
+
+    const menu = document.getElementById("main-menu");
+    expect(menu).not.toBeNull();
+    expect(within(menu as HTMLElement).getAllByRole("link")).toHaveLength(8);
+    await userEvent.keyboard("{Escape}");
+    expect(document.getElementById("main-menu")).toBeNull();
+  });
+
+  it("el jugador, con pocas secciones, no necesita menú", () => {
+    renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("player") });
+
+    expect(screen.queryByRole("button", { name: /abrir el menú/ })).not.toBeInTheDocument();
+  });
+
   it("muestra el rol y el correo de la sesión junto al cierre de sesión", () => {
     renderWithAuth(<AppShell>contenido</AppShell>, { user: fakeUser("assistant_coach") });
 

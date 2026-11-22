@@ -45,7 +45,8 @@ export function FantasyTabs({ tabs, label }: { tabs: readonly FantasyTab[]; labe
         role="tablist"
         aria-label={label}
         onKeyDown={handleKeyDown}
-        className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] z-30 grid grid-cols-5 gap-1 rounded-3xl border bg-card/95 p-1.5 shadow-xl backdrop-blur md:static md:flex md:overflow-x-auto md:rounded-2xl md:bg-muted md:p-1 md:shadow-none"
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+        className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] z-30 grid gap-1 rounded-3xl border bg-card/95 p-1.5 shadow-xl backdrop-blur md:static md:flex md:overflow-x-auto md:rounded-2xl md:bg-muted md:p-1 md:shadow-none"
       >
         {tabs.map((tab, index) => {
           const selected = index === active;
@@ -64,7 +65,7 @@ export function FantasyTabs({ tabs, label }: { tabs: readonly FantasyTab[]; labe
               tabIndex={selected ? 0 : -1}
               onClick={() => setActive(index)}
               className={cn(
-                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[11px] font-bold whitespace-nowrap focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:min-h-12 md:flex-1 md:flex-row md:rounded-xl md:px-4 md:text-base",
+                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 text-[10.5px] font-bold whitespace-nowrap focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:min-h-12 md:flex-1 md:flex-row md:rounded-xl md:px-4 md:text-base",
                 selected
                   ? "text-gold-text md:bg-background md:text-foreground md:shadow-sm"
                   : "text-muted-foreground",

@@ -120,6 +120,9 @@ class MyTeamOut(BaseModel):
     lineup: LineupOut
     next_round: NextRoundOut | None
     last_round: LastRoundOut | None
+    # Jornada ya bloqueada cuyo partido aún no ha cerrado (normalmente, la de hoy): puntúa la
+    # alineación que había al bloquearse. null si no hay ninguna.
+    live_round: LastRoundOut | None = None
 
 
 class RoundOut(BaseModel):

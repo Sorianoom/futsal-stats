@@ -50,8 +50,8 @@ describe("Pestañas", () => {
 
     await userEvent.keyboard("{ArrowRight}");
 
-    expect(screen.getByRole("tab", { name: "Mercado" })).toHaveFocus();
-    expect(screen.getByRole("tab", { name: "Mercado" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Jornadas" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Jornadas" })).toHaveAttribute("aria-selected", "true");
   });
 });
 
@@ -87,6 +87,40 @@ describe("Clasificación", () => {
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText(/saldo negativo/)).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Cobrado: 0,0 M");
+  });
+});
+
+describe("Jornadas", () => {
+  it("lista mis puntos por jornada, la más reciente arriba, y abre el detalle", async () => {
+    api();
+
+    await openTab("Jornadas");
+
+    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/Cádiz.*Pendiente.*—/),
+      expect.stringMatching(/Betis.*Provisional.*25 pts/),
+      expect.stringMatching(/Almería.*Cerrada.*8 pts/),
+    ]);
+    expect(screen.getByText("Total: 33 pts")).toBeInTheDocument();
+
+    await userEvent.click(within(items[1]).getByRole("button"));
+
+    expect(await screen.findByRole("table", { name: "Mi alineación" })).toHaveTextContent("Ana Ruiz");
+  });
+
+  it("con la alineación bloqueada y el partido sin cerrar, enseña la jornada en juego y la próxima", async () => {
+    api({
+      "GET /fantasy/me": {
+        data: { ...ME, live_round: { match_id: "m9", opponent: "Chapeldunac", held_on: "2026-11-22" } },
+      },
+    });
+    renderWithAuth(<FantasyPage />);
+
+    expect(await screen.findByText("vs Chapeldunac")).toBeInTheDocument();
+    expect(screen.getByText("En juego")).toBeInTheDocument();
+    expect(screen.getByText("Próxima jornada")).toBeInTheDocument();
   });
 });
 

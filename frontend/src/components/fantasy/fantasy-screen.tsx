@@ -5,6 +5,7 @@ import { ClausesPanel } from "@/components/fantasy/clauses-panel";
 import { DisplayNameDialog } from "@/components/fantasy/display-name-dialog";
 import { FantasyTabs, type FantasyTab } from "@/components/fantasy/fantasy-tabs";
 import { MarketPanel } from "@/components/fantasy/market-panel";
+import { MyRounds } from "@/components/fantasy/my-rounds";
 import { MyTeam } from "@/components/fantasy/my-team";
 import { NoLeague } from "@/components/fantasy/no-league";
 import { PackOpening } from "@/components/fantasy/pack-opening";
@@ -50,6 +51,14 @@ const ICONS = {
       <path d="M13 2L4 14h7l-1 8 9-12h-7z" />
     </svg>
   ),
+  rounds: (
+    <svg {...ICON}>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+    </svg>
+  ),
   standings: (
     <svg {...ICON}>
       <path d="M8 21h8" />
@@ -74,6 +83,13 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
   const privateSquad = view.me.private_squad === true;
   const tabs: FantasyTab[] = [
     { id: "team", label: "Mi equipo", short: "Equipo", icon: ICONS.team, render: () => <MyTeam view={view} onChanged={onChanged} /> },
+    {
+      id: "rounds",
+      label: "Jornadas",
+      short: "Jornadas",
+      icon: ICONS.rounds,
+      render: () => <MyRounds myId={view.me.participant_id} />,
+    },
     {
       id: "market",
       label: "Mercado",
@@ -113,7 +129,7 @@ function League({ view, onChanged }: { view: FantasyLeagueView; onChanged: () =>
   return (
     <>
       <PackOpening participantId={view.me.participant_id} squad={view.squad} />
-      <RoundTicker round={view.next_round} />
+      <RoundTicker round={view.next_round} live={view.live_round ?? null} />
       <TeamSummary view={view} />
       <div className="flex flex-wrap justify-end gap-2">
         {canRename ? <DisplayNameDialog current={view.me.display_name} onChanged={onChanged} /> : null}

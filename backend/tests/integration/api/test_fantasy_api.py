@@ -802,3 +802,40 @@ async def test_an_unknown_participant_is_404(
 
     assert without_league.status_code == 404
     assert unknown.status_code == 404
+
+
+async def test_the_locked_round_of_an_open_match_is_the_live_round(
+    client: AsyncClient, make_player: MakePlayer, clock: Clock, join: Join, staff: dict[str, str]
+) -> None:
+    players = await _field_players(make_player)
+    headers = await join()
+    await _create_league(client, staff)
+    match_id, _ = await played_match(client, staff, make_player, players=players, finalize=False)
+    next_id = await _new_match(client, staff, "2026-10-24")
+    before = await _me(client, headers)
+    clock.now = AFTER_LOCK
+
+    during = await _me(client, headers)
+
+    assert before["live_round"] is None
+    assert during["live_round"] == {
+        "match_id": match_id,
+        "opponent": "Rival FS",
+        "held_on": MATCH_DAY,
+    }
+    assert during["next_round"]["match_id"] == next_id
+
+
+async def test_once_the_match_is_closed_it_is_no_longer_live(
+    client: AsyncClient,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
+) -> None:
+    headers, match_id, _, _ = await _scored_round(client, join, staff, make_player, clock)
+
+    data = await _me(client, headers)
+
+    assert data["live_round"] is None
+    assert data["last_round"]["match_id"] == match_id

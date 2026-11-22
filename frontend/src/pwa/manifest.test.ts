@@ -8,6 +8,7 @@ interface ManifestIcon {
   src: string;
   sizes: string;
   type: string;
+  purpose?: string;
 }
 
 interface Manifest {
@@ -32,9 +33,9 @@ function pngSize(path: string): string {
 }
 
 describe("manifest.webmanifest", () => {
-  it("abre la app a pantalla completa y en horizontal, como se usa en el iPad", () => {
+  it("abre la app a pantalla completa y gira con el aparato: el iPad en horizontal y los móviles en vertical", () => {
     expect(manifest.display).toBe("standalone");
-    expect(manifest.orientation).toBe("landscape");
+    expect(manifest.orientation).toBe("any");
   });
 
   it("arranca y se limita a la raíz del sitio", () => {
@@ -61,6 +62,10 @@ describe("manifest.webmanifest", () => {
       expect(pngSize(join(PUBLIC_DIR, icon.src))).toBe(icon.sizes);
     },
   );
+
+  it("tiene un icono maskable para que Android lo recorte sin dejar bordes blancos", () => {
+    expect(manifest.icons.some((icon) => icon.purpose === "maskable" && icon.sizes === "512x512")).toBe(true);
+  });
 
   it("el icono de pantalla de inicio de iOS existe y mide 180 píxeles", () => {
     expect(pngSize(join(PUBLIC_DIR, "icons", "apple-touch-icon.png"))).toBe("180x180");
