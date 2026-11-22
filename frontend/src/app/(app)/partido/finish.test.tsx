@@ -463,3 +463,63 @@ describe("fin del partido", () => {
     expect(screen.getByText(/Espera a que se envíen las anotaciones/)).toBeInTheDocument();
   });
 });
+
+describe("traspaso de estadísticas y convocatoria", () => {
+  it("en el descanso pasa lo de un jugador a otro y recarga el partido con el nuevo", async () => {
+    lineup = lineupOf({ type: "part_started", part: 1, starters: STARTERS }, { type: "part_ended", t: 1200 });
+    const server = api({
+      "POST /matches/m1/player-transfer": () => {
+        lineup = lineupOf(
+          { type: "part_started", part: 1, starters: ["p7", "p2", "p3", "p4", "p5"] },
+          { type: "part_ended", t: 1200 },
+        );
+        return { data: { changed: 1 } };
+      },
+    });
+    renderWithAuth(<PartidoPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Traspasar estadísticas" }));
+    const dialog = screen.getByRole("dialog", { name: "Traspasar estadísticas" });
+
+    await userEvent.click(within(within(dialog).getByRole("radiogroup", { name: /^De/ })).getByRole("radio", { name: /Ana Ruiz/ }));
+    await userEvent.click(within(within(dialog).getByRole("radiogroup", { name: /^A / })).getByRole("radio", { name: /Gema Ruiz/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Traspasar" }));
+
+    const call = server.calls.find((c) => c.path.endsWith("/player-transfer"));
+    expect(call?.body).toEqual({ from_player_id: "p1", to_player_id: "p7" });
+    await waitFor(() => expect(screen.getByLabelText("Gema Ruiz")).toBeChecked());
+    expect(screen.getByLabelText("Ana Ruiz")).not.toBeChecked();
+  });
+
+  it("antes de empezar se confirma la convocatoria y solo los convocados salen para elegir", async () => {
+    lineup = [];
+    api();
+    renderWithAuth(<PartidoPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar convocatoria" }));
+    const dialog = screen.getByRole("dialog", { name: "Convocatoria del partido" });
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: /Gema Ruiz/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar (6)" }));
+
+    expect(await screen.findByText("Convocatoria confirmada: 6 jugadores.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Gema Ruiz")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ana Ruiz")).toBeInTheDocument();
+  });
+
+  it("el entrenador borra todas las estadísticas y el partido queda como sin empezar", async () => {
+    lineup = lineupOf({ type: "part_started", part: 1, starters: STARTERS }, { type: "part_ended", t: 1200 });
+    const server = api({
+      "DELETE /matches/m1/stats": () => {
+        lineup = [];
+        return { data: { changed: 2 } };
+      },
+    });
+    renderWithAuth(<PartidoPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Borrar estadísticas" }));
+    const dialog = screen.getByRole("dialog", { name: "¿Borrar las estadísticas del partido?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Borrar estadísticas" }));
+
+    expect(server.calls.some((c) => c.method === "DELETE" && c.path.endsWith("/stats"))).toBe(true);
+    expect(await screen.findByText("Antes de empezar, confirma quién está convocado hoy.")).toBeInTheDocument();
+  });
+});

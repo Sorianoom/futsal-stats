@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "@/components/auth-provider";
+import { ClearStatsDialog } from "@/components/clear-stats-dialog";
 import { LivePanel } from "@/components/live-panel";
+import { MatchSquadDialog } from "@/components/match-squad-dialog";
 import { MatchSummary } from "@/components/match-summary";
 import { PartBreak } from "@/components/part-break";
 import { PlayerActionsDialog } from "@/components/player-actions-dialog";
+import { PlayerTransferDialog } from "@/components/player-transfer-dialog";
 import { RatingDialog } from "@/components/rating-dialog";
 import { StartersPicker } from "@/components/starters-picker";
 import { SyncStatus } from "@/components/sync-status";
@@ -46,6 +50,7 @@ import {
   type SubstitutionPair,
 } from "@/lib/match/lineup";
 import type { ConfirmedLog, Outbox } from "@/lib/match/outbox";
+import { loadSquad, playersInMatch, saveSquad } from "@/lib/match/squad";
 import { useMatchLog } from "@/lib/match/use-match-log";
 import { useWakeLock } from "@/lib/use-wake-lock";
 
@@ -119,6 +124,81 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   const [ending, setEnding] = useState<{ part: number; t: number } | null>(null);
   // Varios cambios a la vez: el tiempo común se fija al abrir la pantalla.
   const [multi, setMulti] = useState<{ t: number; initial: MultiSubstitutionStart | null } | null>(null);
+
+  // Convocatoria confirmada en este dispositivo (null: valen los disponibles de la plantilla).
+  const [squad, setSquad] = useState<string[] | null>(() => loadSquad(matchId));
+  const [squadOpen, setSquadOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const { user } = useAuth();
+  const canClear = user?.role === "head_coach";
+  const involved = useMemo(() => playersInMatch(log.lineup, log.events), [log.lineup, log.events]);
+  /**
+   * Puede salir al campo. Con convocatoria confirmada: los convocados y quien ya ha jugado. Sin
+   * ella: los disponibles de la plantilla (un lesionado no se propone).
+   */
+  const eligible = (player: Player) =>
+    squad ? squad.includes(player.id) || involved.has(player.id) : player.status === "available";
+
+  function confirmSquad(playerIds: string[]) {
+    saveSquad(matchId, playerIds);
+    setSquad(playerIds);
+    setSquadOpen(false);
+  }
+
+  const squadDialog = (
+    <MatchSquadDialog
+      open={squadOpen}
+      players={data.players}
+      selected={squad ?? data.players.filter((p) => p.status === "available").map((p) => p.id)}
+      locked={involved}
+      onSave={confirmSquad}
+      onClose={() => setSquadOpen(false)}
+    />
+  );
+
+  const matchTools = (
+    <div className="mb-4 flex flex-wrap gap-2">
+      <Button variant="outline" size="lg" onClick={() => setSquadOpen(true)}>
+        {squad ? `Convocatoria (${squad.length})` : "Confirmar convocatoria"}
+      </Button>
+      <Button variant="outline" size="lg" onClick={() => setTransferOpen(true)}>
+        Traspasar estadísticas
+      </Button>
+      {canClear ? (
+        <Button variant="outline" size="lg" className="text-destructive" onClick={() => setClearOpen(true)}>
+          Borrar estadísticas
+        </Button>
+      ) : null}
+      {squadDialog}
+      <ClearStatsDialog
+        open={clearOpen}
+        matchId={matchId}
+        opponent={data.match.opponent}
+        pending={log.pending}
+        onDone={() => {
+          setClearOpen(false);
+          onReload();
+        }}
+        onClose={() => setClearOpen(false)}
+      />
+      <PlayerTransferDialog
+        open={transferOpen}
+        matchId={matchId}
+        players={data.players}
+        involved={involved}
+        pending={log.pending}
+        onDone={(toPlayerId) => {
+          // Quien recibe los datos jugó: queda convocado aunque en la plantilla figure lesionado.
+          const base = squad ?? data.players.filter((p) => p.status === "available").map((p) => p.id);
+          confirmSquad([...new Set([...base, toPlayerId])]);
+          setTransferOpen(false);
+          onReload();
+        }}
+        onClose={() => setTransferOpen(false)}
+      />
+    </div>
+  );
 
   const replayed = useMemo(() => replayLineup(log.lineup), [log.lineup]);
   const state = "state" in replayed ? replayed.state : null;
@@ -322,6 +402,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
 
   const alerts = (
     <>
+      {matchTools}
       <RejectionNotice items={rejected} onDismiss={log.dismissRejections} />
       {problem ? (
         <p role="alert" className="mb-4 rounded-lg border p-3 text-destructive">
@@ -345,9 +426,23 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     return (
       <>
         <RejectionNotice items={rejected} onDismiss={log.dismissRejections} />
+        <section
+          aria-label="Convocatoria del partido"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4"
+        >
+          <p className="text-base">
+            {squad
+              ? `Convocatoria confirmada: ${squad.length} jugadores.`
+              : "Antes de empezar, confirma quién está convocado hoy."}
+          </p>
+          <Button size="lg" variant={squad ? "outline" : "default"} onClick={() => setSquadOpen(true)}>
+            {squad ? "Cambiar convocatoria" : "Confirmar convocatoria"}
+          </Button>
+        </section>
+        {squadDialog}
         <StartersPicker
           part={1}
-          players={data.players}
+          players={squad ? data.players.filter((p) => squad.includes(p.id)) : data.players}
           capacity={5}
           proposed={data.proposed}
           busy={false}
@@ -363,9 +458,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   if (inBreak || finished) {
     const blockedPlayers = new Set(state.sentOff);
     const lastPart = state.lastEndedPart;
-    const available = data.players.filter(
-      (p) => !blockedPlayers.has(p.id) && p.status === "available",
-    );
+    const available = data.players.filter((p) => !blockedPlayers.has(p.id) && eligible(p));
     return (
       <div className="space-y-6">
         {alerts}
@@ -414,9 +507,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   const onPitch = new Set(onCourt(state));
   const blocked = new Set(state.sentOff);
   const court = data.players.filter((p) => onPitch.has(p.id));
-  const bench = data.players.filter(
-    (p) => !onPitch.has(p.id) && !blocked.has(p.id) && p.status === "available",
-  );
+  const bench = data.players.filter((p) => !onPitch.has(p.id) && !blocked.has(p.id) && eligible(p));
   const keepers = court.filter((p) => p.position === "goalkeeper");
   // Con dos porteros en pista (raro) no se sabe a quién: se anota desde la ficha de cada uno.
   const keeper = keepers.length === 1 ? keepers[0] : null;

@@ -171,3 +171,13 @@ class StintOut(BaseModel):
 class FinalizeResult(BaseModel):
     stints: list[StintOut]
     seconds_by_player: dict[uuid.UUID, int]
+
+
+class PlayerTransferIn(StrictModel):
+    from_player_id: uuid.UUID
+    to_player_id: uuid.UUID
+
+
+class PlayerTransferOut(BaseModel):
+    # Filas cambiadas (eventos, alineación, tramos y sanciones).
+    changed: int

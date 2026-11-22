@@ -79,6 +79,16 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
 
 ## En curso
 
+- **Arreglos del partido en vivo** (sin migración, 2026-11-22):
+  - `POST /matches/{id}/player-transfer` (staff): pasa a otro jugador todo lo de uno en ese
+    partido (eventos, payloads de alineación, tramos y sanciones). 409 si el destino ya tiene
+    datos. Botón «Traspasar estadísticas» en el partido; exige no tener nada sin enviar.
+  - `DELETE /matches/{id}/stats` (entrenador principal): borra eventos, alineación, valoraciones
+    y tramos; las sanciones se quedan. Botón «Borrar estadísticas»; también olvida el reloj local.
+    Una jornada del Fantasy ya cerrada conserva sus puntos congelados.
+  - Convocatoria del partido (solo en el dispositivo, `localStorage` `match-squad:{id}`): se
+    confirma antes de los titulares; con ella, banquillo y descanso ofrecen solo a los convocados
+    (también lesionados marcados a mano) y a quien ya jugó.
 - **Móvil y jornada en juego** (sin migración, 2026-11-22):
   - `GET /fantasy/me` trae `live_round`: la última jornada bloqueada con el partido sin cerrar
     (la de hoy). La franja la enseña como «En juego» encima de la próxima.

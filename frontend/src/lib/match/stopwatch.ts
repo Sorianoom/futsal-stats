@@ -137,6 +137,15 @@ export function loadMatchClock(matchId: string): MatchClock | null {
   }
 }
 
+/** Olvida el reloj guardado del partido (al borrar sus estadísticas para empezarlo de nuevo). */
+export function forgetMatchClock(matchId: string): void {
+  try {
+    window.localStorage.removeItem(STORAGE_PREFIX + matchId);
+  } catch {
+    // Sin almacenamiento no hay nada que olvidar.
+  }
+}
+
 export function saveMatchClock(matchId: string, clock: MatchClock): void {
   try {
     window.localStorage.setItem(STORAGE_PREFIX + matchId, JSON.stringify(clock));

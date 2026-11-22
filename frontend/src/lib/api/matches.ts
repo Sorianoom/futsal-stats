@@ -74,3 +74,27 @@ export function finalizeMatch(matchId: string, force = false): Promise<FinalizeR
     method: "POST",
   }).finally(() => invalidateMatchStats(matchId));
 }
+
+/**
+ * Pasa todo lo anotado de un jugador a otro en el partido (se apuntó a uno por otro). El
+ * destino no puede tener nada en el partido.
+ */
+export function transferPlayer(matchId: string, fromPlayerId: string, toPlayerId: string): Promise<{ changed: number }> {
+  return apiData<{ changed: number }>(`/matches/${encodeURIComponent(matchId)}/player-transfer`, {
+    method: "POST",
+    body: { from_player_id: fromPlayerId, to_player_id: toPlayerId },
+  }).finally(() => {
+    invalidateMatchStats(matchId);
+    invalidateFantasy();
+  });
+}
+
+/** Borra todas las estadísticas del partido (eventos, alineación, valoraciones y minutos). */
+export function clearMatchStats(matchId: string): Promise<{ changed: number }> {
+  return apiData<{ changed: number }>(`/matches/${encodeURIComponent(matchId)}/stats`, {
+    method: "DELETE",
+  }).finally(() => {
+    invalidateMatchStats(matchId);
+    invalidateFantasy();
+  });
+}

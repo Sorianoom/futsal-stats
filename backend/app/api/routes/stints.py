@@ -22,10 +22,13 @@ from app.domain.stints.stats import seconds_by_player
 from app.domain.stints.validation import StintValidationError, validate_stints
 from app.schemas.match_sync import (
     FinalizeResult,
+    PlayerTransferIn,
+    PlayerTransferOut,
     StintCreate,
     StintOut,
     StintUpdate,
 )
+from app.services import match_transfer
 
 router = APIRouter(tags=["stints"])
 
@@ -163,3 +166,28 @@ async def delete_stint(stint_id: uuid.UUID, db: SessionDep, _: HeadCoach) -> Env
     await points_repo.delete_row(db, row)
     await db.commit()
     return ok(deleted)
+
+
+@router.post("/matches/{match_id}/player-transfer", response_model=Envelope[PlayerTransferOut])
+async def transfer_player(
+    match_id: uuid.UUID, payload: PlayerTransferIn, db: SessionDep, _: CurrentUser
+) -> Envelope[PlayerTransferOut]:
+    """Pasa todo lo anotado de un jugador a otro en este partido (se apuntó a uno por otro)."""
+    await _require_match(db, match_id)
+    try:
+        changed = await match_transfer.transfer_player(
+            db, match_id, payload.from_player_id, payload.to_player_id
+        )
+    except match_transfer.TransferError as error:
+        status = 404 if error.code == "not_found" else 409
+        raise ApiError(status, error.code, str(error)) from error
+    return ok(PlayerTransferOut(changed=changed))
+
+
+@router.delete("/matches/{match_id}/stats", response_model=Envelope[PlayerTransferOut])
+async def clear_match_stats(
+    match_id: uuid.UUID, db: SessionDep, _: HeadCoach
+) -> Envelope[PlayerTransferOut]:
+    """Borra todas las estadísticas del partido (mal tomadas) para dejarlo como sin empezar."""
+    await _require_match(db, match_id)
+    return ok(PlayerTransferOut(changed=await match_transfer.clear_stats(db, match_id)))
