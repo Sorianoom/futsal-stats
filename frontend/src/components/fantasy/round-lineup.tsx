@@ -6,7 +6,7 @@ import { FantasyPitch, SHORT_ROLE, SPOT } from "@/components/fantasy/pitch";
 import { PlayerAvatar } from "@/components/player-avatar";
 import type { FantasyRound, RoundSlot } from "@/lib/api/fantasy-types";
 import { bonusLabel, breakdownLabel, formatContribution, formatScore, roundedScore } from "@/lib/fantasy/breakdown";
-import { formatMoney, formatPoints, formatRating } from "@/lib/fantasy/format";
+import { PAYOUT_PER_POINT, formatMoney, formatPoints, formatRating, payoutFor } from "@/lib/fantasy/format";
 import { lineupSlots } from "@/lib/fantasy/lineup";
 import { cn } from "@/lib/utils";
 
@@ -191,6 +191,22 @@ function SlotExplanation({ slot, negativeBalance }: { slot: RoundSlot; negativeB
   );
 }
 
+/** Lo ganado en la jornada y por qué: 0,1 M por punto. Provisional hasta que se cierra. */
+function Earnings({ round }: { round: FantasyRound }) {
+  if (round.status === "pending") return null;
+  const settled = round.status === "settled";
+  const amount = settled ? round.payout : payoutFor(round.total);
+  const why = round.negative_balance
+    ? "saldo negativo al empezar el partido: no cobra"
+    : `${formatPoints(round.total)} × ${formatMoney(PAYOUT_PER_POINT)}`;
+  return (
+    <p className="font-semibold">
+      {`${settled ? "Cobrado" : "Cobrará al cerrarse"}: ${formatMoney(amount)}`}
+      <span className="font-normal text-muted-foreground">{` (${why})`}</span>
+    </p>
+  );
+}
+
 interface RoundLineupProps {
   round: FantasyRound;
   label: string;
@@ -221,9 +237,7 @@ export function RoundLineup({ round, label, mine = false }: RoundLineupProps) {
         ))}
       </FantasyPitch>
       <p className="text-lg font-extrabold">{`Total: ${formatPoints(round.total)}`}</p>
-      {mine && round.status === "settled" ? (
-        <p className="font-semibold">{`Cobrado: ${formatMoney(round.payout)}`}</p>
-      ) : null}
+      <Earnings round={round} />
       {chosen && showPoints ? <SlotExplanation slot={chosen} negativeBalance={round.negative_balance} /> : null}
       {!chosen && showPoints ? (
         <p className="text-sm text-muted-foreground">Toca un jugador para ver por qué ha sacado esos puntos.</p>

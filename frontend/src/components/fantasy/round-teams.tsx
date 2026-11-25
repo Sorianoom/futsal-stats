@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
 import { fantasyParticipantRoundQuery, fantasyStandingsQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
+import { PAYOUT_PER_POINT, formatMoney, payoutFor } from "@/lib/fantasy/format";
 import { cn } from "@/lib/utils";
 
 interface RoundTeamsProps {
@@ -29,6 +30,9 @@ export function RoundTeams({ round, myId, selected, onSelect }: RoundTeamsProps)
       <h3 id="round-teams-heading" className="font-extrabold">
         Equipos de esta jornada
       </h3>
+      <p className="text-sm text-muted-foreground">
+        {`${round.status === "settled" ? "Lo que ha ganado" : "Lo que ganará al cerrarse la jornada"} cada uno: ${formatMoney(PAYOUT_PER_POINT)} por punto de su alineación (el capitán cuenta doble). Con saldo negativo al empezar el partido no puntúa ni cobra. Toca un nombre para ver su alineación y por qué puntuó así.`}
+      </p>
       <ul aria-label="Equipos de esta jornada" className="space-y-1.5">
         {rows.map((row) => {
           const mine = row.participant_id === myId;
@@ -44,7 +48,10 @@ export function RoundTeams({ round, myId, selected, onSelect }: RoundTeamsProps)
                 )}
               >
                 <span className="truncate font-bold">{mine ? `${row.display_name} (tú)` : row.display_name}</span>
-                <span className="font-extrabold tabular-nums">{`${pointsIn(row, round)} pts`}</span>
+                <span className="flex shrink-0 items-baseline gap-2 tabular-nums">
+                  <span className="font-extrabold">{`${pointsIn(row, round)} pts`}</span>
+                  <span className="text-sm font-bold text-muted-foreground">{`+${formatMoney(payoutFor(pointsIn(row, round)))}`}</span>
+                </span>
               </button>
             </li>
           );

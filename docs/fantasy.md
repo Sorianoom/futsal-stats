@@ -82,7 +82,8 @@ nombre en el código para poder ajustarlos.
 - Equipo de los demás (2026-11-20): en la clasificación, tocar un nombre abre su equipo
   (`GET /fantasy/participants/{id}`): valor, plantilla (lo mismo que ya enseña Cláusulas) y la
   alineación de la última jornada **bloqueada** con sus puntos. La de la próxima no se ve, para
-  que nadie copie una alineación aún abierta; lo cobrado tampoco. Una plantilla privada solo
+  que nadie copie una alineación aún abierta. En la pestaña Jornadas (2026-11-25) sí se ve
+  lo que ganó cada uno en la jornada y por qué (puntos × 0,1 M), también en su alineación. Una plantilla privada solo
   enseña el nombre (salvo a su dueño). Lo pueden abrir todos, también las cuentas que solo miran.
 
 ## Mercado

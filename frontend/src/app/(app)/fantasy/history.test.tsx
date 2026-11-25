@@ -85,8 +85,9 @@ describe("Clasificación", () => {
     await userEvent.click(within(table).getByRole("button", { name: /Almería/ }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText(/saldo negativo/)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/Puntuó 0: tenías saldo negativo/)).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Cobrado: 0,0 M");
+    expect(dialog).toHaveTextContent("saldo negativo al empezar el partido: no cobra");
   });
 });
 
@@ -118,7 +119,7 @@ describe("Jornadas", () => {
     await userEvent.click(within(within(list).getAllByRole("listitem")[2]).getByRole("button"));
 
     const round = await screen.findByRole("region", { name: "Jornada vs Almería" });
-    expect(await within(round).findByText(/saldo negativo/)).toBeInTheDocument();
+    expect(await within(round).findByText(/Puntuó 0: tenías saldo negativo/)).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -162,12 +163,14 @@ describe("Jornadas", () => {
 
     const teams = within(dialog).getByRole("list", { name: "Equipos de esta jornada" });
     expect(within(teams).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      expect.stringMatching(/Míster.*30 pts/),
-      expect.stringMatching(/Carla Ruiz \(tú\).*25 pts/),
+      expect.stringMatching(/Míster.*30 pts.*\+3,0 M/),
+      expect.stringMatching(/Carla Ruiz \(tú\).*25 pts.*\+2,5 M/),
     ]);
+    expect(dialog).toHaveTextContent("Lo que ganará al cerrarse la jornada cada uno: 0,1 M por punto");
     await userEvent.click(within(teams).getByRole("button", { name: /Míster/ }));
 
     const lineup = await within(dialog).findByRole("region", { name: "Alineación de Míster" });
+    expect(lineup).toHaveTextContent("Cobrará al cerrarse: 3,0 M (30 puntos × 0,1 M)");
     await userEvent.click(within(lineup).getByRole("button", { name: "Bea Soto: 12 puntos" }));
     expect(within(lineup).getByRole("region", { name: "Por qué: Bea Soto" })).toHaveTextContent("Capitán×2");
     await userEvent.click(within(dialog).getByRole("button", { name: "Volver a mi alineación" }));

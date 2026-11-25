@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMoment, formatMoney, formatPoints, formatValueChange, lockText } from "./format";
+import { formatMoment, formatMoney, formatPoints, formatValueChange, lockText, payoutFor } from "./format";
 
 describe("formatMoney", () => {
   it.each([
@@ -47,5 +47,13 @@ describe("formatValueChange", () => {
 describe("formatMoment", () => {
   it("da el día corto y la hora en Madrid (cierres y fichajes)", () => {
     expect(formatMoment("2026-11-14T23:00:00Z")).toBe("dom 15, 00:00");
+  });
+});
+
+describe("payoutFor", () => {
+  it("cobra 0,1 M por punto y nunca negativo", () => {
+    expect(formatMoney(payoutFor(28))).toBe("2,8 M");
+    expect(payoutFor(0)).toBe(0);
+    expect(payoutFor(-3)).toBe(0);
   });
 });

@@ -3,6 +3,14 @@
 const THOUSANDS_PER_MILLION = 1000;
 const CLUB_TIME_ZONE = "Europe/Madrid";
 
+/** Cobro por punto al cerrarse la jornada, en miles: 0,1 M (`PAYOUT_PER_POINT` del backend). */
+export const PAYOUT_PER_POINT = 100;
+
+/** Lo que cobra una alineación por sus puntos de la jornada (el capitán ya va contado doble). */
+export function payoutFor(points: number): number {
+  return Math.max(0, points) * PAYOUT_PER_POINT;
+}
+
 const MILLIONS = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** La API da el dinero en miles: 20000 → "20,0 M". */
