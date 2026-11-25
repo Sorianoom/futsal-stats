@@ -91,7 +91,7 @@ describe("Clasificación", () => {
 });
 
 describe("Jornadas", () => {
-  it("lista mis puntos por jornada, la más reciente arriba, y abre el detalle", async () => {
+  it("lista mis puntos por jornada, la más reciente arriba, y enseña en la pista la última con puntos", async () => {
     api();
 
     await openTab("Jornadas");
@@ -104,11 +104,22 @@ describe("Jornadas", () => {
       expect.stringMatching(/Almería.*Cerrada.*8 pts/),
     ]);
     expect(screen.getByText("Total: 33 pts")).toBeInTheDocument();
-
-    await userEvent.click(within(items[1]).getByRole("button"));
+    expect(within(items[1]).getByRole("button")).toHaveAttribute("aria-pressed", "true");
 
     const mine = await screen.findByRole("region", { name: "Mi alineación" });
     expect(within(mine).getByRole("button", { name: "Ana Ruiz: 13 puntos" })).toBeInTheDocument();
+  });
+
+  it("tocar otra jornada la enseña en la pista", async () => {
+    api();
+    await openTab("Jornadas");
+    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
+
+    await userEvent.click(within(within(list).getAllByRole("listitem")[2]).getByRole("button"));
+
+    const round = await screen.findByRole("region", { name: "Jornada vs Almería" });
+    expect(await within(round).findByText(/saldo negativo/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("la jornada se ve en la pista con los puntos y explica por qué puntuó cada uno", async () => {
@@ -147,7 +158,7 @@ describe("Jornadas", () => {
     await openTab("Jornadas");
     const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
     await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
     const teams = within(dialog).getByRole("list", { name: "Equipos de esta jornada" });
     expect(within(teams).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
@@ -168,7 +179,7 @@ describe("Jornadas", () => {
     await openTab("Jornadas");
     const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
     await userEvent.click(within(within(list).getAllByRole("listitem")[0]).getByRole("button"));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
     await within(dialog).findByRole("region", { name: "Mi alineación" });
     expect(within(dialog).queryByRole("list", { name: "Equipos de esta jornada" })).not.toBeInTheDocument();
@@ -184,7 +195,7 @@ describe("Jornadas", () => {
     await openTab("Jornadas");
     const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
     await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
     await userEvent.click(within(dialog).getByRole("button", { name: /Míster/ }));
 

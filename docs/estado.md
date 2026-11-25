@@ -216,6 +216,10 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
 
 ## En curso
 
+- **Pestaña Jornadas con la pista** (2026-11-25). Antes la pista solo salía al tocar una jornada,
+  en un diálogo, y no se veía. Ahora la pestaña enseña directamente la última jornada con puntos
+  en la pista (porqué al tocar y equipos de los demás) y arriba una fila de jornadas para cambiar.
+  La clasificación sigue abriendo el diálogo.
 - **Acción clave** (2026-11-25, sin migración: el tipo de evento es texto sin CHECK). Nuevo botón
   «Acción clave» en la ficha del jugador durante el partido (balón salvado bajo la línea,
   recuperación en una contra…): +0,2 en la nota de cualquier jugador. Columna «AC» en las tablas

@@ -44,7 +44,7 @@ function useDisplayName(participantId: string | null): string {
   return standings?.rows.find((row) => row.participant_id === participantId)?.display_name ?? "";
 }
 
-function RoundContent({ round, myId }: { round: StandingsRound; myId: string | null }) {
+export function RoundContent({ round, myId }: { round: StandingsRound; myId: string | null }) {
   const [selected, setSelected] = useState<string | null>(null);
   const name = useDisplayName(selected);
   const viewingOther = selected !== null && selected !== myId;
