@@ -233,8 +233,9 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
   - `resettle-round` (CLI, `app/services/fantasy_resettle.py`): reabre y vuelve a cerrar la última
     jornada cerrada. Simulacro (solo lectura) del 22-nov con el bloqueo a las 17:39 y la fórmula
     nueva: cambian casi todos, p. ej. 11 → 37, 13 → 22, 32 → 28.
-  - 0016 rellenó el 22-nov con 17:39:48 (hora de Madrid). Tras el push: `resettle-round
-    2026-11-22` (simulacro y luego de verdad). Si después se elige su MVP, hay que repetirlo.
+  - 0016 rellenó el 22-nov con 17:39:48 (hora de Madrid). Jornada del 22-nov recalculada en
+    producción el 2026-11-25 (p. ej. 11 → 37, 13 → 22, 32 → 28), sin MVP. Si se elige su MVP,
+    hay que volver a lanzar `resettle-round 2026-11-22`.
 - **Recalibrado de la nota y los puntos** (subido el 2026-11-25, sin migración). Analizado con
   el único partido con datos (22-nov, 5-5): el portero, con 17 paradas y gol, quedaba por debajo
   de un goleador; un partido sin nada daba 6. Escala acordada: flojo ≈ 5, normal ≈ 7, bueno ≈ 9,
