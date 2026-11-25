@@ -3,39 +3,78 @@
 import { RoundLineup } from "@/components/fantasy/round-lineup";
 import { Button } from "@/components/ui/button";
 import type { StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
-import { fantasyParticipantRoundQuery, fantasyStandingsQuery } from "@/lib/queries";
-import { useApiQuery } from "@/lib/use-api-query";
 import { PAYOUT_PER_POINT, formatMoney, payoutFor } from "@/lib/fantasy/format";
+import { fantasyParticipantRoundQuery } from "@/lib/queries";
+import { useApiQuery } from "@/lib/use-api-query";
 import { cn } from "@/lib/utils";
 
-interface RoundTeamsProps {
+export function pointsIn(row: StandingsRow, round: StandingsRound): number {
+  return row.points_by_round[round.match_id] ?? 0;
+}
+
+/** Participantes de más a menos puntos en la jornada. */
+export function byRoundPoints(rows: readonly StandingsRow[], round: StandingsRound): StandingsRow[] {
+  return [...rows].sort((a, b) => pointsIn(b, round) - pointsIn(a, round));
+}
+
+/** Puesto con empates: dos con los mismos puntos comparten puesto (1, 2, 2, 4). */
+function positions(rows: readonly StandingsRow[], round: StandingsRound): number[] {
+  return rows.map((row) => 1 + rows.filter((other) => pointsIn(other, round) > pointsIn(row, round)).length);
+}
+
+interface PickerProps {
   round: StandingsRound;
+  rows: readonly StandingsRow[];
   myId: string | null;
   selected: string | null;
   onSelect: (participantId: string) => void;
 }
 
-function pointsIn(row: StandingsRow, round: StandingsRound): number {
-  return row.points_by_round[round.match_id] ?? 0;
+/** Fila de participantes encima de la pista: tocar uno cambia la pista a su alineación. */
+export function ParticipantPicker({ round, rows, myId, selected, onSelect }: PickerProps) {
+  return (
+    <ul aria-label="Ver la alineación de" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      {rows.map((row) => {
+        const current = selected === row.participant_id;
+        return (
+          <li key={row.participant_id} className="shrink-0">
+            <button
+              type="button"
+              aria-pressed={current}
+              onClick={() => onSelect(row.participant_id)}
+              className={cn(
+                "flex min-h-11 max-w-40 items-center gap-2 rounded-full border px-3 py-1.5 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted",
+                current && "border-gold bg-gold/15",
+              )}
+            >
+              <span className="truncate font-bold">
+                {row.participant_id === myId ? "Tú" : row.display_name.split(" ")[0]}
+              </span>
+              <span className="font-extrabold tabular-nums">{pointsIn(row, round)}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
-/** Todos los participantes con sus puntos en la jornada; tocar uno abre lo que alineó. */
-export function RoundTeams({ round, myId, selected, onSelect }: RoundTeamsProps) {
-  const { data: standings } = useApiQuery(fantasyStandingsQuery.key, fantasyStandingsQuery.fetch);
-  if (standings === null) return null;
-  const rows = [...standings.rows].sort((a, b) => pointsIn(b, round) - pointsIn(a, round));
-
+/** Ranking de lo ganado en la jornada (0,1 M por punto); tocar a uno enseña su alineación. */
+export function EarningsRanking({ round, rows, myId, selected, onSelect }: PickerProps) {
+  const settled = round.status === "settled";
+  const places = positions(rows, round);
   return (
-    <section aria-labelledby="round-teams-heading" className="space-y-2">
-      <h3 id="round-teams-heading" className="font-extrabold">
-        Equipos de esta jornada
+    <section aria-labelledby="round-earnings-heading" className="space-y-2">
+      <h3 id="round-earnings-heading" className="font-extrabold">
+        {settled ? "Beneficio tras la jornada" : "Beneficio provisional de la jornada"}
       </h3>
       <p className="text-sm text-muted-foreground">
-        {`${round.status === "settled" ? "Lo que ha ganado" : "Lo que ganará al cerrarse la jornada"} cada uno: ${formatMoney(PAYOUT_PER_POINT)} por punto de su alineación (el capitán cuenta doble). Con saldo negativo al empezar el partido no puntúa ni cobra. Toca un nombre para ver su alineación y por qué puntuó así.`}
+        {`${settled ? "Lo que ha ganado" : "Lo que ganará al cerrarse la jornada"} cada uno: ${formatMoney(PAYOUT_PER_POINT)} por punto de su alineación (el capitán cuenta doble). Con saldo negativo al empezar el partido no puntúa ni cobra.`}
       </p>
-      <ul aria-label="Equipos de esta jornada" className="space-y-1.5">
-        {rows.map((row) => {
+      <ol aria-label="Beneficio tras la jornada" className="space-y-1.5">
+        {rows.map((row, index) => {
           const mine = row.participant_id === myId;
+          const points = pointsIn(row, round);
           return (
             <li key={row.participant_id}>
               <button
@@ -43,20 +82,22 @@ export function RoundTeams({ round, myId, selected, onSelect }: RoundTeamsProps)
                 aria-pressed={selected === row.participant_id}
                 onClick={() => onSelect(row.participant_id)}
                 className={cn(
-                  "flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted",
+                  "flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted",
                   selected === row.participant_id && "border-primary bg-primary/10",
+                  mine && "shadow-[inset_4px_0_0_var(--gold)]",
                 )}
               >
-                <span className="truncate font-bold">{mine ? `${row.display_name} (tú)` : row.display_name}</span>
-                <span className="flex shrink-0 items-baseline gap-2 tabular-nums">
-                  <span className="font-extrabold">{`${pointsIn(row, round)} pts`}</span>
-                  <span className="text-sm font-bold text-muted-foreground">{`+${formatMoney(payoutFor(pointsIn(row, round)))}`}</span>
+                <span className="w-7 shrink-0 text-center font-black text-muted-foreground tabular-nums">{`${places[index]}º`}</span>
+                <span className="min-w-0 flex-1 truncate font-bold">
+                  {mine ? `${row.display_name} (tú)` : row.display_name}
                 </span>
+                <span className="text-sm text-muted-foreground tabular-nums">{`${points} pts`}</span>
+                <span className="w-16 text-right font-extrabold tabular-nums">{`+${formatMoney(payoutFor(points))}`}</span>
               </button>
             </li>
           );
         })}
-      </ul>
+      </ol>
     </section>
   );
 }

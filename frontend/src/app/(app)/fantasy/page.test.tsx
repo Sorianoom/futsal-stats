@@ -334,7 +334,7 @@ describe("Cuenta de partidos del cuerpo técnico", () => {
     expect(within(table).getByRole("button", { name: "Carla Ruiz" })).toBeInTheDocument();
     await userEvent.click(within(table).getByRole("button", { name: /Betis/ }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("list", { name: "Equipos de esta jornada" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("list", { name: "Beneficio tras la jornada" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("region", { name: "Mi alineación" })).not.toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("tab", { name: "Mercado" })).not.toBeInTheDocument();

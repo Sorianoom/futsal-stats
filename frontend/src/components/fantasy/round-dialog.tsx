@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { RoundLineup } from "@/components/fantasy/round-lineup";
-import { OtherLineup, RoundTeams } from "@/components/fantasy/round-teams";
+import { EarningsRanking, OtherLineup, ParticipantPicker, byRoundPoints } from "@/components/fantasy/round-teams";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { StandingsRound } from "@/lib/api/fantasy-types";
@@ -38,34 +38,39 @@ interface RoundDialogProps {
   onClose: () => void;
 }
 
-/** Nombre de un participante según la clasificación. */
-function useDisplayName(participantId: string | null): string {
-  const { data: standings } = useApiQuery(fantasyStandingsQuery.key, fantasyStandingsQuery.fetch);
-  return standings?.rows.find((row) => row.participant_id === participantId)?.display_name ?? "";
-}
-
+/**
+ * Una jornada: arriba, a quién se mira (por defecto, yo); en medio, su alineación en la pista; y
+ * debajo, el beneficio de cada uno. Las alineaciones de los demás solo se ven ya bloqueada.
+ */
 export function RoundContent({ round, myId }: { round: StandingsRound; myId: string | null }) {
+  const { data: standings } = useApiQuery(fantasyStandingsQuery.key, fantasyStandingsQuery.fetch);
   const [selected, setSelected] = useState<string | null>(null);
-  const name = useDisplayName(selected);
-  const viewingOther = selected !== null && selected !== myId;
+  const top = useRef<HTMLDivElement>(null);
+  const locked = round.status !== "pending";
+  const rows = locked && standings ? byRoundPoints(standings.rows, round) : [];
+  const current = selected ?? myId ?? rows[0]?.participant_id ?? null;
+  const name = rows.find((row) => row.participant_id === current)?.display_name ?? "";
+
+  const pick = (participantId: string) => {
+    setSelected(participantId);
+    top.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className="space-y-5">
-      {viewingOther ? (
-        <div className="space-y-3">
-          <OtherLineup matchId={round.match_id} participantId={selected} name={name} />
-          {myId ? (
-            <Button variant="outline" onClick={() => setSelected(null)}>
-              Volver a mi alineación
-            </Button>
-          ) : null}
-        </div>
-      ) : myId ? (
-        <RoundBody matchId={round.match_id} />
+      <div ref={top} className="scroll-mt-4 space-y-3">
+        {rows.length > 0 ? (
+          <ParticipantPicker round={round} rows={rows} myId={myId} selected={current} onSelect={pick} />
+        ) : null}
+        {current !== null && current !== myId ? (
+          <OtherLineup key={current} matchId={round.match_id} participantId={current} name={name} />
+        ) : myId ? (
+          <RoundBody matchId={round.match_id} />
+        ) : null}
+      </div>
+      {rows.length > 0 ? (
+        <EarningsRanking round={round} rows={rows} myId={myId} selected={current} onSelect={pick} />
       ) : null}
-      {round.status === "pending" ? null : (
-        <RoundTeams round={round} myId={myId} selected={selected ?? myId} onSelect={setSelected} />
-      )}
     </div>
   );
 }

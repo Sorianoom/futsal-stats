@@ -222,6 +222,9 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
   La clasificación sigue abriendo el diálogo.
   En «Equipos de esta jornada» sale lo ganado por cada uno (+X M) con la regla, y bajo cada
   alineación «Cobrado: X M (N puntos × 0,1 M)» o «Cobrará al cerrarse» si es provisional.
+  Después (mismo día): encima de la pista, una fila con todos los participantes (por defecto yo;
+  quien solo mira ve al primero) y tocar uno cambia la pista a su alineación; debajo, el ranking
+  «Beneficio tras la jornada» (puesto con empates, puntos y +X M). Sin el botón «Volver».
 - **Acción clave** (2026-11-25, sin migración: el tipo de evento es texto sin CHECK). Nuevo botón
   «Acción clave» en la ficha del jugador durante el partido (balón salvado bajo la línea,
   recuperación en una contra…): +0,2 en la nota de cualquier jugador. Columna «AC» en las tablas

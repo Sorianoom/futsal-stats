@@ -161,20 +161,24 @@ describe("Jornadas", () => {
     await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
     const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
-    const teams = within(dialog).getByRole("list", { name: "Equipos de esta jornada" });
-    expect(within(teams).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      expect.stringMatching(/Míster.*30 pts.*\+3,0 M/),
-      expect.stringMatching(/Carla Ruiz \(tú\).*25 pts.*\+2,5 M/),
+    const picker = within(dialog).getByRole("list", { name: "Ver la alineación de" });
+    expect(within(picker).getByRole("button", { name: /Tú/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
+    const ranking = within(dialog).getByRole("list", { name: "Beneficio tras la jornada" });
+    expect(within(ranking).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/1º.*Míster.*30 pts.*\+3,0 M/),
+      expect.stringMatching(/2º.*Carla Ruiz \(tú\).*25 pts.*\+2,5 M/),
     ]);
     expect(dialog).toHaveTextContent("Lo que ganará al cerrarse la jornada cada uno: 0,1 M por punto");
-    await userEvent.click(within(teams).getByRole("button", { name: /Míster/ }));
+    await userEvent.click(within(picker).getByRole("button", { name: /Míster/ }));
 
     const lineup = await within(dialog).findByRole("region", { name: "Alineación de Míster" });
     expect(lineup).toHaveTextContent("Cobrará al cerrarse: 3,0 M (30 puntos × 0,1 M)");
     await userEvent.click(within(lineup).getByRole("button", { name: "Bea Soto: 12 puntos" }));
     expect(within(lineup).getByRole("region", { name: "Por qué: Bea Soto" })).toHaveTextContent("Capitán×2");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Volver a mi alineación" }));
+    await userEvent.click(within(ranking).getByRole("button", { name: /Carla Ruiz/ }));
     expect(await within(dialog).findByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("region", { name: "Alineación de Míster" })).not.toBeInTheDocument();
   });
 
   it("una jornada pendiente no enseña los equipos de los demás", async () => {
@@ -185,7 +189,8 @@ describe("Jornadas", () => {
     const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
     await within(dialog).findByRole("region", { name: "Mi alineación" });
-    expect(within(dialog).queryByRole("list", { name: "Equipos de esta jornada" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("list", { name: "Ver la alineación de" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("list", { name: "Beneficio tras la jornada" })).not.toBeInTheDocument();
   });
 
   it("de una plantilla privada solo dice que es privada", async () => {
@@ -200,7 +205,8 @@ describe("Jornadas", () => {
     await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
     const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
-    await userEvent.click(within(dialog).getByRole("button", { name: /Míster/ }));
+    const picker = within(dialog).getByRole("list", { name: "Ver la alineación de" });
+    await userEvent.click(within(picker).getByRole("button", { name: /Míster/ }));
 
     expect(await within(dialog).findByText("Su plantilla es privada: no se ve su alineación.")).toBeInTheDocument();
   });
