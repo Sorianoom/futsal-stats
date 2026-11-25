@@ -131,7 +131,7 @@ describe("LivePanel", () => {
 
     expect(screen.getByRole("timer", { name: "Reloj" })).toHaveTextContent("12:41");
     const play = screen.getByRole("button", { name: "Arrancar el reloj" });
-    expect(play).toHaveClass("size-16");
+    expect(play).toHaveClass("size-14", "sm:size-16");
     await userEvent.click(play);
     expect(props.onToggleClock).toHaveBeenCalled();
   });

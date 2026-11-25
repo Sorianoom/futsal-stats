@@ -9,7 +9,7 @@ interface WeekNavigatorProps {
 
 export function WeekNavigator({ week, onChange }: WeekNavigatorProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full items-center gap-1.5 sm:w-auto sm:gap-2">
       <Button
         variant="outline"
         size="lg"
@@ -18,7 +18,7 @@ export function WeekNavigator({ week, onChange }: WeekNavigatorProps) {
       >
         ←
       </Button>
-      <p aria-live="polite" className="min-w-52 text-center text-lg font-medium">
+      <p aria-live="polite" className="min-w-0 flex-1 text-center text-base font-medium sm:min-w-52 sm:flex-none sm:text-lg">
         {formatWeekRange(week)}
       </p>
       <Button

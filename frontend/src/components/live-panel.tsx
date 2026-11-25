@@ -31,17 +31,17 @@ function Court({ players, onPick }: CourtProps) {
               <button
                 type="button"
                 onClick={() => onPick(player)}
-                className="flex flex-col items-center gap-2 rounded-2xl p-1 transition-transform outline-none focus-visible:ring-4 focus-visible:ring-white/70 active:scale-95"
+                className="flex flex-col items-center gap-1 rounded-2xl p-1 transition-transform sm:gap-2 outline-none focus-visible:ring-4 focus-visible:ring-white/70 active:scale-95"
               >
                 <span
                   className={cn(
-                    "flex size-20 items-center justify-center rounded-full text-4xl font-extrabold shadow-[0_6px_0_rgba(8,24,80,0.35)] xl:size-[92px]",
+                    "flex size-12 items-center justify-center rounded-full text-2xl font-extrabold shadow-[0_4px_0_rgba(8,24,80,0.35)] sm:size-16 sm:text-3xl md:size-20 md:text-4xl md:shadow-[0_6px_0_rgba(8,24,80,0.35)] xl:size-[92px]",
                     keeper ? "bg-cta text-cta-foreground" : "bg-white text-primary",
                   )}
                 >
                   {player.dorsal}
                 </span>
-                <span className="rounded-full bg-white px-3 py-1 text-[15px] font-extrabold text-foreground">
+                <span className="max-w-[4.5rem] truncate rounded-full bg-white px-1.5 py-0.5 text-[11px] font-extrabold text-foreground sm:max-w-36 sm:px-3 sm:py-1 sm:text-[15px]">
                   {shortName(player)}
                 </span>
                 {keeper ? <span className="sr-only"> (portero)</span> : null}
@@ -96,12 +96,12 @@ interface ClockControlsProps {
 /** Reloj de la parte: grande, con ▶/⏸ para seguir al árbitro y «Ajustar» para cuadrarlo con la mesa. */
 function ClockControls({ text, running, finished, onToggle, onAdjust }: ClockControlsProps) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 sm:gap-3">
       <p
         role="timer"
         aria-label="Reloj"
         className={cn(
-          "min-w-[5ch] text-6xl leading-none font-extrabold tabular-nums",
+          "min-w-[5ch] text-5xl leading-none font-extrabold tabular-nums sm:text-6xl",
           running ? "text-background" : "text-background/60",
         )}
       >
@@ -114,7 +114,7 @@ function ClockControls({ text, running, finished, onToggle, onAdjust }: ClockCon
         disabled={finished && !running}
         onClick={onToggle}
         className={cn(
-          "size-16 rounded-2xl text-3xl",
+          "size-14 rounded-2xl text-3xl sm:size-16",
           running && "border-white/25 bg-white/10 text-background hover:bg-white/20 hover:text-background",
         )}
       >
@@ -124,7 +124,7 @@ function ClockControls({ text, running, finished, onToggle, onAdjust }: ClockCon
         variant="ghost"
         aria-label="Ajustar el reloj"
         onClick={onAdjust}
-        className="h-16 rounded-2xl px-4 text-base font-bold text-background hover:bg-white/10 hover:text-background"
+        className="h-14 rounded-2xl px-3 text-base font-bold text-background hover:bg-white/10 hover:text-background sm:h-16 sm:px-4"
       >
         Ajustar
       </Button>
@@ -173,8 +173,8 @@ export function LivePanel(props: LivePanelProps) {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-foreground px-7 py-4 text-background">
-        <div className="min-w-56 space-y-1.5">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-foreground px-4 py-4 text-background sm:px-7">
+        <div className="min-w-0 space-y-1.5 sm:min-w-56">
           <p className="text-xs font-extrabold tracking-widest text-cta uppercase">{props.title}</p>
           <div className="flex items-center gap-3">
             <p className={cn("text-base", fouling ? "font-bold text-warning" : "text-background/80")}>

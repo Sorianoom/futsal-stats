@@ -56,6 +56,23 @@ describe("Pestañas", () => {
 });
 
 describe("Clasificación", () => {
+  it("en el móvil enseña solo la jornada elegida, por defecto la última con puntos", async () => {
+    api();
+    await openTab("Clasificación");
+    const table = await screen.findByRole("table", { name: "Clasificación" });
+    const column = (name: RegExp) => within(table).getByRole("button", { name }).closest("th") as HTMLElement;
+    const select = screen.getByRole("combobox", { name: "Jornada en la tabla" });
+
+    expect(select).toHaveDisplayValue(/Betis/);
+    expect(column(/Betis/)).not.toHaveClass("hidden");
+    expect(column(/Almería/)).toHaveClass("hidden", "sm:table-cell");
+
+    await userEvent.selectOptions(select, within(select).getByRole("option", { name: /Almería/ }));
+
+    expect(column(/Almería/)).not.toHaveClass("hidden");
+    expect(column(/Betis/)).toHaveClass("hidden", "sm:table-cell");
+  });
+
   it("marca las jornadas provisionales y no las cerradas", async () => {
     api();
 
@@ -91,34 +108,39 @@ describe("Clasificación", () => {
   });
 });
 
+/** Elige una jornada en el desplegable de la pestaña Jornadas. */
+async function pickRound(opponent: RegExp) {
+  const select = await screen.findByRole("combobox", { name: "Jornada" });
+  await userEvent.selectOptions(select, within(select).getByRole("option", { name: opponent }));
+  return screen.findByRole("region", { name: /^Jornada vs/ });
+}
+
 describe("Jornadas", () => {
   it("lista mis puntos por jornada, la más reciente arriba, y enseña en la pista la última con puntos", async () => {
     api();
 
     await openTab("Jornadas");
 
-    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
-    const items = within(list).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual([
-      expect.stringMatching(/Cádiz.*Pendiente.*—/),
-      expect.stringMatching(/Betis.*Provisional.*25 pts/),
-      expect.stringMatching(/Almería.*Cerrada.*8 pts/),
+    const select = await screen.findByRole("combobox", { name: "Jornada" });
+    expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      expect.stringMatching(/Cádiz.*pendiente/),
+      expect.stringMatching(/Betis.*25 pts \(provisional\)/),
+      expect.stringMatching(/Almería.*8 pts/),
     ]);
+    expect(select).toHaveDisplayValue(/Betis/);
     expect(screen.getByText("Total: 33 pts")).toBeInTheDocument();
-    expect(within(items[1]).getByRole("button")).toHaveAttribute("aria-pressed", "true");
 
     const mine = await screen.findByRole("region", { name: "Mi alineación" });
     expect(within(mine).getByRole("button", { name: "Ana Ruiz: 13 puntos" })).toBeInTheDocument();
   });
 
-  it("tocar otra jornada la enseña en la pista", async () => {
+  it("elegir otra jornada la enseña en la pista", async () => {
     api();
     await openTab("Jornadas");
-    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
 
-    await userEvent.click(within(within(list).getAllByRole("listitem")[2]).getByRole("button"));
+    const round = await pickRound(/Almería/);
 
-    const round = await screen.findByRole("region", { name: "Jornada vs Almería" });
+    expect(round).toHaveAccessibleName("Jornada vs Almería");
     expect(await within(round).findByText(/Puntuó 0: tenías saldo negativo/)).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -126,8 +148,6 @@ describe("Jornadas", () => {
   it("la jornada se ve en la pista con los puntos y explica por qué puntuó cada uno", async () => {
     api();
     await openTab("Jornadas");
-    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
-    await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
     const lineup = await screen.findByRole("region", { name: "Mi alineación" });
 
     await userEvent.click(within(lineup).getByRole("button", { name: "Ana Ruiz: 13 puntos" }));
@@ -157,40 +177,37 @@ describe("Jornadas", () => {
       },
     });
     await openTab("Jornadas");
-    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
-    await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
-    const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
+    const round = await screen.findByRole("region", { name: "Jornada vs Betis" });
 
-    const picker = within(dialog).getByRole("list", { name: "Ver la alineación de" });
-    expect(within(picker).getByRole("button", { name: /Tú/ })).toHaveAttribute("aria-pressed", "true");
-    expect(within(dialog).getByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
-    const ranking = within(dialog).getByRole("list", { name: "Beneficio tras la jornada" });
+    const picker = await within(round).findByRole("combobox", { name: "Ver la alineación de" });
+    expect(picker).toHaveDisplayValue("Carla Ruiz (tú) · 25 pts");
+    expect(within(round).getByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
+    const ranking = within(round).getByRole("list", { name: "Beneficio tras la jornada" });
     expect(within(ranking).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       expect.stringMatching(/1º.*Míster.*30 pts.*\+3,0 M/),
       expect.stringMatching(/2º.*Carla Ruiz \(tú\).*25 pts.*\+2,5 M/),
     ]);
-    expect(dialog).toHaveTextContent("Lo que ganará al cerrarse la jornada cada uno: 0,1 M por punto");
-    await userEvent.click(within(picker).getByRole("button", { name: /Míster/ }));
+    expect(round).toHaveTextContent("Lo que ganará al cerrarse la jornada cada uno: 0,1 M por punto");
+    await userEvent.selectOptions(picker, within(picker).getByRole("option", { name: /Míster/ }));
 
-    const lineup = await within(dialog).findByRole("region", { name: "Alineación de Míster" });
+    const lineup = await within(round).findByRole("region", { name: "Alineación de Míster" });
     expect(lineup).toHaveTextContent("Cobrará al cerrarse: 3,0 M (30 puntos × 0,1 M)");
     await userEvent.click(within(lineup).getByRole("button", { name: "Bea Soto: 12 puntos" }));
     expect(within(lineup).getByRole("region", { name: "Por qué: Bea Soto" })).toHaveTextContent("Capitán×2");
     await userEvent.click(within(ranking).getByRole("button", { name: /Carla Ruiz/ }));
-    expect(await within(dialog).findByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("region", { name: "Alineación de Míster" })).not.toBeInTheDocument();
+    expect(await within(round).findByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
+    expect(within(round).queryByRole("region", { name: "Alineación de Míster" })).not.toBeInTheDocument();
   });
 
   it("una jornada pendiente no enseña los equipos de los demás", async () => {
     api({ "GET /fantasy/rounds/m2/me": { data: { ...ROUND, match_id: "m2", status: "pending", total: 0 } } });
     await openTab("Jornadas");
-    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
-    await userEvent.click(within(within(list).getAllByRole("listitem")[0]).getByRole("button"));
-    const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
 
-    await within(dialog).findByRole("region", { name: "Mi alineación" });
-    expect(within(dialog).queryByRole("list", { name: "Ver la alineación de" })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("list", { name: "Beneficio tras la jornada" })).not.toBeInTheDocument();
+    const round = await pickRound(/Cádiz/);
+
+    await within(round).findByRole("region", { name: "Mi alineación" });
+    expect(within(round).queryByRole("combobox", { name: "Ver la alineación de" })).not.toBeInTheDocument();
+    expect(within(round).queryByRole("list", { name: "Beneficio tras la jornada" })).not.toBeInTheDocument();
   });
 
   it("de una plantilla privada solo dice que es privada", async () => {
@@ -201,14 +218,12 @@ describe("Jornadas", () => {
       },
     });
     await openTab("Jornadas");
-    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
-    await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
-    const dialog = await screen.findByRole("region", { name: /^Jornada vs/ });
+    const round = await screen.findByRole("region", { name: "Jornada vs Betis" });
 
-    const picker = within(dialog).getByRole("list", { name: "Ver la alineación de" });
-    await userEvent.click(within(picker).getByRole("button", { name: /Míster/ }));
+    const picker = await within(round).findByRole("combobox", { name: "Ver la alineación de" });
+    await userEvent.selectOptions(picker, within(picker).getByRole("option", { name: /Míster/ }));
 
-    expect(await within(dialog).findByText("Su plantilla es privada: no se ve su alineación.")).toBeInTheDocument();
+    expect(await within(round).findByText("Su plantilla es privada: no se ve su alineación.")).toBeInTheDocument();
   });
 
   it("con la alineación bloqueada y el partido sin cerrar, enseña la jornada en juego y la próxima", async () => {

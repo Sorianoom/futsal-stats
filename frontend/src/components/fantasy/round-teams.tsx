@@ -3,6 +3,7 @@
 import { RoundLineup } from "@/components/fantasy/round-lineup";
 import { Button } from "@/components/ui/button";
 import type { StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
+import { SELECT_CLASS } from "@/lib/form-styles";
 import { PAYOUT_PER_POINT, formatMoney, payoutFor } from "@/lib/fantasy/format";
 import { fantasyParticipantRoundQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -30,32 +31,24 @@ interface PickerProps {
   onSelect: (participantId: string) => void;
 }
 
-/** Fila de participantes encima de la pista: tocar uno cambia la pista a su alineación. */
+/** Desplegable encima de la pista: elegir a alguien cambia la pista a su alineación. */
 export function ParticipantPicker({ round, rows, myId, selected, onSelect }: PickerProps) {
   return (
-    <ul aria-label="Ver la alineación de" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-      {rows.map((row) => {
-        const current = selected === row.participant_id;
-        return (
-          <li key={row.participant_id} className="shrink-0">
-            <button
-              type="button"
-              aria-pressed={current}
-              onClick={() => onSelect(row.participant_id)}
-              className={cn(
-                "flex min-h-11 max-w-40 items-center gap-2 rounded-full border px-3 py-1.5 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [@media(hover:hover)]:hover:bg-muted",
-                current && "border-gold bg-gold/15",
-              )}
-            >
-              <span className="truncate font-bold">
-                {row.participant_id === myId ? "Tú" : row.display_name.split(" ")[0]}
-              </span>
-              <span className="font-extrabold tabular-nums">{pointsIn(row, round)}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <label className="block space-y-1">
+      <span className="text-sm font-bold text-muted-foreground">Ver la alineación de</span>
+      <select
+        aria-label="Ver la alineación de"
+        value={selected ?? ""}
+        onChange={(event) => onSelect(event.target.value)}
+        className={SELECT_CLASS}
+      >
+        {rows.map((row) => (
+          <option key={row.participant_id} value={row.participant_id}>
+            {`${row.participant_id === myId ? `${row.display_name} (tú)` : row.display_name} · ${pointsIn(row, round)} pts`}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

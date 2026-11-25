@@ -6,7 +6,7 @@ import type { FantasyLeagueView } from "@/lib/api/fantasy-types";
 export function MyTeam({ view, onChanged }: { view: FantasyLeagueView; onChanged: () => void }) {
   return (
     <>
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <LineupEditor squad={view.squad} lineup={view.lineup} onSaved={onChanged} />
         <SquadList
           squad={view.squad}

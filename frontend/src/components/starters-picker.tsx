@@ -51,17 +51,17 @@ function CourtPreview({ chosen, capacity, onRemove }: CourtPreviewProps) {
                 type="button"
                 aria-label={`Quitar a ${player.name}`}
                 onClick={() => onRemove(player.id)}
-                className="flex flex-col items-center gap-1.5 rounded-2xl p-1 outline-none focus-visible:ring-4 focus-visible:ring-white/70 active:scale-95"
+                className="flex flex-col items-center gap-1 rounded-2xl p-1 outline-none sm:gap-1.5 focus-visible:ring-4 focus-visible:ring-white/70 active:scale-95"
               >
                 <span
                   className={cn(
-                    "flex size-16 items-center justify-center rounded-full text-3xl font-extrabold shadow-[0_5px_0_rgba(8,24,80,0.35)] xl:size-[76px]",
+                    "flex size-12 items-center justify-center rounded-full text-2xl font-extrabold shadow-[0_4px_0_rgba(8,24,80,0.35)] sm:size-16 sm:text-3xl sm:shadow-[0_5px_0_rgba(8,24,80,0.35)] xl:size-[76px]",
                     keeper ? "bg-cta text-cta-foreground" : "bg-white text-primary",
                   )}
                 >
                   {player.dorsal}
                 </span>
-                <span className="rounded-full bg-white px-2.5 py-0.5 text-sm font-extrabold text-foreground">
+                <span className="max-w-[4.5rem] truncate rounded-full bg-white px-1.5 py-0.5 text-[11px] font-extrabold text-foreground sm:max-w-36 sm:px-2.5 sm:text-sm">
                   {shortName(player)}
                 </span>
               </button>
@@ -75,7 +75,7 @@ function CourtPreview({ chosen, capacity, onRemove }: CourtPreviewProps) {
             style={{ left: `${x}%`, top: `${y}%` }}
             className="absolute -translate-x-1/2 -translate-y-1/2"
           >
-            <span className="flex size-16 items-center justify-center rounded-full border-[3px] border-dashed border-white/55 text-3xl font-bold text-white/55 xl:size-[76px]">
+            <span className="flex size-12 items-center justify-center rounded-full border-[3px] border-dashed border-white/55 text-2xl font-bold text-white/55 sm:size-16 sm:text-3xl xl:size-[76px]">
               +
             </span>
           </li>

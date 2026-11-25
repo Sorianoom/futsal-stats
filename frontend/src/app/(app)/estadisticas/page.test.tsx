@@ -332,6 +332,26 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     expect(screen.getByText("Faltas de equipo: 3 en la 1ª parte, 5 en la 2ª parte")).toBeInTheDocument();
   });
 
+  it("en el móvil enseña un grupo de columnas a la vez, además de minutos y nota", async () => {
+    api();
+    renderWithAuth(<EstadisticasPage />);
+    const table = await screen.findByRole("table", { name: "Jugadores" });
+    const header = (title: string) => within(table).getByRole("columnheader", { name: title });
+    const groups = screen.getAllByRole("group", { name: "Columnas" }).at(-1) as HTMLElement;
+
+    expect(within(groups).getByRole("button", { name: "Ataque" })).toHaveAttribute("aria-pressed", "true");
+    expect(header("Goles")).not.toHaveClass("hidden");
+    expect(header("Robos")).toHaveClass("hidden", "sm:table-cell");
+    expect(header("Minutos")).not.toHaveClass("hidden");
+    expect(header("Nota")).not.toHaveClass("hidden");
+
+    await userEvent.click(within(groups).getByRole("button", { name: "Defensa" }));
+
+    expect(header("Robos")).not.toHaveClass("hidden");
+    expect(header("Acciones clave")).not.toHaveClass("hidden");
+    expect(header("Goles")).toHaveClass("hidden", "sm:table-cell");
+  });
+
   it("tabla de jugadores con minutos en mm:ss y todas las acciones", async () => {
     api();
     renderWithAuth(<EstadisticasPage />);

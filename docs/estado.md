@@ -216,6 +216,16 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
 
 ## En curso
 
+- **Revisión para el móvil** (2026-11-25). Medido en un navegador a 360 px con datos inventados
+  de peor caso (BD local `futsal_movil`, 17 participantes con nombres largos; nada de producción).
+  Arreglado: textos `sr-only` dentro de tablas con scroll ensanchaban toda la página (contenedor
+  `relative`); navegador de semanas de 460 px; rejilla de Mi equipo y diálogos (`grid-cols-
+  [minmax(0,1fr)]`; un `<select>` nativo pide el ancho de su opción más larga); botones de la ficha
+  de Plantilla; tablas de estadísticas con grupos de columnas en el móvil (Ataque, Defensa,
+  Faltas, Portero); clasificación con una sola jornada en el móvil (desplegable); Jornadas con
+  desplegables en vez de filas deslizables; marcador y pista del partido en directo (fichas y
+  nombres más pequeños, sin solaparse; también en el iPad con nombres largos). Desde `sm` todo
+  sigue como antes.
 - **Pestaña Jornadas con la pista** (2026-11-25). Antes la pista solo salía al tocar una jornada,
   en un diálogo, y no se veía. Ahora la pestaña enseña directamente la última jornada con puntos
   en la pista (porqué al tocar y equipos de los demás) y arriba una fila de jornadas para cambiar.

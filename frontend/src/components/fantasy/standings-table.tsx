@@ -8,6 +8,7 @@ import { MySeason, Podium, positionOf } from "@/components/fantasy/standings-hig
 import { FANTASY_HEADING } from "@/components/fantasy/styles";
 import { Button } from "@/components/ui/button";
 import type { FantasyStandings, RoundStatus, StandingsRound, StandingsRow } from "@/lib/api/fantasy-types";
+import { SELECT_CLASS } from "@/lib/form-styles";
 import { fantasyStandingsQuery } from "@/lib/queries";
 import { useApiQuery } from "@/lib/use-api-query";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ const ROUND_MARK: Partial<Record<RoundStatus, { text: string; className: string 
 };
 
 /** Cabecera de una jornada: se puede tocar si quien mira tiene equipo (`onOpen`). */
-function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen?: () => void }) {
+function RoundHeader({ round, onOpen, className }: { round: StandingsRound; onOpen?: () => void; className?: string }) {
   const mark = ROUND_MARK[round.status];
   const content = (
     <>
@@ -42,7 +43,7 @@ function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen?: () => 
     </>
   );
   return (
-    <th scope="col" className="px-1 py-2 text-left align-bottom">
+    <th scope="col" className={cn("px-1 py-2 text-left align-bottom", className)}>
       {onOpen ? (
         <button
           type="button"
@@ -60,15 +61,22 @@ function RoundHeader({ round, onOpen }: { round: StandingsRound; onOpen?: () => 
 
 interface TableProps {
   standings: FantasyStandings;
+  /** La única jornada que cabe en el móvil; las demás columnas salen desde `sm`. */
+  phoneRound: string | null;
   /** null: quien mira no juega (cuenta de partidos del cuerpo técnico). */
   myId: string | null;
   onOpenRound?: (round: StandingsRound) => void;
   onOpenParticipant: (row: StandingsRow) => void;
 }
 
-function Table({ standings, myId, onOpenRound, onOpenParticipant }: TableProps) {
+/** Columna de una jornada: en el móvil solo la elegida. */
+function roundColumn(round: StandingsRound, phoneRound: string | null): string | undefined {
+  return round.match_id === phoneRound ? undefined : "hidden sm:table-cell";
+}
+
+function Table({ standings, phoneRound, myId, onOpenRound, onOpenParticipant }: TableProps) {
   return (
-    <div role="region" aria-label="Tabla de clasificación" tabIndex={0} className="overflow-x-auto rounded-3xl border bg-card">
+    <div role="region" aria-label="Tabla de clasificación" tabIndex={0} className="relative overflow-x-auto rounded-3xl border bg-card">
       <table aria-label="Clasificación" className="w-full border-collapse bg-card">
         <thead>
           <tr>
@@ -79,6 +87,7 @@ function Table({ standings, myId, onOpenRound, onOpenParticipant }: TableProps) 
               <RoundHeader
                 key={round.match_id}
                 round={round}
+                className={roundColumn(round, phoneRound)}
                 onOpen={onOpenRound ? () => onOpenRound(round) : undefined}
               />
             ))}
@@ -94,7 +103,7 @@ function Table({ standings, myId, onOpenRound, onOpenParticipant }: TableProps) 
                 className={cn("border-t bg-card", mine && "bg-gold/15 shadow-[inset_4px_0_0_var(--gold)]")}
               >
                 <td className={`${CELL} font-bold text-muted-foreground`}>{positionOf(standings.rows, row)}</td>
-                <th scope="row" className={cn(CELL, STICKY, "text-left font-bold whitespace-nowrap")}>
+                <th scope="row" className={cn(CELL, STICKY, "max-w-40 text-left font-bold break-words sm:max-w-none sm:whitespace-nowrap")}>
                   <button
                     type="button"
                     onClick={() => onOpenParticipant(row)}
@@ -114,6 +123,7 @@ function Table({ standings, myId, onOpenRound, onOpenParticipant }: TableProps) 
                     key={round.match_id}
                     className={cn(
                       CELL,
+                      roundColumn(round, phoneRound),
                       round.status === "pending" && "text-muted-foreground",
                       round.status === "scored" && "italic",
                     )}
@@ -130,6 +140,12 @@ function Table({ standings, myId, onOpenRound, onOpenParticipant }: TableProps) 
   );
 }
 
+/** La última jornada con puntos; si ninguna tiene, la primera. */
+function latestRound(rounds: readonly StandingsRound[]): string | null {
+  const played = rounds.filter((round) => round.status !== "pending");
+  return (played.at(-1) ?? rounds[0])?.match_id ?? null;
+}
+
 /**
  * Clasificación de la liga. Tocar una jornada abre mi alineación de esa jornada y tocar un nombre,
  * el equipo de ese participante; sin `myId` (quien solo mira, sin equipo) no hay alineación propia
@@ -139,6 +155,8 @@ export function Standings({ myId }: { myId: string | null }) {
   const { data: standings, failed, reload } = useApiQuery(fantasyStandingsQuery.key, fantasyStandingsQuery.fetch);
   const [openRound, setOpenRound] = useState<StandingsRound | null>(null);
   const [openRow, setOpenRow] = useState<StandingsRow | null>(null);
+  const [chosenRound, setChosenRound] = useState<string | null>(null);
+  const phoneRound = standings ? (chosenRound ?? latestRound(standings.rounds)) : null;
 
   return (
     <section aria-labelledby="standings-heading" className="space-y-3">
@@ -168,8 +186,26 @@ export function Standings({ myId }: { myId: string | null }) {
           ) : null}
           <Podium rows={standings.rows} myId={myId ?? ""} />
           {myId ? <MySeason standings={standings} myId={myId} /> : null}
+          {standings.rounds.length > 1 ? (
+            <label className="block space-y-1 sm:hidden">
+              <span className="text-sm font-bold text-muted-foreground">Jornada en la tabla</span>
+              <select
+                aria-label="Jornada en la tabla"
+                value={phoneRound ?? ""}
+                onChange={(event) => setChosenRound(event.target.value)}
+                className={SELECT_CLASS}
+              >
+                {[...standings.rounds].reverse().map((round) => (
+                  <option key={round.match_id} value={round.match_id}>
+                    {`vs ${round.opponent} · ${formatShortDay(round.held_on)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <Table
             standings={standings}
+            phoneRound={phoneRound}
             myId={myId}
             onOpenRound={setOpenRound}
             onOpenParticipant={setOpenRow}

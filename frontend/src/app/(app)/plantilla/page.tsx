@@ -153,7 +153,7 @@ export default function PlantillaPage() {
               <p className="text-sm font-semibold text-muted-foreground">{POSITION_LABEL[player.position]}</p>
             </div>
             {canEdit ? (
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 {player.has_account ? (
                   <span className="text-sm font-bold text-muted-foreground">Tiene cuenta</span>
                 ) : !player.is_active ? (

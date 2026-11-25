@@ -13,7 +13,7 @@ interface CourtSurfaceProps {
 /** La cancha en azul con sus líneas: el fondo común del partido en vivo y de la elección de titulares. */
 export function CourtSurface({ title, className, children }: CourtSurfaceProps) {
   return (
-    <section className={cn("relative aspect-[724/500] w-full overflow-hidden rounded-[28px] bg-primary", className)}>
+    <section className={cn("relative aspect-[4/3] w-full sm:aspect-[724/500] overflow-hidden rounded-[28px] bg-primary", className)}>
       <svg
         aria-hidden="true"
         viewBox="0 0 724 500"
@@ -29,7 +29,7 @@ export function CourtSurface({ title, className, children }: CourtSurfaceProps) 
         <circle cx="362" cy="250" r="62" />
         <path d="M24 142a108 108 0 0 1 0 216M700 142a108 108 0 0 0 0 216" />
       </svg>
-      <h2 className="absolute top-6 left-7 text-xs font-extrabold tracking-widest text-white/85 uppercase">
+      <h2 className="absolute top-3 left-4 text-[10px] sm:top-6 sm:left-7 sm:text-xs font-extrabold tracking-widest text-white/85 uppercase">
         {title}
       </h2>
       {children}

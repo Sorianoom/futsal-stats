@@ -51,12 +51,18 @@ export function PlayerActionsDialog({
           <DialogTitle>{player ? `${player.dorsal} · ${player.name}` : "Jugador"}</DialogTitle>
           <DialogDescription>¿Qué ha pasado?</DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <Button size="lg" onClick={onGoal}>
             {EVENT_LABEL.goal}
           </Button>
           {quickKindsFor(player).map((kind) => (
-            <Button key={kind} variant="outline" size="lg" onClick={() => onQuick(kind)}>
+            <Button
+              key={kind}
+              variant="outline"
+              size="lg"
+              className="h-auto min-h-12 px-2 leading-tight whitespace-normal"
+              onClick={() => onQuick(kind)}
+            >
               {EVENT_LABEL[kind]}
             </Button>
           ))}
