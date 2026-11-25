@@ -64,7 +64,7 @@ nombre en el código para poder ajustarlos.
   Sin nota (no jugó o menos de 3 minutos) = 0. Los puntos nunca son negativos.
   - Escala buscada: partido flojo ≈ 5, normal ≈ 7, bueno ≈ 9, partidazo más.
   - Puntuación (`backend/app/domain/rating/score.py`, en centésimas): base **5,4**; gol +2,5
-    (portero +5,0); asistencia +0,7; robo +0,3; pérdida −0,3; falta −0,4; amarilla −0,5; roja −2,0;
+    (portero +5,0); asistencia +0,7; robo +0,3; acción clave +0,2 (balón salvado bajo la línea, recuperación en una contra…); pérdida −0,3; falta −0,4; amarilla −0,5; roja −2,0;
     **+0,3 por cada 10 minutos en pista seguidos sin gol en contra** (un gol rival con él en pista
     reinicia la racha; banquillo y descanso no). Campo: tiro sin gol +0,1 y ±0,15 por gol a favor o
     en contra con él en pista. Portero: parada +0,4 y −0,4 por gol encajado (sin bonus aparte de

@@ -7,6 +7,7 @@ describe("breakdownLabel", () => {
     expect(breakdownLabel({ key: "base", count: 1, points: 5.4 })).toBe("Base");
     expect(breakdownLabel({ key: "goals", count: 1, points: 1.5 })).toBe("1 gol");
     expect(breakdownLabel({ key: "saves", count: 17, points: 6.8 })).toBe("17 paradas");
+    expect(breakdownLabel({ key: "key_actions", count: 2, points: 0.4 })).toBe("2 acciones clave");
     expect(breakdownLabel({ key: "clean_streaks", count: 2, points: 0.6 })).toBe("2 rachas de 10′ sin gol en contra");
     expect(breakdownLabel({ key: "goals_against_on_court", count: 1, points: -0.15 })).toBe(
       "1 gol en contra con él en pista",

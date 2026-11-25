@@ -20,7 +20,7 @@ const SECTIONS = [
       "Cada jornada es un partido oficial. Alineas 1 portero y 4 de campo de tu plantilla.",
       "La alineación se bloquea cuando el entrenador empieza el partido: cuentan los jugadores y el capitán que tengas en ese momento. Si no la tocas, se queda la de la jornada anterior.",
       "Cada jugador puntúa su nota del partido redondeada (sin tope de 10) y +2 si el entrenador lo elige MVP. Si no juega, 0. Un hueco vacío también es 0.",
-      "La nota parte de 5,4: cada gol suma 2,5 (5 si es del portero) y también suman asistencias, robos, paradas y cada 10 minutos seguidos en pista sin que te marquen; restan pérdidas, faltas, tarjetas y goles en contra con él en pista. Un partido flojo da unos 5 puntos, uno normal 7, uno bueno 9 y un partidazo más. Toca un jugador en una jornada para ver por qué puntuó así.",
+      "La nota parte de 5,4: cada gol suma 2,5 (5 si es del portero) y también suman asistencias, robos, acciones clave, paradas y cada 10 minutos seguidos en pista sin que te marquen; restan pérdidas, faltas, tarjetas y goles en contra con él en pista. Un partido flojo da unos 5 puntos, uno normal 7, uno bueno 9 y un partidazo más. Toca un jugador en una jornada para ver por qué puntuó así.",
       "Capitán (opcional): sus puntos cuentan el doble, también lo malo. Si no juega, nadie dobla.",
     ],
   },

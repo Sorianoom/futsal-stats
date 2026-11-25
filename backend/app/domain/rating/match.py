@@ -74,6 +74,7 @@ def rating_input(
         assists=counts.get(EventKind.ASSIST, 0),
         shots=counts.get(EventKind.SHOT, 0),
         steals=counts.get(EventKind.STEAL, 0),
+        key_actions=counts.get(EventKind.KEY_ACTION, 0),
         turnovers=counts.get(EventKind.TURNOVER, 0),
         fouls=counts.get(EventKind.FOUL, 0),
         yellows=counts.get(EventKind.YELLOW, 0),

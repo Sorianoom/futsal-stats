@@ -269,6 +269,7 @@ describe("panel en vivo", () => {
     ["Tiro", "shot"],
     ["Pérdida", "turnover"],
     ["Robo", "steal"],
+    ["Acción clave", "key_action"],
     ["Amarilla", "yellow"],
   ])("%s se anota con un toque", async (label, kind) => {
     const server = api();

@@ -8,6 +8,7 @@ export interface PlayerStats {
   shots: number;
   turnovers: number;
   steals: number;
+  key_actions: number;
   fouls: number;
   yellows: number;
   reds: number;

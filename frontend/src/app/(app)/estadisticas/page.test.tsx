@@ -38,6 +38,7 @@ const STATS: MatchStats = {
       shots: 6,
       turnovers: 3,
       steals: 4,
+      key_actions: 0,
       fouls: 2,
       yellows: 1,
       reds: 0,
@@ -54,6 +55,7 @@ const STATS: MatchStats = {
       shots: 0,
       turnovers: 0,
       steals: 0,
+      key_actions: 0,
       fouls: 0,
       yellows: 0,
       reds: 1,
@@ -97,6 +99,7 @@ const SEASON: SeasonStats = {
       shots: 12,
       turnovers: 6,
       steals: 8,
+      key_actions: 5,
       fouls: 3,
       yellows: 1,
       reds: 0,
@@ -113,6 +116,7 @@ const SEASON: SeasonStats = {
       shots: 0,
       turnovers: 0,
       steals: 0,
+      key_actions: 0,
       fouls: 0,
       yellows: 0,
       reds: 1,
@@ -225,6 +229,7 @@ describe("EstadisticasPage: temporada", () => {
       "12",
       "6",
       "8",
+      "5",
       "3",
       "1",
       "0",
@@ -335,11 +340,11 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
     const ana = within(table).getByText("9 · Ana Ruiz").closest("tr") as HTMLElement;
     const cells = within(ana).getAllByRole("cell").map((cell) => cell.textContent);
 
-    expect(cells).toEqual(["40:00", "2", "1", "6", "3", "4", "2", "1", "0", "0", "7,5"]);
+    expect(cells).toEqual(["40:00", "2", "1", "6", "3", "4", "0", "2", "1", "0", "0", "7,5"]);
     const bea = within(table).getByText("7 · Bea Soto").closest("tr") as HTMLElement;
     expect(within(bea).getAllByRole("cell")[0]).toHaveTextContent("05:05");
-    expect(within(bea).getAllByRole("cell")[8]).toHaveTextContent("1");
-    expect(within(bea).getAllByRole("cell")[9]).toHaveTextContent("6");
+    expect(within(bea).getAllByRole("cell")[9]).toHaveTextContent("1");
+    expect(within(bea).getAllByRole("cell")[10]).toHaveTextContent("6");
   });
 
   it("la nota lleva un decimal con coma y una raya si no hay nota", async () => {
@@ -398,6 +403,7 @@ describe("EstadisticasPage: estadísticas de un partido", () => {
       "Tiros",
       "Pérdidas",
       "Robos",
+      "Acciones clave",
       "Faltas",
       "Amarillas",
       "Rojas",

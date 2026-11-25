@@ -5,6 +5,7 @@ import pytest
 from app.domain.rating import (
     RatingError,
     RatingInput,
+    RatingPart,
     player_rating,
     rating_breakdown,
     rating_score,
@@ -79,6 +80,12 @@ def test_a_foul_weighs_more_than_a_turnover() -> None:
 
 def test_field_player_four_minutes_one_steal() -> None:
     assert player_rating(field_player(seconds=FOUR_MIN, steals=1)) == 5.7
+
+
+def test_a_key_action_adds_two_tenths_to_anyone() -> None:
+    assert player_rating(field_player(key_actions=1)) == 5.6
+    assert player_rating(goalkeeper(key_actions=2)) == 5.8
+    assert rating_breakdown(field_player(key_actions=3))[1] == RatingPart("key_actions", 3, 60)
 
 
 def test_field_player_saves_do_not_count() -> None:

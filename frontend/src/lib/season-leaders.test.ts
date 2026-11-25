@@ -15,6 +15,7 @@ function stats(id: string, overrides: Partial<SeasonPlayerStats> = {}): SeasonPl
     shots: 0,
     turnovers: 0,
     steals: 0,
+    key_actions: 0,
     fouls: 0,
     yellows: 0,
     reds: 0,

@@ -216,6 +216,10 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
 
 ## En curso
 
+- **Acción clave** (2026-11-25, sin migración: el tipo de evento es texto sin CHECK). Nuevo botón
+  «Acción clave» en la ficha del jugador durante el partido (balón salvado bajo la línea,
+  recuperación en una contra…): +0,2 en la nota de cualquier jugador. Columna «AC» en las tablas
+  de estadísticas y línea en el porqué de la jornada.
 - **Jornada en la pista con el porqué** (subido el 2026-11-25, sin migración). Mi equipo ya no
   enseña puntos ni colores de forma; la jornada se ve en la pista (`FantasyPitch`, compartida) y
   al tocar una ficha sale el desglose (`rating_breakdown`, `bonus_parts`, guardados en el hueco

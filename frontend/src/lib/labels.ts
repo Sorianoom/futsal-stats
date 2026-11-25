@@ -72,6 +72,7 @@ export const EVENT_LABEL: Record<EventKind, string> = {
   shot: "Tiro",
   turnover: "Pérdida",
   steal: "Robo",
+  key_action: "Acción clave",
   foul: "Falta",
   yellow: "Amarilla",
   red: "Roja",

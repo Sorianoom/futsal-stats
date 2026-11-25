@@ -14,7 +14,7 @@ import type { EventKind } from "@/lib/match/events";
 import { shortName } from "@/lib/player-name";
 
 /** Se anotan con un toque, con el último tiempo del marcador. */
-const QUICK_KINDS: readonly EventKind[] = ["assist", "shot", "turnover", "steal", "foul", "yellow"];
+const QUICK_KINDS: readonly EventKind[] = ["assist", "shot", "turnover", "steal", "key_action", "foul", "yellow"];
 /** Solo el portero para: a los de campo no se les ofrece. */
 const KEEPER_KINDS: readonly EventKind[] = ["save", ...QUICK_KINDS];
 

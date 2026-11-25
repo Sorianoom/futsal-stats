@@ -25,6 +25,7 @@ class PlayerStatsOut(BaseModel):
     shots: int
     turnovers: int
     steals: int
+    key_actions: int
     fouls: int
     yellows: int
     reds: int

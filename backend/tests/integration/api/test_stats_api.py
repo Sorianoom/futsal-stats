@@ -63,6 +63,7 @@ async def played_match(client, headers, make_player, extra_events=(), players=No
         event(10, "shot", 2, 500, p[4]),
         event(11, "steal", 2, 600, p[4]),
         event(12, "turnover", 2, 700, p[5]),
+        event(19, "key_action", 2, 800, p[4]),
         *extra_events,
     ]
     ratings = [
@@ -106,6 +107,7 @@ async def test_a_closed_match_reports_score_fouls_minutes_and_actions(
     assert rows[str(p[1].id)]["yellows"] == 1
     assert rows[str(p[2].id)]["fouls"] == 2
     assert rows[str(p[4].id)]["shots"] == 1 and rows[str(p[4].id)]["steals"] == 1
+    assert rows[str(p[4].id)]["key_actions"] == 1 and rows[str(p[5].id)]["key_actions"] == 0
     assert rows[str(p[5].id)]["turnovers"] == 1
 
 
@@ -262,6 +264,7 @@ async def test_a_field_player_rating_uses_actions_minutes_and_goals_on_court(
             seconds=2400,
             shots=1,
             steals=1,
+            key_actions=1,
             goals_for_on_court=2,
             goals_against_on_court=1,
             clean_streaks=3,  # 700 s antes del gol en contra (1 bloque) y 1700 s después (2)
@@ -358,6 +361,7 @@ async def test_goals_outside_the_stints_do_not_count_on_court_for_the_rating(
             seconds=2400,
             shots=1,
             steals=1,
+            key_actions=1,
             goals_for_on_court=2,
             goals_against_on_court=1,
             clean_streaks=3,  # 700 s antes del gol en contra (1 bloque) y 1700 s después (2)

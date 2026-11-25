@@ -9,6 +9,7 @@ export type EventKind =
   | "shot"
   | "turnover"
   | "steal"
+  | "key_action"
   | "foul"
   | "yellow"
   | "red"

@@ -16,6 +16,7 @@ class EventKind(StrEnum):
     SHOT = "shot"
     TURNOVER = "turnover"
     STEAL = "steal"
+    KEY_ACTION = "key_action"  # acción clave: balón salvado bajo la línea, recuperación clave
     FOUL = "foul"
     YELLOW = "yellow"
     RED = "red"

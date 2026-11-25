@@ -7,6 +7,7 @@ const ACTIONS: Record<string, readonly [string, string]> = {
   goals: ["gol", "goles"],
   assists: ["asistencia", "asistencias"],
   steals: ["robo", "robos"],
+  key_actions: ["acción clave", "acciones clave"],
   turnovers: ["pérdida", "pérdidas"],
   fouls: ["falta", "faltas"],
   yellows: ["amarilla", "amarillas"],

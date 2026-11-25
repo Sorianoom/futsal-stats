@@ -26,6 +26,7 @@ COMMON_WEIGHTS: dict[str, int] = {
     "goals": 250,
     "assists": 70,
     "steals": 30,
+    "key_actions": 20,
     "turnovers": -30,
     "fouls": -40,
     "yellows": -50,
@@ -61,6 +62,7 @@ class RatingInput:
     assists: int = 0
     shots: int = 0  # tiros que NO acabaron en gol
     steals: int = 0
+    key_actions: int = 0
     turnovers: int = 0
     fouls: int = 0
     yellows: int = 0
