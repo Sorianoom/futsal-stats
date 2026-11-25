@@ -20,12 +20,13 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     MetaData,
+    SmallInteger,
     String,
     UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.auth_sessions import RevokeReason
@@ -278,6 +279,10 @@ class MatchEvent(Base):
         UniqueConstraint("match_id", "seq"),
         CheckConstraint("part IN (1, 2)", name="part_valid"),
         CheckConstraint("t >= 0", name="t_not_negative"),
+        CheckConstraint("(goal_x IS NULL) = (goal_y IS NULL)", name="goal_point_complete"),
+        CheckConstraint(
+            "goal_x BETWEEN 0 AND 100 AND goal_y BETWEEN 0 AND 100", name="goal_point_valid"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -290,6 +295,10 @@ class MatchEvent(Base):
     voids_event_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("match_events.id"), nullable=True
     )
+    # Detalle de un gol (ver `domain/stints/goal_detail.py`): tipos y punto de media pista.
+    goal_tags: Mapped[list[str] | None] = mapped_column(ARRAY(String(32)), nullable=True)
+    goal_x: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    goal_y: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     created_at: Mapped[datetime] = _created_at()
 
 

@@ -37,6 +37,10 @@ export interface EventIn {
   t: number;
   player_id?: string | null;
   voids_event_id?: string | null;
+  /** Solo en los goles, opcionales: tipos y punto de media pista (`lib/match/goal-detail.ts`). */
+  goal_tags?: string[] | null;
+  goal_x?: number | null;
+  goal_y?: number | null;
 }
 
 export interface RatingIn {

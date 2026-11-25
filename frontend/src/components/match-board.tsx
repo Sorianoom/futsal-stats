@@ -20,6 +20,7 @@ import { ClockAdjustDialog } from "@/components/clock-adjust-dialog";
 import { Button } from "@/components/ui/button";
 import { UndoDialog } from "@/components/undo-dialog";
 import { EndPartDialog } from "@/components/end-part-dialog";
+import { GoalDetailDialog } from "@/components/goal-detail-dialog";
 import {
   MultiSubstitutionDialog,
   type MultiSubstitutionStart,
@@ -27,7 +28,9 @@ import {
 import { RejectionNotice } from "@/components/sync-status";
 import type { LineupEventRecord, LoggedEvent, Match, StintRecord } from "@/lib/api/match-types";
 import type { Player } from "@/lib/api/types";
+import { shortName } from "@/lib/player-name";
 import { formatClock } from "@/lib/match/clock";
+import type { GoalDetail } from "@/lib/match/goal-detail";
 import { describeRejection } from "@/lib/match/rejections";
 import { describeUndo, undoTargetId } from "@/lib/match/undo";
 import { actionTime } from "@/lib/match/stopwatch";
@@ -106,6 +109,13 @@ interface MatchBoardProps {
 const BLOCKED = "Recarga el partido antes de seguir";
 const UNDO_CHANGED = "Lo último anotado ha cambiado: no se ha deshecho nada. Vuelve a pulsar Deshacer";
 
+interface PendingGoal {
+  /** null: gol del rival. */
+  player: Player | null;
+  part: number;
+  t: number;
+}
+
 export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onConfirmed }: MatchBoardProps) {
   const log = useMatchLog({
     matchId,
@@ -116,6 +126,8 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     onConfirmed,
   });
   const [sheetPlayer, setSheetPlayer] = useState<Player | null>(null);
+  // Gol a punto de anotarse: se queda con el tiempo del toque mientras se elige su detalle.
+  const [pendingGoal, setPendingGoal] = useState<PendingGoal | null>(null);
   const [anchor, setAnchor] = useState<SubstitutionAnchor | null>(null);
   const [adjustingClock, setAdjustingClock] = useState(false);
   const [rating, setRating] = useState(false);
@@ -326,6 +338,25 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     if (part === null || blockedByConflict()) return;
     const t = currentElapsed();
     log.recordEvent(player ? { kind, part, t, player_id: player.id } : { kind, part, t });
+  }
+
+  /** Abre el detalle del gol con el tiempo del toque; el gol se anota al guardar. */
+  function startGoal(player: Player | null) {
+    if (part === null || blockedByConflict()) return;
+    setPendingGoal({ player, part, t: currentElapsed() });
+  }
+
+  function saveGoal(detail: GoalDetail) {
+    if (!pendingGoal || blockedByConflict()) return;
+    const { player, part: goalPart, t } = pendingGoal;
+    log.recordEvent({
+      kind: player ? "goal" : "rival_goal",
+      part: goalPart,
+      t,
+      player_id: player?.id ?? null,
+      ...detail,
+    });
+    setPendingGoal(null);
   }
 
   function quick(kind: EventKind) {
@@ -563,7 +594,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         onBenchPlayer={(player) => setAnchor({ player, side: "bench" })}
         onToggleClock={stopwatch.toggle}
         onAdjustClock={() => setAdjustingClock(true)}
-        onRivalGoal={() => recordQuick("rival_goal", null)}
+        onRivalGoal={() => startGoal(null)}
         onSave={() => {
           if (keeper) recordQuick("save", keeper);
         }}
@@ -584,7 +615,7 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
         onClose={() => setSheetPlayer(null)}
         onQuick={quick}
         onGoal={() => {
-          if (sheetPlayer) recordQuick("goal", sheetPlayer);
+          if (sheetPlayer) startGoal(sheetPlayer);
           setSheetPlayer(null);
         }}
         onRed={() => {
@@ -595,6 +626,20 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
           if (sheetPlayer) setAnchor({ player: sheetPlayer, side: "court" });
           setSheetPlayer(null);
         }}
+      />
+      <GoalDetailDialog
+        goal={
+          pendingGoal
+            ? {
+                forTeam: pendingGoal.player !== null,
+                title: pendingGoal.player ? `Gol de ${shortName(pendingGoal.player)}` : "Gol rival",
+              }
+            : null
+        }
+        saveLabel="Guardar gol"
+        skipLabel="Guardar sin detalle"
+        onSave={saveGoal}
+        onClose={() => setPendingGoal(null)}
       />
       <SubstitutionDialog
         anchor={anchor}

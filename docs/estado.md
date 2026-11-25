@@ -1,7 +1,7 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-25. Todo subido: MVP (0015), nueva puntuación, bloqueo al empezar el
+Última actualización: 2026-11-26. Todo subido: MVP (0015), nueva puntuación, bloqueo al empezar el
 partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 2026-11-25.
 
 ## Hecho y en producción
@@ -216,6 +216,16 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
 
 ## En curso
 
+- **Detalle de los goles** (2026-11-26, sin subir; **migración 0017**, aplicarla en Neon antes del
+  push). Petición del entrenador. Al anotar un gol (nuestro o del rival) se abre una ventana con
+  hasta 3 tipos (balón parado, jugada ensayada, contraataque, pérdida en campo propio / robo en
+  campo rival, segundo palo, tiro lejano, 1 contra 1, rebote, portero-jugador, penalti o doble
+  penalti, en propia) y media pista para tocar desde dónde. Todo opcional («Guardar sin detalle»);
+  cerrar la ventana no anota el gol. Viaja con el evento por la cola offline (`goal_tags`,
+  `goal_x`, `goal_y` en `match_events`, de 0 a 100 sobre media pista desde la portería que recibe).
+  Se completa o cambia después en Corregir partido → Eventos → «Detalle»
+  (`PUT /matches/{id}/events/{event_id}/goal-detail`). Estadísticas del partido y de la temporada:
+  «Cómo fueron los goles», por tipo y con mapa. Dominio: `domain/stints/goal_detail.py`.
 - **Revisión para el móvil** (2026-11-25). Medido en un navegador a 360 px con datos inventados
   de peor caso (BD local `futsal_movil`, 17 participantes con nombres largos; nada de producción).
   Arreglado: textos `sr-only` dentro de tablas con scroll ensanchaban toda la página (contenedor

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { MatchOfficialToggle } from "@/components/match-official-toggle";
 import { ScoreBanner } from "@/components/score-banner";
+import { GoalsSummary } from "@/components/goals-summary";
 import { PlayerStatsTable, QuintetStatsTable } from "@/components/stats-tables";
 import { Button } from "@/components/ui/button";
 import type { MatchStats } from "@/lib/api/stats-types";
@@ -170,6 +171,8 @@ export function MatchStatsView({ matchId }: { matchId: string }) {
         <h2 className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Jugadores</h2>
         <PlayerStatsTable players={stats.players} />
       </section>
+
+      <GoalsSummary goals={stats.goals ?? []} />
 
       {isPlayer ? (
         <PlayerUnclosedNote closed={stats.closed} />

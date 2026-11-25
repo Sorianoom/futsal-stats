@@ -1,6 +1,7 @@
 """Estadísticas de un partido: minutos, acciones por jugador, quintetos y resumen de equipo."""
 
 import uuid
+from collections.abc import Iterable
 
 from fastapi import APIRouter
 from sqlalchemy import select
@@ -21,6 +22,7 @@ from app.domain.stints.events import (
     effective_events,
     team_fouls_by_part,
 )
+from app.domain.stints.goal_detail import GOAL_KINDS
 from app.domain.stints.models import VALID_PARTS, Stint
 from app.domain.stints.stats import (
     QuintetRating,
@@ -30,6 +32,7 @@ from app.domain.stints.stats import (
     seconds_by_player,
 )
 from app.schemas.stats import (
+    GoalOut,
     MatchPlayerStatsOut,
     MatchStatsOut,
     PlayerStatsOut,
@@ -47,6 +50,24 @@ season_router = APIRouter(prefix="/stats", tags=["stats"])
 async def _player_rows(db: SessionDep, ids: set[str]) -> dict[str, Player]:
     query = select(Player).where(Player.id.in_([uuid.UUID(i) for i in ids]))
     return {str(p.id): p for p in (await db.execute(query)).scalars().all()}
+
+
+def _goals_out(events: Iterable[MatchEvent]) -> list[GoalOut]:
+    """Los goles que cuentan (sin los deshechos), con su detalle."""
+    return [
+        GoalOut(
+            event_id=uuid.UUID(e.id),
+            for_team=e.kind is EventKind.GOAL,
+            part=e.part,
+            t=e.t,
+            player_id=uuid.UUID(e.player_id) if e.player_id else None,
+            tags=list(e.goal_tags),
+            x=e.goal_x,
+            y=e.goal_y,
+        )
+        for e in events
+        if e.kind in GOAL_KINDS
+    ]
 
 
 def _warning(uncovered: int) -> list[str]:
@@ -116,6 +137,7 @@ async def match_stats(
             players=players,
             quintets=quintets,
             warnings=warnings,
+            goals=_goals_out(events),
         )
     )
 
@@ -185,10 +207,12 @@ async def season_players(db: SessionDep, _: AnyUser) -> Envelope[SeasonStatsOut]
     seconds: dict[str, int] = {}
     played: dict[str, int] = {}
     totals: dict[str, dict[EventKind, int]] = {}
+    goals: list[GoalOut] = []
     skipped = 0
     for match_id, stints in stints_by_match.items():
         try:
             counts = counts_by_player(events_by_match.get(match_id, []))
+            goals.extend(_goals_out(effective_events(events_by_match.get(match_id, []))))
         except EventError:
             skipped += 1
             continue
@@ -213,5 +237,10 @@ async def season_players(db: SessionDep, _: AnyUser) -> Envelope[SeasonStatsOut]
         else []
     )
     return ok(
-        SeasonStatsOut(matches=len(stints_by_match) - skipped, players=players, warnings=warnings)
+        SeasonStatsOut(
+            matches=len(stints_by_match) - skipped,
+            players=players,
+            warnings=warnings,
+            goals=goals,
+        )
     )

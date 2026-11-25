@@ -6,6 +6,15 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.stints.events import EventKind
+from app.domain.stints.goal_detail import (
+    COURT_MAX,
+    COURT_MIN,
+    MAX_GOAL_TAGS,
+    GoalDetail,
+    GoalDetailError,
+    GoalTag,
+    validate_goal_detail,
+)
 from app.schemas.points import StrictModel
 
 MAX_BATCH = 500
@@ -16,6 +25,27 @@ MAX_STARTERS = 5
 Part = Annotated[int, Field(ge=1, le=2)]
 Seconds = Annotated[int, Field(ge=0, le=MAX_SECONDS)]
 EVENTS_WITHOUT_PLAYER = (EventKind.RIVAL_GOAL, EventKind.UNDO)
+CourtPoint = Annotated[int, Field(ge=COURT_MIN, le=COURT_MAX)]
+GoalTags = Annotated[list[GoalTag], Field(max_length=MAX_GOAL_TAGS)]
+
+
+class GoalDetailIn(StrictModel):
+    """Tipos y punto de media pista de un gol; todo opcional."""
+
+    goal_tags: GoalTags = Field(default_factory=list)
+    goal_x: CourtPoint | None = None
+    goal_y: CourtPoint | None = None
+
+    def detail(self) -> GoalDetail:
+        return GoalDetail(tuple(self.goal_tags), self.goal_x, self.goal_y)
+
+    @model_validator(mode="after")
+    def _point_complete(self) -> "GoalDetailIn":
+        try:
+            validate_goal_detail(EventKind.GOAL, self.detail())
+        except GoalDetailError as error:
+            raise ValueError(str(error)) from error
+        return self
 
 
 class EventIn(StrictModel):
@@ -26,6 +56,9 @@ class EventIn(StrictModel):
     t: Seconds
     player_id: uuid.UUID | None = None
     voids_event_id: uuid.UUID | None = None
+    goal_tags: GoalTags | None = None
+    goal_x: CourtPoint | None = None
+    goal_y: CourtPoint | None = None
 
     @model_validator(mode="after")
     def _coherent(self) -> "EventIn":
@@ -35,6 +68,11 @@ class EventIn(StrictModel):
         no_player = self.kind in EVENTS_WITHOUT_PLAYER
         if no_player != (self.player_id is None):
             raise ValueError("El jugador es obligatorio salvo en gol rival y deshacer")
+        detail = GoalDetail(tuple(self.goal_tags or ()), self.goal_x, self.goal_y)
+        try:
+            validate_goal_detail(self.kind, detail)
+        except GoalDetailError as error:
+            raise ValueError(str(error)) from error
         return self
 
 
@@ -115,6 +153,9 @@ class EventOut(BaseModel):
     t: int
     player_id: uuid.UUID | None
     voids_event_id: uuid.UUID | None
+    goal_tags: list[GoalTag] | None = None
+    goal_x: int | None = None
+    goal_y: int | None = None
 
 
 class LineupEventOut(BaseModel):

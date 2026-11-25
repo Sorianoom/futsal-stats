@@ -11,6 +11,7 @@ import {
   confirmedOf,
   dropRejected,
   EMPTY_OUTBOX,
+  goalDetailFields,
   idsOf,
   plus,
   restoreOutbox,
@@ -63,6 +64,10 @@ export interface NewEvent {
   player_id?: string | null;
   /** Solo en "undo": el evento que deshace. */
   voids_event_id?: string | null;
+  /** Solo en los goles, opcionales: tipos y punto de media pista (`lib/match/goal-detail.ts`). */
+  goal_tags?: string[] | null;
+  goal_x?: number | null;
+  goal_y?: number | null;
 }
 
 interface Options {
@@ -376,6 +381,7 @@ export function useMatchLog({
         t: input.t,
         player_id: input.player_id ?? null,
         voids_event_id: input.voids_event_id ?? null,
+        ...goalDetailFields(input),
       };
       eventsRef.current = [...eventsRef.current, event];
       remember(event.id);

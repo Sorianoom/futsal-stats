@@ -94,6 +94,7 @@ describe("partido: copia local de los datos", () => {
     await screen.findByRole("list", { name: "En pista" });
 
     await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar sin detalle" }));
 
     await waitFor(async () => {
       const copy = await loadSnapshot("m1");

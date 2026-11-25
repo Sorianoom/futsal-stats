@@ -151,6 +151,9 @@ def event_to_domain(row: MatchEvent) -> DomainEvent:
         t=row.t,
         player_id=str(row.player_id) if row.player_id else None,
         voids=str(row.voids_event_id) if row.voids_event_id else None,
+        goal_tags=tuple(row.goal_tags or ()),
+        goal_x=row.goal_x,
+        goal_y=row.goal_y,
     )
 
 

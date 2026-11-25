@@ -406,3 +406,38 @@ async def test_the_assistant_coach_sees_quintets_and_warnings(
     stats = (await client.get(f"/matches/{match_id}/stats", headers=assistant)).json()["data"]
 
     assert stats["quintets"] and stats["warnings"]
+
+
+async def test_stats_list_each_goal_with_its_detail(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    headers = await login()
+    match_id, p = await played_match(client, headers, make_player)
+    events = (await client.get(f"/matches/{match_id}/events", headers=headers)).json()["data"]
+    rival = next(e for e in events if e["kind"] == "rival_goal")
+    body = {"goal_tags": ["counter"], "goal_x": 50, "goal_y": 20}
+    await client.put(
+        f"/matches/{match_id}/events/{rival['id']}/goal-detail", json=body, headers=headers
+    )
+
+    match_goals = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"][
+        "goals"
+    ]
+    season_goals = (await client.get("/stats/players", headers=headers)).json()["data"]["goals"]
+
+    against = [g for g in match_goals if not g["for_team"]]
+    assert [g["for_team"] for g in match_goals].count(True) == 2
+    assert against == [
+        {
+            "event_id": rival["id"],
+            "for_team": False,
+            "part": 1,
+            "t": 700,
+            "player_id": None,
+            "tags": ["counter"],
+            "x": 50,
+            "y": 20,
+        }
+    ]
+    assert next(g for g in match_goals if g["player_id"] == str(p[0].id))["tags"] == []
+    assert sorted(g["event_id"] for g in season_goals) == sorted(g["event_id"] for g in match_goals)

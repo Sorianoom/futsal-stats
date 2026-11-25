@@ -29,6 +29,19 @@ export interface QuintetStats {
   rating_average: number | null;
 }
 
+/** Un gol con su detalle (tipos y punto de media pista, que pueden faltar). */
+export interface GoalStat {
+  event_id: string;
+  /** Nuestro; si no, del rival. */
+  for_team: boolean;
+  part: number;
+  t: number;
+  player_id: string | null;
+  tags: string[];
+  x: number | null;
+  y: number | null;
+}
+
 export interface MatchStats {
   match_id: string;
   /** False mientras el partido no se haya cerrado: hay acciones pero no minutos ni quintetos. */
@@ -38,6 +51,7 @@ export interface MatchStats {
   players: MatchPlayerStats[];
   quintets: QuintetStats[];
   warnings: string[];
+  goals?: GoalStat[];
 }
 
 export interface SeasonPlayerStats extends PlayerStats {
@@ -50,4 +64,5 @@ export interface SeasonStats {
   matches: number;
   players: SeasonPlayerStats[];
   warnings: string[];
+  goals?: GoalStat[];
 }

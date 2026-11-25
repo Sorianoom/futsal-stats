@@ -1,3 +1,4 @@
+import type { GoalDetail } from "@/lib/match/goal-detail";
 import { queryCache } from "@/lib/query-cache";
 
 import { apiData } from "./client";
@@ -41,6 +42,14 @@ export function setMatchOfficial(matchId: string, isOfficial: boolean): Promise<
 
 export function listMatchEvents(matchId: string): Promise<LoggedEvent[]> {
   return apiData<LoggedEvent[]>(`/matches/${encodeURIComponent(matchId)}/events`);
+}
+
+/** Pone o cambia el tipo y el punto de un gol ya anotado (al corregir el partido). */
+export function setGoalDetail(matchId: string, eventId: string, detail: GoalDetail): Promise<LoggedEvent> {
+  return apiData<LoggedEvent>(
+    `/matches/${encodeURIComponent(matchId)}/events/${encodeURIComponent(eventId)}/goal-detail`,
+    { method: "PUT", body: detail },
+  ).finally(() => invalidateMatchStats(matchId));
 }
 
 export function listLineupEvents(matchId: string): Promise<LineupEventRecord[]> {

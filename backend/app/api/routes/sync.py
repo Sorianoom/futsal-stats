@@ -12,6 +12,7 @@ from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.db import match_repo, points_repo
 from app.db.models import LineupEventRow, Match, MatchEvent, QuintetRatingRow
+from app.domain.stints.goal_detail import GOAL_KINDS
 from app.domain.sync import (
     Decision,
     IncomingEvent,
@@ -25,6 +26,7 @@ from app.domain.sync import (
 from app.schemas.match_sync import (
     EventIn,
     EventOut,
+    GoalDetailIn,
     LineupEventIn,
     LineupEventOut,
     LineupPayload,
@@ -266,3 +268,25 @@ async def sync_status(match_id: uuid.UUID, db: SessionDep, _: CurrentUser) -> En
             ratings=RatingsStatus(count=await match_repo.count_ratings(db, match_id)),
         )
     )
+
+
+@router.put("/{match_id}/events/{event_id}/goal-detail", response_model=Envelope[EventOut])
+async def set_goal_detail(
+    match_id: uuid.UUID,
+    event_id: uuid.UUID,
+    payload: GoalDetailIn,
+    db: SessionDep,
+    _: CurrentUser,
+) -> Envelope[EventOut]:
+    """Pone (o cambia) el tipo y el punto de un gol ya anotado: en el partido no siempre da
+    tiempo. Es un dato del gol, no un evento: no cambia el marcador ni el registro."""
+    await _existing_match(db, match_id)
+    row = await db.get(MatchEvent, event_id)
+    if row is None or row.match_id != match_id:
+        raise ApiError(404, "not_found", "Gol no encontrado")
+    if row.kind not in GOAL_KINDS:
+        raise ApiError(422, "not_a_goal", "Solo un gol lleva tipo y punto de la pista")
+    row.goal_tags = [tag.value for tag in payload.goal_tags] or None
+    row.goal_x, row.goal_y = payload.goal_x, payload.goal_y
+    await db.commit()
+    return ok(EventOut.model_validate(row))

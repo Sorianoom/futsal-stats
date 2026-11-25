@@ -528,6 +528,29 @@ describe("CorregirPage: eventos", () => {
     expect(screen.getByRole("button", { name: "Deshacer Gol de Ana Ruiz" })).toBeInTheDocument();
   });
 
+  it("un gol se puede completar después con su tipo y desde dónde", async () => {
+    const server = api({
+      "PUT /matches/m1/events/e1/goal-detail": (request) => {
+        events = events.map((event) => (event.id === "e1" ? { ...event, ...(request.body as object) } : event));
+        return { data: events[0] };
+      },
+    });
+    renderWithAuth(<CorregirPage />);
+    const list = await screen.findByRole("list", { name: "Eventos" });
+    expect(within(list).getByText("Sin detalle")).toBeInTheDocument();
+
+    await userEvent.click(within(list).getByRole("button", { name: "Detalle de Gol de Ana Ruiz" }));
+    const dialog = await screen.findByRole("dialog", { name: "Gol de Ana Ruiz" });
+    expect(within(dialog).getByRole("button", { name: "Robo en campo rival" })).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Contraataque" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar detalle" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const put = server.calls.find((call) => call.method === "PUT");
+    expect(put?.body).toEqual({ goal_tags: ["counter"], goal_x: null, goal_y: null });
+    expect(await within(list).findByText("Contraataque")).toBeInTheDocument();
+  });
+
   it("sin eventos lo indica", async () => {
     events = [];
     api();

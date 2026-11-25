@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { GoalsSummary } from "@/components/goals-summary";
 import { SeasonStatsTable } from "@/components/stats-tables";
 import { FriendlyBadge } from "@/components/friendly-badge";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ function Season() {
           </p>
           <Leaders players={season.players} />
           <SeasonStatsTable players={season.players} />
+          <GoalsSummary goals={season.goals ?? []} />
         </>
       ) : null}
     </section>

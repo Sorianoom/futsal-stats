@@ -2,17 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { GoalDetailDialog } from "@/components/goal-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import type { LoggedEvent } from "@/lib/api/match-types";
-import { listMatchEvents, syncMatch } from "@/lib/api/matches";
+import { listMatchEvents, setGoalDetail, syncMatch } from "@/lib/api/matches";
 import { describeEvent } from "@/lib/labels";
 import { elapsedToDisplay, formatClock, type ClockSettings } from "@/lib/match/clock";
 import { effectiveEvents } from "@/lib/match/events";
+import { describeGoalDetail, detailOf, type GoalDetail } from "@/lib/match/goal-detail";
 import { newId } from "@/lib/ids";
 import { nextSeq } from "@/lib/match/sequence";
 
 const OFFLINE_ERROR = "Sin conexión. No se pudo deshacer; inténtalo de nuevo.";
+const DETAIL_ERROR = "No se pudo guardar el detalle del gol. Inténtalo de nuevo.";
+const GOAL_KINDS = new Set(["goal", "rival_goal"]);
 const UNDO_ERROR = "No se pudo deshacer. Inténtalo de nuevo.";
 const SEQ_CONFLICT =
   "Se anotaron eventos desde otro dispositivo. Se ha recargado la lista; vuelve a intentarlo.";
@@ -51,6 +55,10 @@ export function CorrectEvents({ matchId, nameOf, settings }: CorrectEventsProps)
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
+  // Gol cuyo detalle (tipo y punto) se está completando.
+  const [detailing, setDetailing] = useState<LoggedEvent | null>(null);
+  const [savingDetail, setSavingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const locked = useRef(false);
   // Mismo id y seq al reintentar: si el envío llegó pero se perdió la respuesta, el servidor
   // lo reconoce como duplicado en vez de rechazarlo.
@@ -112,6 +120,21 @@ export function CorrectEvents({ matchId, nameOf, settings }: CorrectEventsProps)
     }
   }
 
+  async function saveDetail(detail: GoalDetail) {
+    if (!detailing) return;
+    setSavingDetail(true);
+    setDetailError(null);
+    try {
+      await setGoalDetail(matchId, detailing.id, detail);
+      setDetailing(null);
+      reload();
+    } catch {
+      setDetailError(DETAIL_ERROR);
+    } finally {
+      setSavingDetail(false);
+    }
+  }
+
   if (failed) {
     return (
       <div role="alert" className="flex items-center justify-between rounded-lg border p-4">
@@ -155,10 +178,29 @@ export function CorrectEvents({ matchId, nameOf, settings }: CorrectEventsProps)
         {current.map((event) => {
           const description = describeEvent(event, nameOf);
           const when = formatClock(elapsedToDisplay(event.t, settings));
+          const isGoal = GOAL_KINDS.has(event.kind);
+          const goalDetail = isGoal ? describeGoalDetail(detailOf(event), event.kind === "goal") : "";
           return (
             <li key={event.id} className="space-y-2 rounded-2xl border-2 bg-card p-4">
-              <div className="flex items-center gap-4">
-                <span className="flex-1 text-lg">{`${event.part}ª parte · ${when} · ${description}`}</span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="min-w-0 flex-1 text-lg">
+                  {`${event.part}ª parte · ${when} · ${description}`}
+                  {isGoal ? (
+                    <span className="block text-sm text-muted-foreground">{goalDetail || "Sin detalle"}</span>
+                  ) : null}
+                </span>
+                {isGoal && confirmingId !== event.id ? (
+                  <Button
+                    variant="outline"
+                    aria-label={`Detalle de ${description}`}
+                    onClick={() => {
+                      setDetailError(null);
+                      setDetailing(event);
+                    }}
+                  >
+                    Detalle
+                  </Button>
+                ) : null}
                 {confirmingId === event.id ? (
                   <span className="flex gap-2">
                     <Button variant="outline" onClick={() => setConfirmingId(null)}>
@@ -195,6 +237,22 @@ export function CorrectEvents({ matchId, nameOf, settings }: CorrectEventsProps)
           );
         })}
       </ul>
+      <GoalDetailDialog
+        goal={
+          detailing
+            ? {
+                forTeam: detailing.kind === "goal",
+                title: describeEvent(detailing, nameOf),
+                initial: detailOf(detailing),
+              }
+            : null
+        }
+        saveLabel="Guardar detalle"
+        saving={savingDetail}
+        error={detailError}
+        onSave={(detail) => void saveDetail(detail)}
+        onClose={() => setDetailing(null)}
+      />
     </section>
   );
 }

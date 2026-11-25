@@ -33,6 +33,10 @@ class MatchEvent:
     t: int
     player_id: str | None = None
     voids: str | None = None
+    # Solo en los goles (ver `goal_detail`): tipos y punto de la pista, opcionales.
+    goal_tags: tuple[str, ...] = ()
+    goal_x: int | None = None
+    goal_y: int | None = None
 
 
 def effective_events(events: Iterable[MatchEvent]) -> tuple[MatchEvent, ...]:

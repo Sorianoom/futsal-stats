@@ -50,6 +50,20 @@ class QuintetStatsOut(BaseModel):
     rating_average: float | None
 
 
+class GoalOut(BaseModel):
+    """Un gol con su detalle. `for_team`: nuestro; si no, del rival. Punto sobre media pista
+    (ver `domain/stints/goal_detail.py`); tipos y punto pueden faltar."""
+
+    event_id: uuid.UUID
+    for_team: bool
+    part: int
+    t: int
+    player_id: uuid.UUID | None
+    tags: list[str]
+    x: int | None
+    y: int | None
+
+
 class MatchStatsOut(BaseModel):
     match_id: uuid.UUID
     """False mientras no se haya cerrado el partido: hay acciones pero no minutos ni quintetos."""
@@ -59,6 +73,7 @@ class MatchStatsOut(BaseModel):
     players: list[MatchPlayerStatsOut]
     quintets: list[QuintetStatsOut]
     warnings: list[str]
+    goals: list[GoalOut] = []
 
 
 class SeasonPlayerStatsOut(PlayerStatsOut):
@@ -71,3 +86,5 @@ class SeasonStatsOut(BaseModel):
     matches: int
     players: list[SeasonPlayerStatsOut]
     warnings: list[str]
+    # Goles de los partidos cerrados de la temporada, con su detalle.
+    goals: list[GoalOut] = []

@@ -58,6 +58,19 @@ export function plus(outbox: Outbox, extra: Outbox): Outbox {
   };
 }
 
+type GoalDetailFields = Pick<EventIn, "goal_tags" | "goal_x" | "goal_y">;
+
+/** El detalle de un gol, solo si lo tiene: los demás eventos viajan como siempre. */
+export function goalDetailFields(event: GoalDetailFields): GoalDetailFields {
+  const fields: GoalDetailFields = {};
+  if (event.goal_tags && event.goal_tags.length > 0) fields.goal_tags = [...event.goal_tags];
+  if (event.goal_x != null && event.goal_y != null) {
+    fields.goal_x = event.goal_x;
+    fields.goal_y = event.goal_y;
+  }
+  return fields;
+}
+
 export function toEventIn(event: LoggedEvent): EventIn {
   return {
     id: event.id,
@@ -67,6 +80,7 @@ export function toEventIn(event: LoggedEvent): EventIn {
     t: event.t,
     player_id: event.player_id,
     voids_event_id: event.voids_event_id,
+    ...goalDetailFields(event),
   };
 }
 
@@ -79,6 +93,7 @@ function toLoggedEvent(event: EventIn): LoggedEvent {
     t: event.t,
     player_id: event.player_id ?? null,
     voids_event_id: event.voids_event_id ?? null,
+    ...goalDetailFields(event),
   };
 }
 

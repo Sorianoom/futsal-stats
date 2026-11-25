@@ -89,7 +89,7 @@ async def test_without_closed_matches_the_season_is_empty(
 
     response = await client.get("/stats/players", headers=headers)
 
-    assert response.json()["data"] == {"matches": 0, "players": [], "warnings": []}
+    assert response.json()["data"] == {"matches": 0, "players": [], "warnings": [], "goals": []}
 
 
 async def test_a_match_with_inconsistent_events_is_skipped_with_a_warning(

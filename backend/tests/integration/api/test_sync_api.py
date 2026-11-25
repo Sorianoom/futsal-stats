@@ -436,3 +436,97 @@ async def test_the_first_part_start_marks_when_the_match_started(
     assert before is None
     assert started is not None
     assert await _started_at(session, match_id) == started  # la 2ª parte no la mueve
+
+
+# --- Detalle del gol ---------------------------------------------------------------------------
+
+
+async def test_a_goal_syncs_with_its_types_and_point_and_comes_back(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    head = await login(Role.HEAD_COACH)
+    match_id = await new_match(client, head)
+    player = await make_player(7)
+    against = {
+        **event(1, "rival_goal"),
+        "goal_tags": ["set_piece", "far_post"],
+        "goal_x": 80,
+        "goal_y": 12,
+    }
+    ours = event(2, "goal", player.id)
+
+    response = await sync(client, head, match_id, events=[against, ours])
+    stored = (await client.get(f"/matches/{match_id}/events", headers=head)).json()["data"]
+
+    assert response.status_code == 200 and response.json()["data"]["rejected"] == []
+    assert stored[0]["goal_tags"] == ["set_piece", "far_post"]
+    assert (stored[0]["goal_x"], stored[0]["goal_y"]) == (80, 12)
+    assert stored[1]["goal_tags"] is None and stored[1]["goal_x"] is None
+
+
+async def test_only_goals_carry_a_detail_and_it_must_be_possible(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    head = await login(Role.HEAD_COACH)
+    match_id = await new_match(client, head)
+    player = await make_player(7)
+
+    foul = await sync(
+        client, head, match_id, events=[{**event(1, "foul", player.id), "goal_tags": ["counter"]}]
+    )
+    half_point = await sync(
+        client, head, match_id, events=[{**event(1, "rival_goal"), "goal_x": 5}]
+    )
+    unknown = await sync(
+        client, head, match_id, events=[{**event(1, "rival_goal"), "goal_tags": ["chilena"]}]
+    )
+
+    assert foul.status_code == half_point.status_code == unknown.status_code == 422
+
+
+async def test_the_detail_of_a_goal_can_be_completed_later(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    head = await login(Role.HEAD_COACH)
+    match_id = await new_match(client, head)
+    player = await make_player(7)
+    goal, foul = event(1, "rival_goal"), event(2, "foul", player.id)
+    await sync(client, head, match_id, events=[goal, foul])
+    url = f"/matches/{match_id}/events/{{}}/goal-detail"
+    body = {"goal_tags": ["turnover", "one_on_one"], "goal_x": 40, "goal_y": 30}
+
+    response = await client.put(url.format(goal["id"]), json=body, headers=head)
+    again = await sync(client, head, match_id, events=[goal])
+    stored = (await client.get(f"/matches/{match_id}/events", headers=head)).json()["data"][0]
+    cleared = await client.put(url.format(goal["id"]), json={}, headers=head)
+    not_a_goal = await client.put(url.format(foul["id"]), json=body, headers=head)
+    missing = await client.put(url.format(uuid.uuid4()), json=body, headers=head)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["goal_tags"] == ["turnover", "one_on_one"]
+    assert again.json()["data"]["duplicates"] == [goal["id"]]
+    assert (stored["goal_tags"], stored["goal_x"], stored["goal_y"]) == (
+        ["turnover", "one_on_one"],
+        40,
+        30,
+    )
+    assert cleared.json()["data"]["goal_tags"] is None and cleared.json()["data"]["goal_x"] is None
+    assert not_a_goal.status_code == 422 and not_a_goal.json()["error"]["code"] == "not_a_goal"
+    assert missing.status_code == 404
+
+
+async def test_a_player_cannot_change_the_detail_of_a_goal(
+    client: AsyncClient, login: Login, make_player: MakePlayer
+) -> None:
+    head = await login(Role.HEAD_COACH)
+    match_id = await new_match(client, head)
+    goal = event(1, "rival_goal")
+    await sync(client, head, match_id, events=[goal])
+    ficha = await make_player(9)
+    player = await login(Role.PLAYER, player_id=ficha.id)
+
+    response = await client.put(
+        f"/matches/{match_id}/events/{goal['id']}/goal-detail", json={}, headers=player
+    )
+
+    assert response.status_code == 403

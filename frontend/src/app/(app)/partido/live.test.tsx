@@ -236,6 +236,7 @@ describe("panel en vivo", () => {
 
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Gol" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar sin detalle" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("1 – 0");
@@ -510,11 +511,50 @@ describe("panel en vivo", () => {
     await setClock("1700");
 
     await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar sin detalle" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 1");
     await waitFor(() => expect(posts(server)).toHaveLength(1));
     expect(posts(server)[0].events[0]).toMatchObject({ kind: "rival_goal", player_id: null, t: 180 });
+  });
+
+  it("un gol rival puede llevar sus tipos y el punto de media pista desde el que entró", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    await userEvent.click(screen.getByRole("button", { name: "Gol rival" }));
+    const dialog = await screen.findByRole("dialog", { name: "Gol rival" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Balón parado" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Segundo palo" }));
+    const court = within(dialog).getByRole("button", { name: /Nuestra media pista/ });
+    vi.spyOn(court, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 220, 220));
+    fireEvent.click(court, { clientX: 110, clientY: 110, detail: 1 });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar gol" }));
+
+    expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 1");
+    await waitFor(() => expect(posts(server)).toHaveLength(1));
+    expect(posts(server)[0].events[0]).toMatchObject({
+      kind: "rival_goal",
+      goal_tags: ["set_piece", "far_post"],
+      goal_x: 50,
+      goal_y: 50,
+    });
+  });
+
+  it("cerrar el detalle del gol no anota nada", async () => {
+    const server = api();
+    renderWithAuth(<PartidoPage />);
+    await openBoard();
+
+    await userEvent.click(within(await tapCourt("Ana Ruiz")).getByRole("button", { name: "Gol" }));
+    expect(await screen.findByRole("dialog", { name: "Gol de Ana Ruiz" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Marcador")).toHaveTextContent("0 – 0");
+    expect(posts(server)).toHaveLength(0);
   });
 
   it("deshacer pide confirmación, dice qué se deshace y baja el marcador", async () => {
@@ -524,6 +564,7 @@ describe("panel en vivo", () => {
     await setClock("1500");
     const sheet = await tapCourt("Ana Ruiz");
     await userEvent.click(within(sheet).getByRole("button", { name: "Gol" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar sin detalle" }));
     await waitFor(() => expect(posts(server)).toHaveLength(1));
 
     await userEvent.click(screen.getByRole("button", { name: /^Deshacer gol de Ana Ruiz \(\d\d:\d\d\)$/ }));
@@ -555,6 +596,7 @@ describe("panel en vivo", () => {
       gate.then(() => mocked(input, init))) as typeof fetch;
 
     await userEvent.click(within(await tapCourt("Ana Ruiz")).getByRole("button", { name: "Gol" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar sin detalle" }));
     await userEvent.click(screen.getByRole("button", { name: /^Deshacer gol de Ana Ruiz/ }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent(/Deshacer gol de Ana Ruiz/);
@@ -679,6 +721,7 @@ describe("panel en vivo", () => {
     await setClock("1500");
     const second = await tapCourt("Bea Ruiz");
     await userEvent.click(within(second).getByRole("button", { name: "Gol" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar sin detalle" }));
 
     expect(screen.getByLabelText("Marcador")).toHaveTextContent("1 – 0");
     await waitFor(() => expect(posts(server)).toHaveLength(2));
