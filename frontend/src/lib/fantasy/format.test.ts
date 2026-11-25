@@ -17,12 +17,12 @@ describe("formatMoney", () => {
 });
 
 describe("lockText", () => {
-  it("da el día y la hora del bloqueo en Madrid, no en UTC", () => {
-    expect(lockText("2026-11-14T23:00:00Z")).toBe("Se bloquea el domingo, 15 de noviembre a las 00:00");
+  it("avisa de que se bloquea al empezar el partido, con su día", () => {
+    expect(lockText("2026-11-15")).toBe("Se bloquea al empezar el partido (domingo, 15 de noviembre)");
   });
 
-  it("acepta la hora con desfase", () => {
-    expect(lockText("2026-07-05T00:00:00+02:00")).toBe("Se bloquea el domingo, 5 de julio a las 00:00");
+  it("no se va al día anterior por la zona horaria", () => {
+    expect(lockText("2026-07-05")).toBe("Se bloquea al empezar el partido (domingo, 5 de julio)");
   });
 });
 

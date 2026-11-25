@@ -24,6 +24,10 @@ SEED = 20261114
 LEAGUE_DAY = datetime(2026, 10, 10, 10, 0, tzinfo=UTC)
 FIRST_MARKET_CLOSES = datetime(2026, 10, 10, 22, 0, tzinfo=UTC)
 NEXT_DAY = datetime(2026, 10, 11, 10, 0, tzinfo=UTC)
+# Partido del 17/10 (el de `played_match`): mañana de ese día, inicio a las 18:00 y poco después.
+MATCH_MORNING = datetime(2026, 10, 17, 8, 0, tzinfo=UTC)
+KICKOFF = datetime(2026, 10, 17, 16, 0, tzinfo=UTC)
+AFTER_KICKOFF = datetime(2026, 10, 17, 16, 30, tzinfo=UTC)
 
 
 @dataclass
@@ -137,3 +141,17 @@ async def give_copies(
         )
     await session.flush()
     return [c.id for c in chosen]
+
+
+async def play_at_kickoff(clock: Clock, *args: Any, **kwargs: Any) -> tuple[str, list[Player]]:
+    """`played_match` sincronizado a las 18:00 del día del partido (su inicio bloquea el
+    Fantasy); después el reloj vuelve a donde estaba."""
+    from tests.integration.api.test_stats_api import played_match
+
+    before = clock.now
+    clock.now = KICKOFF
+    try:
+        match_id, players = await played_match(*args, **kwargs)
+    finally:
+        clock.now = before
+    return str(match_id), list(players)

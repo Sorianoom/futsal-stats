@@ -176,6 +176,14 @@ class MatchOut(BaseModel):
     opponent: str
     # Con valor por defecto para repetir respuestas idempotentes guardadas antes de existir.
     is_official: bool = True
+    # MVP del partido (suma puntos en el Fantasy); null si no se ha elegido.
+    mvp_player_id: uuid.UUID | None = None
+
+
+class MatchMvpIn(StrictModel):
+    """MVP del partido; null lo quita."""
+
+    player_id: uuid.UUID | None
 
 
 class ExclusionCreate(StrictModel):

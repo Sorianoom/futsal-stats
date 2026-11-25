@@ -334,13 +334,13 @@ async def save_lineup(
 async def scheduled_matches(db: AsyncSession, since: date) -> list[ScheduledMatch]:
     """Partidos desde una fecha, oficiales o no (la regla de qué es jornada está en el dominio)."""
     query = (
-        select(Match.id, Match.opponent, TeamSession.held_on, Match.is_official)
+        select(Match.id, Match.opponent, TeamSession.held_on, Match.is_official, Match.started_at)
         .join(TeamSession, TeamSession.id == Match.session_id)
         .where(TeamSession.held_on >= since)
     )
     return [
-        ScheduledMatch(str(mid), opponent, held_on, official)
-        for mid, opponent, held_on, official in (await db.execute(query)).all()
+        ScheduledMatch(str(mid), opponent, held_on, official, started_at)
+        for mid, opponent, held_on, official, started_at in (await db.execute(query)).all()
     ]
 
 

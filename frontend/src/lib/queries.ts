@@ -11,12 +11,15 @@ import {
   FANTASY_TRANSFERS_KEY,
   FANTASY_CLAUSES_KEY,
   fantasyParticipantKey,
+  fantasyParticipantRoundKey,
   fantasyRoundKey,
   getClauses,
   getFantasyMe,
   getMarket,
   getMyRound,
+  getParticipantRound,
   getParticipantTeam,
+  type ParticipantRound,
   getStandings,
   getTransfers,
 } from "@/lib/api/fantasy";
@@ -113,6 +116,10 @@ export const fantasyStandingsQuery: Query<FantasyStandings> = {
 export const fantasyRoundQuery = (matchId: string): Query<FantasyRound> => ({
   key: fantasyRoundKey(matchId),
   fetch: () => getMyRound(matchId),
+});
+export const fantasyParticipantRoundQuery = (matchId: string, participantId: string): Query<ParticipantRound> => ({
+  key: fantasyParticipantRoundKey(matchId, participantId),
+  fetch: () => getParticipantRound(matchId, participantId),
 });
 export const fantasyParticipantQuery = (participantId: string): Query<ParticipantTeam> => ({
   key: fantasyParticipantKey(participantId),

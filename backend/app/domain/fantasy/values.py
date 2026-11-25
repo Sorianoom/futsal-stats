@@ -12,19 +12,18 @@ from app.domain.fantasy.rules import (
     VALUE_CHANGE_PER_POINT,
     VALUE_CHANGE_WITHOUT_RATING,
 )
-from app.domain.fantasy.scoring import player_points
 
 
-def value_change(rating: float | None, goals: int) -> int:
+def value_change(points: int | None) -> int:
     """0,2 M × (puntos − 6) del jugador en la jornada; sin nota (no jugó), −0,2 M."""
-    if rating is None:
+    if points is None:
         return VALUE_CHANGE_WITHOUT_RATING
-    return VALUE_CHANGE_PER_POINT * (player_points(rating, goals) - VALUE_BASELINE_POINTS)
+    return VALUE_CHANGE_PER_POINT * (points - VALUE_BASELINE_POINTS)
 
 
-def next_value(before: int, rating: float | None, goals: int) -> int:
-    """Valor tras la jornada, nunca por debajo del mínimo."""
-    return max(MIN_PLAYER_VALUE, before + value_change(rating, goals))
+def next_value(before: int, points: int | None) -> int:
+    """Valor tras la jornada, nunca por debajo del mínimo. `points` es None si no tuvo nota."""
+    return max(MIN_PLAYER_VALUE, before + value_change(points))
 
 
 def round_payout(points: int) -> int:

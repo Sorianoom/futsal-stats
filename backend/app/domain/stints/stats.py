@@ -126,6 +126,32 @@ def on_court_goals_by_player(
     }
 
 
+def clean_streaks_by_player(
+    segments: Sequence[LineupSegment], goals: Iterable[GoalEvent], block_seconds: int
+) -> dict[str, int]:
+    """Bloques completos de `block_seconds` en pista sin gol en contra, por jugador.
+
+    Cada jugador acumula sus segundos en pista; un gol rival con él en pista (misma regla que
+    los quintetos) cierra su racha y la pone a cero. El banquillo y el descanso no la cortan.
+    """
+    against: dict[LineupSegment, list[int]] = defaultdict(list)
+    for goal in goals:
+        if not goal.for_team:
+            against[_locate(segments, goal.part, goal.t)].append(goal.t)
+    running: dict[str, int] = defaultdict(int)
+    blocks: dict[str, int] = defaultdict(int)
+    for segment in sorted(segments, key=lambda s: (s.part, s.start)):
+        since = segment.start
+        for t in sorted(against.get(segment, [])):
+            for player in segment.players:
+                blocks[player] += (running[player] + t - since) // block_seconds
+                running[player] = 0
+            since = t
+        for player in segment.players:
+            running[player] += segment.end - since
+    return {player: blocks[player] + total // block_seconds for player, total in running.items()}
+
+
 def quintet_stats(
     segments: Sequence[LineupSegment],
     goals: Iterable[GoalEvent],

@@ -36,6 +36,8 @@ class MatchPlayerStatsOut(PlayerStatsOut):
 
     # Nota de 1 a 10; None si el partido no está cerrado o jugó menos de 3 minutos.
     rating: float | None
+    # Puntuación exacta, sin tope ni redondeo: la que usa el Fantasy. None igual que `rating`.
+    score: float | None = None
 
 
 class QuintetStatsOut(BaseModel):

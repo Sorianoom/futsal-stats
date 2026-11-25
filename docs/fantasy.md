@@ -43,14 +43,41 @@ nombre en el código para poder ajustarlos.
 ## Jornadas, alineación y puntos
 
 - Una jornada = un partido oficial.
-- Alineación: **1 portero y 4 de campo** de la propia plantilla. Se bloquea a las **00:00 (hora de
-  Madrid) del día del partido** (los partidos solo tienen fecha).
+- Alineación: **1 portero y 4 de campo** de la propia plantilla. Se bloquea **cuando el
+  entrenador empieza el partido** (cambiado el 2026-11-25; antes, a las 00:00 del día del partido):
+  `matches.started_at`, la primera vez que el servidor recibe el inicio de la 1ª parte (migración
+  0016). Si el partido no empieza ese día, se bloquea a las 00:00 del día siguiente. Todo lo que
+  depende del bloqueo (alineación y capitán, copias que eran suyas y saldo negativo) se mira en ese
+  momento con el historial.
+  - Si el iPad empieza sin red, el bloqueo llega cuando sincroniza: puede ser algo más tarde que el
+    inicio real. Borrar las estadísticas del partido no lo desbloquea.
+- Pantallas (2026-11-25): «Mi equipo» solo sirve para elegir; no enseña puntos ni la forma. La
+  jornada se ve en la pista con los puntos de cada ficha y, al tocar un jugador, el porqué: base,
+  cada acción con lo que suma, nota exacta redondeada, MVP y capitán. El porqué se
+  congela con la jornada (`slots` de `fantasy_round_scores`: `score`, `mvp`, `breakdown`, `bonus`).
+- Con la jornada ya bloqueada, cualquiera ve lo que alineó cada participante (jugadores, capitán y
+  puntos) desde la jornada (`GET /fantasy/rounds/{id}/participants/{pid}`); las plantillas privadas
+  no (403 `private_squad`).
 - Si no se toca, se mantiene la alineación de la jornada anterior.
-- Puntos de un jugador alineado: **nota del partido redondeada (,5 hacia arriba) + 2 por gol**. Sin
-  nota (no jugó o menos de 3 minutos) = 0. Los puntos nunca son negativos.
-  - Ejemplos: nota 6,3 sin goles → 6; nota 9,3 con 2 goles → 13; no jugó → 0.
+- Puntos de un jugador alineado (recalibrado el 2026-11-25): **puntuación exacta del partido, sin
+  tope de 10, redondeada (,5 hacia arriba)**. Los goles solo cuentan dentro de la nota, una vez.
+  Sin nota (no jugó o menos de 3 minutos) = 0. Los puntos nunca son negativos.
+  - Escala buscada: partido flojo ≈ 5, normal ≈ 7, bueno ≈ 9, partidazo más.
+  - Puntuación (`backend/app/domain/rating/score.py`, en centésimas): base **5,4**; gol +2,5
+    (portero +5,0); asistencia +0,7; robo +0,3; pérdida −0,3; falta −0,4; amarilla −0,5; roja −2,0;
+    **+0,3 por cada 10 minutos en pista seguidos sin gol en contra** (un gol rival con él en pista
+    reinicia la racha; banquillo y descanso no). Campo: tiro sin gol +0,1 y ±0,15 por gol a favor o
+    en contra con él en pista. Portero: parada +0,4 y −0,4 por gol encajado (sin bonus aparte de
+    portería a cero).
+  - La nota que se ve en Estadísticas es esa misma puntuación limitada a 1–10 y con un decimal; la
+    API da también la exacta (`score`).
+  - Ejemplo real (22-nov, 5-5): portero con 17 paradas, un gol y 5 encajados → 15,2 → 15;
+    jugador de campo con 2 goles → 10,95 → 11; 30 minutos sin acierto → 5,05 → 5.
 - Huecos de la alineación (falta portero o jugadores de campo): puntúan **0**.
 - Saldo negativo al bloquearse la alineación: la jornada puntúa **0**.
+- MVP (2026-11-22, migración 0015): el entrenador elige el MVP de cada partido desde el menú ⋯
+  del partido (`PUT /matches/{id}/mvp`). Suma **+2** a sus puntos de esa jornada si jugó (con
+  capitán, ×2) y cuenta para el cambio de valor. Una jornada ya cerrada no se recalcula.
 - Clasificación: suma de puntos de todas las jornadas.
 - Equipo de los demás (2026-11-20): en la clasificación, tocar un nombre abre su equipo
   (`GET /fantasy/participants/{id}`): valor, plantilla (lo mismo que ya enseña Cláusulas) y la
@@ -120,7 +147,7 @@ Acordados con el usuario el 2026-11-19. Contrato de la API: `docs/fantasy-api-pa
 ### Capitán (acordado y construido el 2026-11-19, migración 0010)
 
 - En la alineación se puede elegir un capitán: es opcional y puede ser cualquiera de los 5,
-  también el portero. Se bloquea con la alineación (00:00 en Madrid del día del partido).
+  también el portero. Se bloquea con la alineación (al empezar el partido).
 - Sus puntos de la jornada cuentan el doble, para la clasificación y para el cobro por punto.
 - Si no juega o se queda sin nota, sus 0 puntos siguen siendo 0: no hay vicecapitán.
 - Si algún día hay puntos negativos, también se doblan. Hoy no los hay (`MIN_PLAYER_POINTS = 0`).
@@ -148,3 +175,10 @@ Acordados con el usuario el 2026-11-19. Contrato de la API: `docs/fantasy-api-pa
 5. **Capitán** (puntúa doble, migración 0010) y el diseño nuevo de las pantallas del jugador.
 
 Cada paso lleva migración: se aplica en Neon antes de subir a `main`.
+
+## Volver a cerrar una jornada
+
+`uv run python -m app.cli resettle-round AAAA-MM-DD [--dry-run]` (con `DIRECT_DATABASE_URL`): deshace
+los cobros, los cambios de valor y los puntos congelados de esa jornada y la cierra otra vez con los
+datos y las reglas actuales. Solo la última jornada cerrada. Usado el 2026-11-25 para la del 22-nov
+(bloqueo al empezar el partido y nueva puntuación).

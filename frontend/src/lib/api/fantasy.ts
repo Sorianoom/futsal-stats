@@ -1,6 +1,6 @@
 import { queryCache } from "@/lib/query-cache";
 
-import { apiData } from "./client";
+import { ApiError, apiData } from "./client";
 import type {
   BankSale,
   ClauseRaise,
@@ -25,6 +25,10 @@ export const FANTASY_CLAUSES_KEY = "fantasy:clauses";
 const FANTASY_ROUND_PREFIX = "fantasy:round:";
 export function fantasyRoundKey(matchId: string): string {
   return `${FANTASY_ROUND_PREFIX}${matchId}`;
+}
+/** Bajo el prefijo de las jornadas: se olvida con ellas. */
+export function fantasyParticipantRoundKey(matchId: string, participantId: string): string {
+  return `${FANTASY_ROUND_PREFIX}${matchId}:${participantId}`;
 }
 const FANTASY_PARTICIPANT_PREFIX = "fantasy:participant:";
 export function fantasyParticipantKey(participantId: string): string {
@@ -57,6 +61,19 @@ export function getStandings(): Promise<FantasyStandings> {
 
 export function getMyRound(matchId: string): Promise<FantasyRound> {
   return apiData<FantasyRound>(`/fantasy/rounds/${encodeURIComponent(matchId)}/me`);
+}
+
+/** Alineación de otro participante en una jornada; la de una plantilla privada no se ve. */
+export type ParticipantRound = { private: true } | { private: false; round: FantasyRound };
+
+export async function getParticipantRound(matchId: string, participantId: string): Promise<ParticipantRound> {
+  const path = `/fantasy/rounds/${encodeURIComponent(matchId)}/participants/${encodeURIComponent(participantId)}`;
+  try {
+    return { private: false, round: await apiData<FantasyRound>(path) };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "private_squad") return { private: true };
+    throw error;
+  }
 }
 
 export function getParticipantTeam(participantId: string): Promise<ParticipantTeam> {

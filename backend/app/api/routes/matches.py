@@ -9,8 +9,15 @@ from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.api.idempotency import IdempotencyKey, run_idempotent
 from app.db import points_repo
-from app.db.models import Match
-from app.schemas.points import ExclusionCreate, ExclusionOut, MatchCreate, MatchOut, MatchUpdate
+from app.db.models import Match, Player
+from app.schemas.points import (
+    ExclusionCreate,
+    ExclusionOut,
+    MatchCreate,
+    MatchMvpIn,
+    MatchOut,
+    MatchUpdate,
+)
 
 router = APIRouter(tags=["matches"])
 
@@ -27,6 +34,7 @@ def _match_out(match: Match, held_on: object) -> MatchOut:
             "held_on": held_on,
             "opponent": match.opponent,
             "is_official": match.is_official,
+            "mvp_player_id": match.mvp_player_id,
         }
     )
 
@@ -59,6 +67,23 @@ async def update_match(
     if match is None:
         raise _not_found("Partido")
     match.is_official = payload.is_official
+    await db.flush()
+    held_on = await points_repo.match_date(db, match)
+    await db.commit()
+    return ok(_match_out(match, held_on))
+
+
+@router.put("/matches/{match_id}/mvp", response_model=Envelope[MatchOut])
+async def set_mvp(
+    match_id: uuid.UUID, payload: MatchMvpIn, db: SessionDep, _: CurrentUser
+) -> Envelope[MatchOut]:
+    """Elige (o quita, con null) el MVP del partido: suma puntos en el Fantasy si jugó."""
+    match = await points_repo.get_match(db, match_id)
+    if match is None:
+        raise _not_found("Partido")
+    if payload.player_id is not None and await db.get(Player, payload.player_id) is None:
+        raise _not_found("Jugador")
+    match.mvp_player_id = payload.player_id
     await db.flush()
     held_on = await points_repo.match_date(db, match)
     await db.commit()

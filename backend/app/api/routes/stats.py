@@ -11,24 +11,21 @@ from app.api.errors import ApiError
 from app.db import match_repo, points_repo
 from app.db.models import Player, StintRow
 from app.domain.points.callup import Position
-from app.domain.rating import player_rating
-from app.domain.rating.match import goal_events, rating_input
+from app.domain.rating.match import goal_events, match_results
 from app.domain.roles import STAFF_ROLES
 from app.domain.stints.events import (
     EventError,
     EventKind,
+    MatchEvent,
     counts_by_player,
     effective_events,
     team_fouls_by_part,
 )
 from app.domain.stints.models import VALID_PARTS, Stint
 from app.domain.stints.stats import (
-    GoalEvent,
-    LineupSegment,
     QuintetRating,
     build_segments,
     has_segment,
-    on_court_goals_by_player,
     quintet_stats,
     seconds_by_player,
 )
@@ -102,7 +99,7 @@ async def match_stats(
     ]
     quintets.sort(key=lambda q: -q.seconds)
 
-    players = await _match_players(db, seconds, counts, segments, covered_goals)
+    players = await _match_players(db, stints, raw_events, seconds, counts)
     warnings = _warning(uncovered) if stints else []
     if user.role not in STAFF_ROLES:
         quintets, warnings = [], []
@@ -125,38 +122,28 @@ async def match_stats(
 
 async def _match_players(
     db: SessionDep,
+    stints: list[Stint],
+    raw_events: list[MatchEvent],
     seconds: dict[str, int],
     counts: dict[str, dict[EventKind, int]],
-    segments: tuple[LineupSegment, ...],
-    covered_goals: list[GoalEvent],
 ) -> list[MatchPlayerStatsOut]:
     """Filas por jugador con su nota. Sin tramos (partido sin cerrar) no hay nota."""
     rows = await _player_rows(db, set(seconds) | set(counts))
-    on_court = on_court_goals_by_player(segments, covered_goals)
+    goalkeepers = {pid for pid, p in rows.items() if p.position is Position.GOALKEEPER}
+    results = match_results(stints, raw_events, goalkeepers)
     players = []
     for pid, player in rows.items():
-        player_seconds, player_counts = seconds.get(pid, 0), counts.get(pid, {})
-        base = _player_stats(player, player_seconds, player_counts)
-        on_court_goals = on_court.get(pid, (0, 0))
-        rating = (
-            _rating(player, player_counts, player_seconds, on_court_goals) if segments else None
+        base = _player_stats(player, seconds.get(pid, 0), counts.get(pid, {}))
+        result = results.get(pid)
+        players.append(
+            MatchPlayerStatsOut(
+                **base.model_dump(),
+                rating=result.rating if result else None,
+                score=result.score if result else None,
+            )
         )
-        players.append(MatchPlayerStatsOut(**base.model_dump(), rating=rating))
     players.sort(key=lambda p: (-p.seconds, p.dorsal))
     return players
-
-
-def _rating(
-    player: Player, counts: dict[EventKind, int], seconds: int, on_court: tuple[int, int]
-) -> float | None:
-    return player_rating(
-        rating_input(
-            is_goalkeeper=player.position is Position.GOALKEEPER,
-            seconds=seconds,
-            counts=counts,
-            on_court=on_court,
-        )
-    )
 
 
 def _player_stats(player: Player, seconds: int, counts: dict[EventKind, int]) -> PlayerStatsOut:

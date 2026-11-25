@@ -5,6 +5,7 @@ import type {
   FantasyLineup,
   FantasyMarket,
   FantasyRound,
+  RoundSlot,
   FantasyStandings,
   FantasyTransfers,
   SquadCopy,
@@ -63,6 +64,25 @@ export const STANDINGS: FantasyStandings = {
   ],
 };
 
+function emptySlot(slot: RoundSlot["slot"]): RoundSlot {
+  return {
+    slot,
+    copy_id: null,
+    player_id: null,
+    name: null,
+    dorsal: null,
+    photo_url: null,
+    rating: null,
+    score: null,
+    goals: 0,
+    points: 0,
+    captain: false,
+    mvp: false,
+    breakdown: [],
+    bonus: [],
+  };
+}
+
 export const ROUND: FantasyRound = {
   match_id: "m1",
   status: "scored",
@@ -70,11 +90,54 @@ export const ROUND: FantasyRound = {
   payout: 0,
   negative_balance: false,
   slots: [
-    { slot: "goalkeeper", copy_id: null, player_id: null, name: null, rating: null, goals: 0, points: 0, captain: false },
-    { slot: "field", copy_id: "c1", player_id: "p1", name: "Ana Ruiz", rating: 9.3, goals: 2, points: 13, captain: false },
-    { slot: "field", copy_id: "c2", player_id: "p2", name: "Bea Soto", rating: 6.3, goals: 0, points: 6, captain: false },
-    { slot: "field", copy_id: "c3", player_id: "p3", name: "Dani Gil", rating: 6.0, goals: 0, points: 6, captain: false },
-    { slot: "field", copy_id: null, player_id: null, name: null, rating: null, goals: 0, points: 0, captain: false },
+    emptySlot("goalkeeper"),
+    {
+      ...emptySlot("field"),
+      copy_id: "c1",
+      player_id: "p1",
+      name: "Ana Ruiz",
+      dorsal: 7,
+      rating: 10,
+      score: 12.7,
+      goals: 2,
+      points: 13,
+      breakdown: [
+        { key: "base", count: 1, points: 5.4 },
+        { key: "goals", count: 2, points: 5 },
+        { key: "assists", count: 2, points: 1.4 },
+        { key: "steals", count: 2, points: 0.6 },
+        { key: "goals_for_on_court", count: 2, points: 0.3 },
+      ],
+    },
+    {
+      ...emptySlot("field"),
+      copy_id: "c2",
+      player_id: "p2",
+      name: "Bea Soto",
+      dorsal: 8,
+      rating: 6.3,
+      score: 6.3,
+      points: 6,
+      breakdown: [
+        { key: "base", count: 1, points: 5.4 },
+        { key: "steals", count: 3, points: 0.9 },
+      ],
+    },
+    {
+      ...emptySlot("field"),
+      copy_id: "c3",
+      player_id: "p3",
+      name: "Dani Gil",
+      dorsal: 9,
+      rating: 6,
+      score: 6,
+      points: 6,
+      breakdown: [
+        { key: "base", count: 1, points: 5.4 },
+        { key: "clean_streaks", count: 2, points: 0.6 },
+      ],
+    },
+    emptySlot("field"),
   ],
 };
 

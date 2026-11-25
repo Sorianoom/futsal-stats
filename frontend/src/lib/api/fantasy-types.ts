@@ -66,7 +66,8 @@ export interface NextRound {
   match_id: string;
   opponent: string;
   held_on: string;
-  /** Momento ISO en que se bloquea la alineación (00:00 en Madrid del día del partido). */
+  /** Momento ISO del bloqueo si ya se sabe: al empezar el partido o, si no empieza ese día, a las
+   * 00:00 del día siguiente. */
   locks_at: string;
 }
 
@@ -123,16 +124,33 @@ export interface FantasyStandings {
   rows: StandingsRow[];
 }
 
+/** Una línea del porqué: la acción (`base`, `goals`, `saves`…), cuántas veces y lo que suma. */
+export interface BreakdownItem {
+  key: string;
+  count: number;
+  points: number;
+}
+
 export interface RoundSlot {
   slot: Position;
   copy_id: string | null;
   player_id: string | null;
   name: string | null;
+  dorsal: number | null;
+  photo_url: string | null;
+  /** La nota que se ve (1-10). */
   rating: number | null;
+  /** Puntuación exacta sin tope: la que se redondea para los puntos. */
+  score: number | null;
   goals: number;
   /** Ya multiplicados si es el capitán. */
   points: number;
   captain: boolean;
+  mvp: boolean;
+  /** Base y acciones: suman `score`. Vacío en jornadas cerradas antes de guardarse el porqué. */
+  breakdown: BreakdownItem[];
+  /** Extras del Fantasy fuera de la nota: el MVP. */
+  bonus: BreakdownItem[];
 }
 
 export interface FantasyRound {

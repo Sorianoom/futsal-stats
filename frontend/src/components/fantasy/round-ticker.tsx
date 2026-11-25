@@ -29,7 +29,7 @@ export function RoundTicker({ round, live = null }: RoundTickerProps) {
           <span className={`${BADGE} bg-primary text-primary-foreground`}>En juego</span>
           <span className="text-base font-extrabold">{`vs ${live.opponent}`}</span>
           <span className="text-muted-foreground">{dayOf(live.held_on)}</span>
-          <span className="text-muted-foreground sm:ml-auto">Alineación cerrada: puntúa la que tenías a las 00:00</span>
+          <span className="text-muted-foreground sm:ml-auto">Alineación cerrada: puntúa la que tenías al empezar el partido</span>
         </div>
       ) : null}
       <div className={`${ROW} bg-gold/10`}>
@@ -38,7 +38,7 @@ export function RoundTicker({ round, live = null }: RoundTickerProps) {
           <>
             <span className="text-base font-extrabold">{`vs ${round.opponent}`}</span>
             <span className="text-muted-foreground">{dayOf(round.held_on)}</span>
-            <span className="text-gold-text sm:ml-auto">{lockText(round.locks_at)}</span>
+            <span className="text-gold-text sm:ml-auto">{lockText(round.held_on)}</span>
           </>
         ) : (
           <span className="text-muted-foreground">No hay ninguna jornada programada</span>

@@ -144,16 +144,32 @@ class StandingsOut(BaseModel):
     rows: list[StandingRowOut]
 
 
+class BreakdownItemOut(BaseModel):
+    """Una línea del porqué de los puntos: la acción, cuántas veces y lo que suma."""
+
+    key: str
+    count: int
+    points: float
+
+
 class SlotOut(BaseModel):
     slot: Position
     copy_id: uuid.UUID | None
     player_id: uuid.UUID | None
     name: str | None
+    dorsal: int | None = None
+    photo_url: str | None = None
     rating: float | None
+    # Puntuación exacta sin tope (la que se redondea para los puntos).
+    score: float | None = None
     goals: int
     # Ya multiplicados si es el capitán.
     points: int
     captain: bool
+    mvp: bool = False
+    # Porqué de la nota (base y acciones, suman `score`) y extras del Fantasy (gol, MVP).
+    breakdown: list[BreakdownItemOut] = []
+    bonus: list[BreakdownItemOut] = []
 
 
 class RoundDetailOut(BaseModel):

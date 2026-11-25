@@ -91,3 +91,25 @@ async def participant_team(
         return ok(await fantasy_rivals.participant_team(db, user, now, rng, participant_id))
     except fantasy_rivals.ParticipantNotFoundError as error:
         raise ApiError(404, "not_found", "Participante no encontrado") from error
+
+
+@router.get(
+    "/rounds/{match_id}/participants/{participant_id}", response_model=Envelope[RoundDetailOut]
+)
+async def participant_round(
+    match_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    db: SessionDep,
+    user: AnyUser,
+    now: NowDep,
+    rng: RngDep,
+) -> Envelope[RoundDetailOut]:
+    """Lo que alineó un participante en una jornada ya bloqueada (al empezar el partido)."""
+    try:
+        return ok(
+            await fantasy_rivals.participant_round_of(db, user, now, rng, match_id, participant_id)
+        )
+    except (fantasy_rivals.ParticipantNotFoundError, fantasy_rivals.RoundNotVisibleError) as error:
+        raise ApiError(404, "not_found", "Jornada o participante no encontrados") from error
+    except fantasy_rivals.PrivateSquadError as error:
+        raise ApiError(403, "private_squad", "Su plantilla es privada") from error

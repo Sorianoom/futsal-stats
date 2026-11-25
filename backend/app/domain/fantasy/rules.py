@@ -41,7 +41,9 @@ MAX_MONEY_AMOUNT = 1000 * MONEY_PER_MILLION
 # Movimientos que devuelve el historial de traspasos.
 TRANSFERS_PAGE_SIZE = 50
 
-POINTS_PER_GOAL = 2
+# Los goles solo suman dentro de la nota (`rating/score.py`): no hay puntos aparte por gol.
+# El MVP del partido (lo elige el entrenador) suma esto si jugó.
+MVP_BONUS = 2
 MIN_PLAYER_POINTS = 0
 # El capitán (opcional, cualquiera de los 5) multiplica sus puntos de la jornada, también los
 # negativos si algún día los hay.

@@ -6,7 +6,12 @@ Lo usan las estadísticas del partido y el Fantasy, para que la nota se calcule 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from app.domain.rating.score import RatingInput, player_rating
+from app.domain.rating.score import (
+    CLEAN_STREAK_SECONDS,
+    RatingInput,
+    player_rating,
+    rating_score,
+)
 from app.domain.stints.events import (
     EventKind,
     MatchEvent,
@@ -17,6 +22,7 @@ from app.domain.stints.models import Stint
 from app.domain.stints.stats import (
     GoalEvent,
     build_segments,
+    clean_streaks_by_player,
     has_segment,
     on_court_goals_by_player,
     seconds_by_player,
@@ -25,10 +31,21 @@ from app.domain.stints.stats import (
 
 @dataclass(frozen=True, slots=True)
 class PlayerMatchResult:
-    """Nota del jugador (None si no la tiene) y goles que marcó."""
+    """Nota que se enseña (None si no la tiene), goles que marcó, si fue el MVP, si es portero
+    (su gol puntúa doble) y la puntuación exacta sin tope que usa el Fantasy (`score`; si falta,
+    se usa la nota)."""
 
     rating: float | None
     goals: int
+    mvp: bool = False
+    goalkeeper: bool = False
+    score: float | None = None
+    # Estadísticas con las que se calculó la nota (para explicarla); None sin tramos.
+    data: RatingInput | None = None
+
+    @property
+    def fantasy_score(self) -> float | None:
+        return self.score if self.score is not None else self.rating
 
 
 def goal_events(events: Iterable[MatchEvent]) -> list[GoalEvent]:
@@ -46,6 +63,7 @@ def rating_input(
     seconds: int,
     counts: Mapping[EventKind, int],
     on_court: tuple[int, int],
+    clean_streaks: int,
 ) -> RatingInput:
     """Entrada de la nota. Los tiros ya son tiros sin gol: el gol no genera un evento de tiro."""
     goals_for, goals_against = on_court
@@ -63,6 +81,7 @@ def rating_input(
         saves=counts.get(EventKind.SAVE, 0),
         goals_for_on_court=goals_for,
         goals_against_on_court=goals_against,
+        clean_streaks=clean_streaks,
     )
 
 
@@ -78,20 +97,23 @@ def match_results(
         g for g in goal_events(effective_events(raw_events)) if has_segment(segments, g.part, g.t)
     ]
     on_court = on_court_goals_by_player(segments, goals)
+    streaks = clean_streaks_by_player(segments, goals, CLEAN_STREAK_SECONDS)
     results = {}
     for player_id in set(seconds) | set(counts):
         player_counts = counts.get(player_id, {})
-        rating = (
-            player_rating(
-                rating_input(
-                    is_goalkeeper=player_id in goalkeeper_ids,
-                    seconds=seconds.get(player_id, 0),
-                    counts=player_counts,
-                    on_court=on_court.get(player_id, (0, 0)),
-                )
-            )
-            if segments
-            else None
+        is_goalkeeper = player_id in goalkeeper_ids
+        data = rating_input(
+            is_goalkeeper=is_goalkeeper,
+            seconds=seconds.get(player_id, 0),
+            counts=player_counts,
+            on_court=on_court.get(player_id, (0, 0)),
+            clean_streaks=streaks.get(player_id, 0),
         )
-        results[player_id] = PlayerMatchResult(rating, player_counts.get(EventKind.GOAL, 0))
+        results[player_id] = PlayerMatchResult(
+            rating=player_rating(data) if segments else None,
+            goals=player_counts.get(EventKind.GOAL, 0),
+            goalkeeper=is_goalkeeper,
+            score=rating_score(data) if segments else None,
+            data=data if segments else None,
+        )
     return results

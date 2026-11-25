@@ -20,8 +20,10 @@ describe("Cómo se juega", () => {
     const dialog = screen.getByRole("dialog", { name: "Cómo se juega" });
     for (const text of [
       "1 portero y 4 de campo",
-      "00:00",
-      "+2 por gol",
+      "cuando el entrenador empieza el partido",
+      "cada gol suma 2,5 (5 si es del portero)",
+      "+2 si el entrenador lo elige MVP",
+      "10 minutos seguidos en pista sin que te marquen",
       "doble",
       "también lo malo",
       "20 M",

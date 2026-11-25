@@ -213,6 +213,14 @@ class Match(Base):
     opponent: Mapped[str] = mapped_column(String(100))
     # Solo los partidos oficiales son jornadas del Fantasy (los amistosos no puntúan).
     is_official: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # MVP del partido, elegido por el entrenador: suma puntos en el Fantasy.
+    # Primera vez que el servidor recibe el inicio de la 1ª parte: bloquea el Fantasy.
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    mvp_player_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("players.id"), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = _created_at()
 
 

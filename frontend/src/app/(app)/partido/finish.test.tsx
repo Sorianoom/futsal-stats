@@ -477,7 +477,8 @@ describe("traspaso de estadísticas y convocatoria", () => {
       },
     });
     renderWithAuth(<PartidoPage />);
-    await userEvent.click(await screen.findByRole("button", { name: "Traspasar estadísticas" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Opciones del partido" }));
+    await userEvent.click(screen.getByRole("button", { name: "Traspasar estadísticas" }));
     const dialog = screen.getByRole("dialog", { name: "Traspasar estadísticas" });
 
     await userEvent.click(within(within(dialog).getByRole("radiogroup", { name: /^De/ })).getByRole("radio", { name: /Ana Ruiz/ }));
@@ -515,11 +516,29 @@ describe("traspaso de estadísticas y convocatoria", () => {
     });
     renderWithAuth(<PartidoPage />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Borrar estadísticas" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Opciones del partido" }));
+    await userEvent.click(screen.getByRole("button", { name: "Borrar estadísticas" }));
     const dialog = screen.getByRole("dialog", { name: "¿Borrar las estadísticas del partido?" });
     await userEvent.click(within(dialog).getByRole("button", { name: "Borrar estadísticas" }));
 
     expect(server.calls.some((c) => c.method === "DELETE" && c.path.endsWith("/stats"))).toBe(true);
     expect(await screen.findByText("Antes de empezar, confirma quién está convocado hoy.")).toBeInTheDocument();
+  });
+
+  it("elige el MVP del partido entre los que han jugado", async () => {
+    lineup = lineupOf({ type: "part_started", part: 1, starters: STARTERS }, { type: "part_ended", t: 1200 });
+    const server = api({ "PUT /matches/m1/mvp": { data: { ...MATCH, mvp_player_id: "p2" } } });
+    renderWithAuth(<PartidoPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Opciones del partido" }));
+    await userEvent.click(screen.getByRole("button", { name: "Elegir MVP" }));
+    const dialog = screen.getByRole("dialog", { name: "MVP del partido" });
+    expect(within(dialog).queryByRole("radio", { name: /Gema Ruiz/ })).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Bea Ruiz/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar MVP" }));
+
+    expect(server.calls.find((c) => c.path.endsWith("/mvp"))?.body).toEqual({ player_id: "p2" });
+    await userEvent.click(screen.getByRole("button", { name: "Opciones del partido" }));
+    expect(screen.getByRole("button", { name: "MVP: Bea Ruiz" })).toBeInTheDocument();
   });
 });

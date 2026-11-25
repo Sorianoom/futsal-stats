@@ -107,7 +107,88 @@ describe("Jornadas", () => {
 
     await userEvent.click(within(items[1]).getByRole("button"));
 
-    expect(await screen.findByRole("table", { name: "Mi alineación" })).toHaveTextContent("Ana Ruiz");
+    const mine = await screen.findByRole("region", { name: "Mi alineación" });
+    expect(within(mine).getByRole("button", { name: "Ana Ruiz: 13 puntos" })).toBeInTheDocument();
+  });
+
+  it("la jornada se ve en la pista con los puntos y explica por qué puntuó cada uno", async () => {
+    api();
+    await openTab("Jornadas");
+    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
+    await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
+    const lineup = await screen.findByRole("region", { name: "Mi alineación" });
+
+    await userEvent.click(within(lineup).getByRole("button", { name: "Ana Ruiz: 13 puntos" }));
+
+    const why = within(lineup).getByRole("region", { name: "Por qué: Ana Ruiz" });
+    for (const text of [
+      "Base5,4",
+      "2 goles+5,0",
+      "2 asistencias+1,4",
+      "2 robos+0,6",
+      "2 goles a favor con él en pista+0,3",
+      "Nota exacta 12,7, redondeada13",
+      "Total13",
+    ]) {
+      expect(why).toHaveTextContent(text);
+    }
+  });
+
+  it("en una jornada ya bloqueada se ve lo que alineó cada uno, con su capitán", async () => {
+    api({
+      "GET /fantasy/rounds/m1/participants/pa1": {
+        data: {
+          ...ROUND,
+          total: 30,
+          slots: ROUND.slots.map((slot) => (slot.copy_id === "c2" ? { ...slot, captain: true, points: 12 } : slot)),
+        },
+      },
+    });
+    await openTab("Jornadas");
+    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
+    await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
+    const dialog = await screen.findByRole("dialog");
+
+    const teams = within(dialog).getByRole("list", { name: "Equipos de esta jornada" });
+    expect(within(teams).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/Míster.*30 pts/),
+      expect.stringMatching(/Carla Ruiz \(tú\).*25 pts/),
+    ]);
+    await userEvent.click(within(teams).getByRole("button", { name: /Míster/ }));
+
+    const lineup = await within(dialog).findByRole("region", { name: "Alineación de Míster" });
+    await userEvent.click(within(lineup).getByRole("button", { name: "Bea Soto: 12 puntos" }));
+    expect(within(lineup).getByRole("region", { name: "Por qué: Bea Soto" })).toHaveTextContent("Capitán×2");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Volver a mi alineación" }));
+    expect(await within(dialog).findByRole("region", { name: "Mi alineación" })).toBeInTheDocument();
+  });
+
+  it("una jornada pendiente no enseña los equipos de los demás", async () => {
+    api({ "GET /fantasy/rounds/m2/me": { data: { ...ROUND, match_id: "m2", status: "pending", total: 0 } } });
+    await openTab("Jornadas");
+    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
+    await userEvent.click(within(within(list).getAllByRole("listitem")[0]).getByRole("button"));
+    const dialog = await screen.findByRole("dialog");
+
+    await within(dialog).findByRole("region", { name: "Mi alineación" });
+    expect(within(dialog).queryByRole("list", { name: "Equipos de esta jornada" })).not.toBeInTheDocument();
+  });
+
+  it("de una plantilla privada solo dice que es privada", async () => {
+    api({
+      "GET /fantasy/rounds/m1/participants/pa1": {
+        status: 403,
+        error: { code: "private_squad", message: "Su plantilla es privada" },
+      },
+    });
+    await openTab("Jornadas");
+    const list = await screen.findByRole("list", { name: "Mis puntos por jornada" });
+    await userEvent.click(within(within(list).getAllByRole("listitem")[1]).getByRole("button"));
+    const dialog = await screen.findByRole("dialog");
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /Míster/ }));
+
+    expect(await within(dialog).findByText("Su plantilla es privada: no se ve su alineación.")).toBeInTheDocument();
   });
 
   it("con la alineación bloqueada y el partido sin cerrar, enseña la jornada en juego y la próxima", async () => {
@@ -147,8 +228,8 @@ describe("Equipo de otro participante", () => {
     const dialog = await openParticipant("Carla Ruiz");
 
     expect(within(dialog).getByRole("heading", { name: "Carla Ruiz" })).toBeInTheDocument();
-    const lineup = await within(dialog).findByRole("table", { name: "Alineación de Carla Ruiz" });
-    expect(lineup).toHaveTextContent("Ana Ruiz");
+    const lineup = await within(dialog).findByRole("region", { name: "Alineación de Carla Ruiz" });
+    expect(within(lineup).getByRole("button", { name: "Ana Ruiz: 13 puntos" })).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Alineación vs Betis");
     expect(dialog).toHaveTextContent("Total: 25");
     expect(dialog).not.toHaveTextContent("Cobrado");

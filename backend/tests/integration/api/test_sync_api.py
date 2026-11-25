@@ -1,8 +1,12 @@
 import uuid
+from datetime import datetime
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models import Match
 from app.domain.points.callup import Position
 from app.domain.roles import Role
 from tests.integration.api.conftest import Login, MakePlayer
@@ -404,3 +408,31 @@ async def test_a_lineup_undo_needs_what_it_voids(client: AsyncClient, login: Log
     response = await sync(client, headers, match_id, lineup_events=[bad])
 
     assert response.status_code == 422
+
+
+async def _started_at(session: AsyncSession, match_id: str) -> datetime | None:
+    query = select(Match.started_at).where(Match.id == uuid.UUID(match_id))
+    started: datetime | None = (await session.execute(query)).scalar_one()
+    return started
+
+
+async def test_the_first_part_start_marks_when_the_match_started(
+    client: AsyncClient, login: Login, make_player: MakePlayer, session: AsyncSession
+) -> None:
+    headers = await login()
+    match_id = await new_match(client, headers)
+    starters = [str((await make_player(n)).id) for n in range(1, 6)]
+
+    def start(seq: int, part: int) -> dict[str, Any]:
+        payload = {"type": "part_started", "part": part, "starters": starters}
+        return {"id": str(uuid.uuid4()), "seq": seq, "payload": payload}
+
+    await sync(client, headers, match_id, events=[event(1, "shot", starters[0])])
+    before = await _started_at(session, match_id)
+    await sync(client, headers, match_id, lineup_events=[start(1, 1)])
+    started = await _started_at(session, match_id)
+    await sync(client, headers, match_id, lineup_events=[start(2, 2)])
+
+    assert before is None
+    assert started is not None
+    assert await _started_at(session, match_id) == started  # la 2ª parte no la mueve

@@ -37,8 +37,10 @@ from tests.integration.api.test_stats_api import played_match
 SEED = 20261110
 # Liga creada el 10/10/2026; el partido de `played_match` es el 17/10/2026.
 LEAGUE_DAY = datetime(2026, 10, 10, 10, 0, tzinfo=UTC)
-BEFORE_LOCK = datetime(2026, 10, 16, 21, 59, tzinfo=UTC)  # 23:59 en Madrid
-AFTER_LOCK = datetime(2026, 10, 16, 22, 0, tzinfo=UTC)  # 00:00 del 17 en Madrid
+# Día del partido: por la mañana la alineación sigue abierta; se bloquea al empezar (18:00).
+MATCH_MORNING = datetime(2026, 10, 17, 8, 0, tzinfo=UTC)
+KICKOFF = datetime(2026, 10, 17, 16, 0, tzinfo=UTC)
+AFTER_KICKOFF = datetime(2026, 10, 17, 16, 30, tzinfo=UTC)
 # Noche del partido: jornada puntuada pero provisional (se cierra a las 00:00 del 18).
 AFTER_MATCH = datetime(2026, 10, 17, 20, 0, tzinfo=UTC)
 MATCH_DAY = "2026-10-17"
@@ -52,6 +54,33 @@ class Clock:
 @pytest.fixture
 def clock() -> Clock:
     return Clock(LEAGUE_DAY)
+
+
+async def _start(
+    client: AsyncClient, staff: dict[str, str], make_player: MakePlayer, match_id: str
+) -> None:
+    """Envía solo el inicio de la 1ª parte, como hace el iPad al pulsar «Empezar»."""
+    starters = [str((await make_player(40 + n)).id) for n in range(5)]
+    payload = {"type": "part_started", "part": 1, "starters": starters}
+    body = {
+        "events": [],
+        "ratings": [],
+        "lineup_events": [{"id": str(uuid.uuid4()), "seq": 1, "payload": payload}],
+    }
+    response = await client.post(f"/matches/{match_id}/sync", json=body, headers=staff)
+    assert response.status_code == 200, response.text
+
+
+async def _play(clock: Clock, *args: Any, **kwargs: Any) -> tuple[str, Any]:
+    """`played_match` sincronizado a la hora de inicio (bloquea el Fantasy); el reloj vuelve
+    después a donde estaba."""
+    before = clock.now
+    clock.now = KICKOFF
+    try:
+        match_id, players = await played_match(*args, **kwargs)
+    finally:
+        clock.now = before
+    return str(match_id), players
 
 
 @pytest.fixture
@@ -262,6 +291,7 @@ async def test_next_round_is_the_next_official_match_not_locked(
     clock: Clock,
     join: Join,
     staff: dict[str, str],
+    make_player: MakePlayer,
 ) -> None:
     headers = await join()
     await _create_league(client, staff)
@@ -275,9 +305,13 @@ async def test_next_round_is_the_next_official_match_not_locked(
         "match_id": match_id,
         "opponent": "Rival FS",
         "held_on": MATCH_DAY,
-        "locks_at": "2026-10-17T00:00:00+02:00",
+        "locks_at": "2026-10-18T00:00:00+02:00",  # como tarde; antes si empieza el partido
     }
-    clock.now = AFTER_LOCK
+    clock.now = MATCH_MORNING
+    assert (await _me(client, headers))["next_round"]["match_id"] == match_id
+    clock.now = KICKOFF
+    await _start(client, staff, make_player, match_id)
+    clock.now = AFTER_KICKOFF
     assert (await _me(client, headers))["next_round"] is None
 
 
@@ -481,10 +515,7 @@ async def _expected_points(
 ) -> dict[str, int]:
     stats = (await client.get(f"/matches/{match_id}/stats", headers=headers)).json()["data"]
     rows = {row["player_id"]: row for row in stats["players"]}
-    return {
-        pid: player_points(rows[pid]["rating"], rows[pid]["goals"]) if pid in rows else 0
-        for pid in player_ids
-    }
+    return {pid: player_points(rows[pid]["score"]) if pid in rows else 0 for pid in player_ids}
 
 
 async def _scored_round(
@@ -497,7 +528,7 @@ async def _scored_round(
     me = await _me(client, headers)
     squad = me["squad"]
     await _put_lineup(client, headers, field=[c["copy_id"] for c in squad])
-    match_id, _ = await played_match(client, staff, make_player, players=players)
+    match_id, _ = await _play(clock, client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
     expected = await _expected_points(client, staff, match_id, [c["player_id"] for c in squad])
     return headers, match_id, me, sum(expected.values())
@@ -557,15 +588,27 @@ async def test_round_detail_lists_my_five_slots(
         "copy_id": None,
         "player_id": None,
         "name": None,
+        "dorsal": None,
+        "photo_url": None,
         "rating": None,
+        "score": None,
         "goals": 0,
         "points": 0,
         "captain": False,
+        "mvp": False,
+        "breakdown": [],
+        "bonus": [],
     }
     filled = data["slots"][1:3]
     assert [s["copy_id"] for s in filled] == [c["copy_id"] for c in me["squad"]]
-    assert all(s["rating"] is not None and s["name"] for s in filled)
+    assert all(s["rating"] is not None and s["name"] and s["dorsal"] for s in filled)
     assert sum(s["points"] for s in data["slots"]) == expected_total
+    for slot in filled:
+        # El porqué: base y acciones suman la nota exacta; los extras, el resto de los puntos.
+        assert slot["breakdown"][0] == {"key": "base", "count": 1, "points": 5.4}
+        assert sum(p["points"] for p in slot["breakdown"]) == pytest.approx(slot["score"])
+        bonus = sum(p["points"] for p in slot["bonus"])
+        assert slot["points"] == round(slot["score"] + 1e-9) + bonus
 
 
 async def test_a_lineup_saved_after_the_lock_does_not_change_the_round(
@@ -580,11 +623,11 @@ async def test_a_lineup_saved_after_the_lock_does_not_change_the_round(
     headers = await join()
     await _create_league(client, staff)
     squad = (await _me(client, headers))["squad"]
-    clock.now = BEFORE_LOCK
+    clock.now = MATCH_MORNING  # el mismo día, antes de empezar: cuenta
     await _put_lineup(client, headers, field=[c["copy_id"] for c in squad])
-    clock.now = AFTER_LOCK
+    match_id, _ = await _play(clock, client, staff, make_player, players=players)
+    clock.now = AFTER_KICKOFF
     await _put_lineup(client, headers)  # vacía, ya para la jornada siguiente
-    match_id, _ = await played_match(client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
 
     detail = (await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)).json()["data"]
@@ -605,9 +648,9 @@ async def test_a_lineup_saved_after_the_lock_is_for_the_next_round(
     headers = await join()
     await _create_league(client, staff)
     squad = (await _me(client, headers))["squad"]
-    clock.now = AFTER_LOCK
+    match_id, _ = await _play(clock, client, staff, make_player, players=players)
+    clock.now = AFTER_KICKOFF
     await _put_lineup(client, headers, field=[c["copy_id"] for c in squad])
-    match_id, _ = await played_match(client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
 
     standings = (await client.get("/fantasy/standings", headers=headers)).json()["data"]
@@ -627,7 +670,7 @@ async def test_a_locked_round_of_an_open_match_is_pending(
     players = await _field_players(make_player)
     headers = await join()
     await _create_league(client, staff)
-    match_id, _ = await played_match(client, staff, make_player, players=players, finalize=False)
+    match_id, _ = await _play(clock, client, staff, make_player, players=players, finalize=False)
     next_id = await _new_match(client, staff, "2026-10-24")
     await _new_match(client, staff, "2026-10-31")
     clock.now = AFTER_MATCH
@@ -658,7 +701,7 @@ async def test_rows_are_ranked_by_total(
     await _create_league(client, staff)
     squad = (await _me(client, assistant))["squad"]
     await _put_lineup(client, assistant, field=[c["copy_id"] for c in squad])
-    await played_match(client, staff, make_player, players=players)
+    await _play(clock, client, staff, make_player, players=players)
     clock.now = AFTER_MATCH
 
     rows = (await client.get("/fantasy/standings", headers=coach)).json()["data"]["rows"]
@@ -771,6 +814,51 @@ async def test_anyone_sees_a_rivals_squad_and_scored_lineup(
         assert filled == [c["copy_id"] for c in me["squad"]]
 
 
+async def _round_of(
+    client: AsyncClient, headers: dict[str, str], match_id: str, participant_id: str
+) -> Any:
+    return await client.get(
+        f"/fantasy/rounds/{match_id}/participants/{participant_id}", headers=headers
+    )
+
+
+async def test_anyone_sees_what_each_participant_lined_up_in_a_locked_round(
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
+) -> None:
+    headers, match_id, me, _ = await _scored_round(client, join, staff, make_player, clock)
+    own = (await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)).json()["data"]
+    rival = await join("Lucas")
+    assistant = await login(Role.ASSISTANT_COACH)
+
+    for viewer in (rival, assistant, headers):
+        response = await _round_of(client, viewer, match_id, me["me"]["participant_id"])
+        assert response.status_code == 200, response.text
+        assert response.json()["data"] == own
+
+
+async def test_the_round_of_someone_else_is_hidden_until_it_locks(
+    client: AsyncClient, make_player: MakePlayer, clock: Clock, staff: dict[str, str], join: Join
+) -> None:
+    await _field_players(make_player)
+    headers = await join()
+    await _create_league(client, staff)
+    me = await _me(client, headers)
+    match_id = await _new_match(client, staff, MATCH_DAY)
+    clock.now = MATCH_MORNING
+    rival = await join("Lucas")
+
+    response = await _round_of(client, rival, match_id, me["me"]["participant_id"])
+    unknown = await _round_of(client, rival, match_id, str(uuid.uuid4()))
+
+    assert response.status_code == 404
+    assert unknown.status_code == 404
+
+
 async def test_the_lineup_of_an_open_round_is_not_shown(
     client: AsyncClient, make_player: MakePlayer, clock: Clock, staff: dict[str, str], join: Join
 ) -> None:
@@ -780,7 +868,7 @@ async def test_the_lineup_of_an_open_round_is_not_shown(
     me = await _me(client, headers)
     await _put_lineup(client, headers, field=[c["copy_id"] for c in me["squad"]])
     await _new_match(client, staff, MATCH_DAY)
-    clock.now = BEFORE_LOCK
+    clock.now = MATCH_MORNING
     rival = await join("Lucas")
 
     data = (await _team(client, rival, me["me"]["participant_id"])).json()["data"]
@@ -810,10 +898,11 @@ async def test_the_locked_round_of_an_open_match_is_the_live_round(
     players = await _field_players(make_player)
     headers = await join()
     await _create_league(client, staff)
-    match_id, _ = await played_match(client, staff, make_player, players=players, finalize=False)
+    match_id, _ = await _play(clock, client, staff, make_player, players=players, finalize=False)
     next_id = await _new_match(client, staff, "2026-10-24")
+    clock.now = MATCH_MORNING
     before = await _me(client, headers)
-    clock.now = AFTER_LOCK
+    clock.now = AFTER_KICKOFF
 
     during = await _me(client, headers)
 
@@ -839,3 +928,40 @@ async def test_once_the_match_is_closed_it_is_no_longer_live(
 
     assert data["live_round"] is None
     assert data["last_round"]["match_id"] == match_id
+
+
+async def test_the_mvp_of_the_match_adds_two_fantasy_points(
+    client: AsyncClient,
+    make_player: MakePlayer,
+    clock: Clock,
+    staff: dict[str, str],
+    join: Join,
+) -> None:
+    headers, match_id, me, expected_total = await _scored_round(
+        client, join, staff, make_player, clock
+    )
+    mvp = me["squad"][0]["player_id"]
+
+    response = await client.put(f"/matches/{match_id}/mvp", json={"player_id": mvp}, headers=staff)
+    detail = (await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)).json()["data"]
+    cleared = await client.put(f"/matches/{match_id}/mvp", json={"player_id": None}, headers=staff)
+    after = (await client.get(f"/fantasy/rounds/{match_id}/me", headers=headers)).json()["data"]
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["mvp_player_id"] == mvp
+    assert detail["total"] == expected_total + 2
+    assert cleared.json()["data"]["mvp_player_id"] is None
+    assert after["total"] == expected_total
+
+
+async def test_only_staff_picks_the_mvp(
+    client: AsyncClient, make_player: MakePlayer, staff: dict[str, str], join: Join
+) -> None:
+    player = await join()
+    match_id = await _new_match(client, staff, MATCH_DAY)
+
+    response = await client.put(
+        f"/matches/{match_id}/mvp", json={"player_id": None}, headers=player
+    )
+
+    assert response.status_code == 403

@@ -1,7 +1,8 @@
 # Estado del proyecto
 
 Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de trabajo.
-Última actualización: 2026-11-20 (cuentas del Fantasy del cuerpo técnico, migración 0013; sin subir junto con la 0012 y el diseño D).
+Última actualización: 2026-11-25. Todo subido: MVP (0015), nueva puntuación, bloqueo al empezar el
+partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 2026-11-25.
 
 ## Hecho y en producción
 
@@ -18,11 +19,9 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   sigue tardando ~3 s (arranque en frío).
 - **Nota de 1 a 10 por jugador y partido** (push directo a `main`, `5621d5b`, sin PR): tests en
   verde. Alimentará el Fantasy (fase 12).
-  - Cálculo en `backend/app/domain/rating/score.py`, con las tablas de pesos al principio.
-    Base 6,0; gol +1,5; asistencia +0,7; robo +0,3; pérdida −0,3; falta −0,2; amarilla −0,5;
-    roja −2,0. Campo: tiro sin gol +0,1 y ±0,3 por gol a favor o en contra en pista. Portero:
-    parada +0,4, gol encajado −0,6 y portería a cero +1,0 (≥ 10 min sin encajar). Escala fija,
-    limitada a 1–10, con un decimal. Sin nota con menos de 3 minutos o con el partido sin cerrar.
+  - Cálculo en `backend/app/domain/rating/score.py`, con las tablas de pesos al principio. Pesos
+    recalibrados el 2026-11-25 (ver «En curso» y `docs/fantasy.md`). Se enseña limitada a 1–10,
+    con un decimal. Sin nota con menos de 3 minutos o con el partido sin cerrar.
   - Solo usa lo que registra el segundo entrenador durante el partido. Nuevo evento `save`
     (parada): botón en la ficha del portero y botón directo en el panel si hay un solo portero en
     pista. Sin migración: `kind` es texto sin CHECK.
@@ -77,9 +76,7 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     (dos dispositivos) siguen pidiendo recargar.
   - Sin comprobar todavía en un partido real.
 
-## En curso
-
-- **Arreglos del partido en vivo** (sin migración, 2026-11-22):
+- **Arreglos del partido en vivo** (subido el 2026-11-22, `eefe97a`, sin migración):
   - `POST /matches/{id}/player-transfer` (staff): pasa a otro jugador todo lo de uno en ese
     partido (eventos, payloads de alineación, tramos y sanciones). 409 si el destino ya tiene
     datos. Botón «Traspasar estadísticas» en el partido; exige no tener nada sin enviar.
@@ -89,7 +86,7 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   - Convocatoria del partido (solo en el dispositivo, `localStorage` `match-squad:{id}`): se
     confirma antes de los titulares; con ella, banquillo y descanso ofrecen solo a los convocados
     (también lesionados marcados a mano) y a quien ya jugó.
-- **Móvil y jornada en juego** (sin migración, 2026-11-22):
+- **Móvil y jornada en juego** (subido el 2026-11-22, `d722817`, sin migración):
   - `GET /fantasy/me` trae `live_round`: la última jornada bloqueada con el partido sin cerrar
     (la de hoy). La franja la enseña como «En juego» encima de la próxima.
   - Pestaña **Jornadas** en el Fantasy: mis puntos por jornada; tocar una abre mi alineación.
@@ -98,10 +95,10 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     Safari en iPhone/iPad; «Ahora no» lo calla 14 días.
   - Manifiesto con `orientation: any` (antes forzaba horizontal en los móviles), `id` e icono
     maskable; iconos regenerados desde `src/app/icon.svg` (el de 512 estaba descentrado).
-- **Cláusula tras una compra cara** (sin migración): al fichar en el mercado o por clausulazo,
+- **Cláusula tras una compra cara** (subido el 2026-11-21, `c33ccdb`; migración 0014): al fichar en el mercado o por clausulazo,
   la cláusula es max(1,5 × valor, 1,25 × lo pagado). La **migración 0014** (solo datos) sube a esa
   regla las copias ya fichadas, según su último fichaje a su dueño actual; nunca baja una cláusula.
-- **Equipo de los demás desde la clasificación** (sin migración): tocar un nombre abre su
+- **Equipo de los demás desde la clasificación** (subido el 2026-11-21, `c33ccdb`): tocar un nombre abre su
   plantilla y su alineación de la última jornada bloqueada. Ver `docs/fantasy.md`.
 - **Cuentas del Fantasy del cuerpo técnico** (subido; 0012 y 0013 aplicadas en Neon el
   2026-11-20, después del push: el login dio 500 hasta aplicarlas). Reglas en `docs/fantasy.md`, «Participantes y cuentas».
@@ -117,7 +114,7 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
   - Probado en el navegador contra la API local: invitar a «Bruno», crear la cuenta, plantilla
     privada y la cuenta del entrenador viendo solo la clasificación.
 
-- **Diseño D del Fantasy, colores del club** (sin subir, sin migración; va detrás de la 0012).
+- **Diseño D del Fantasy, colores del club** (subido el 2026-11-20, `730a277`, sin migración).
   Prototipos y elección en https://claude.ai/artifact/UPKR81LBEVNWziBKReaZDP (fila D) y prototipo
   funcional en https://claude.ai/artifact/224cNNKTBaoRyQ3FfJQMQK.
   - Mientras se ve el Fantasy, `<html>` lleva `fantasy` (y `dark` en oscuro): paleta azul y
@@ -128,8 +125,8 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     jornadas (`Spark`), «en racha» arriba del mercado (más puntos en 3 jornadas), filtros del
     mercado, podio y gráfica de la temporada en la Liga.
   - API: `recent_points` (últimas 5 jornadas puntuadas) en plantilla, mercado y cláusulas.
-- **Nombre de los entrenadores en el Fantasy** (sin subir: **lleva la migración 0012**, aplicarla
-  en Neon antes del push; sin ella falla el login porque `users.display_name` no existe).
+- **Nombre de los entrenadores en el Fantasy** (subido el 2026-11-19, `28265fb`; migración 0012
+  aplicada en Neon el 2026-11-20).
   - `users.display_name` (40 caracteres, opcional). `PATCH /auth/me` lo pone o quita; solo el
     personal técnico (un jugador usa el nombre de su ficha).
   - En el Fantasy, los entrenadores tienen el botón «Tu nombre: …» junto a «Cómo se juega».
@@ -217,12 +214,49 @@ Traspaso entre sesiones y ordenadores. Se actualiza al terminar cada sesión de 
     No hay forma de reactivar a un jugador ni su cuenta (tampoco había reactivación antes).
   - Frontend: el jugador solo ve «Estadísticas»; las pantallas de entrenador le redirigen allí.
 
+## En curso
+
+- **Jornada en la pista con el porqué** (subido el 2026-11-25, sin migración). Mi equipo ya no
+  enseña puntos ni colores de forma; la jornada se ve en la pista (`FantasyPitch`, compartida) y
+  al tocar una ficha sale el desglose (`rating_breakdown`, `bonus_parts`, guardados en el hueco
+  congelado). Sin probar en el navegador.
+- **Bloqueo del Fantasy al empezar el partido** (subido el 2026-11-25; migración 0016 aplicada). Quejas:
+  el 22-nov cambiaron la alineación por la mañana y no contó, porque se bloqueaba a las 00:00. En
+  producción: empezó a las 17:39:48 y entre las 00:00 y esa hora hubo 6 alineaciones de 5
+  participantes, un fichaje (00:12) y una venta a la banca (14:34) que no contaron.
+  - `matches.started_at`: lo pone `/sync` la primera vez que recibe `part_started` de la 1ª parte;
+    la 0016 lo rellena con el `created_at` de ese evento en los partidos ya jugados. Bloqueo =
+    `min(started_at, 00:00 del día siguiente)` (`calendar.lock_time(round)`).
+  - Ver lo que alineó cada uno en una jornada bloqueada: `GET /fantasy/rounds/{id}/participants/{pid}`
+    y, en el diálogo de la jornada, «Equipos de esta jornada». También para las cuentas que solo
+    miran. Plantillas privadas: 403 `private_squad`.
+  - `resettle-round` (CLI, `app/services/fantasy_resettle.py`): reabre y vuelve a cerrar la última
+    jornada cerrada. Simulacro (solo lectura) del 22-nov con el bloqueo a las 17:39 y la fórmula
+    nueva: cambian casi todos, p. ej. 11 → 37, 13 → 22, 32 → 28.
+  - 0016 rellenó el 22-nov con 17:39:48 (hora de Madrid). Tras el push: `resettle-round
+    2026-11-22` (simulacro y luego de verdad). Si después se elige su MVP, hay que repetirlo.
+- **Recalibrado de la nota y los puntos** (subido el 2026-11-25, sin migración). Analizado con
+  el único partido con datos (22-nov, 5-5): el portero, con 17 paradas y gol, quedaba por debajo
+  de un goleador; un partido sin nada daba 6. Escala acordada: flojo ≈ 5, normal ≈ 7, bueno ≈ 9,
+  partidazo más. Nuevos pesos en `docs/fantasy.md`: base 5,4; gol +2,5 (portero +5,0); falta −0,4;
+  ±0,15 por gol en pista; portero −0,4 por encajado; +0,3 por cada 10 min en pista sin gol en
+  contra (`clean_streaks_by_player`, sustituye a la portería a cero). Fantasy: puntuación exacta
+  sin tope y +2 MVP; el gol ya no suma aparte (decidido para que no cuente dos veces). `GET /matches/{id}/stats` añade `score` (exacta). La nota se
+  calcula al momento: cambia también la del 22-nov; si su jornada ya se cerró, sus puntos del
+  Fantasy siguen congelados. Revisar los pesos con 3-4 partidos más.
+- **MVP del partido** (subido el 2026-11-25; migración 0015 aplicada): `matches.mvp_player_id`; +2 en el Fantasy. Ver `docs/fantasy.md`. Las opciones del
+  partido (convocatoria, MVP, traspasar, borrar) van en un menú ⋯.
+  Tests en verde el 2026-11-25 (backend 1027, frontend 1135, typecheck). Falta: tests propios
+  de `mvp-dialog.tsx` y `match-options-menu.tsx`, probarlo en el navegador.
+
 ## Pendiente
 
 - Comprobar en producción la nota, el botón «Parada» y la caché del detalle.
 - Comprobar en producción que `x-real-ip` llega con la IP real y que el bloqueo funciona.
 - Comprobar en producción el Fantasy (pasos 2 a 5): invitación, sobres, alineación con capitán,
   pujas, cláusulas y el cierre de la primera jornada oficial.
+- Comprobar en un partido real lo del 22-nov: convocatoria al empezar, traspasar y borrar
+  estadísticas (el primer partido tenía minutos mal cogidos, p. ej. 40 min).
 - Comprobar la vista previa del enlace en WhatsApp (puede tardar por la caché de WhatsApp).
 - Cambiar la contraseña de `neondb_owner` en Neon: se escribió en claro en un comando (historial
   de zsh). Para migrar, poner `DIRECT_DATABASE_URL` en `backend/.env` en vez de en el comando.

@@ -22,7 +22,7 @@ interface PlayerTransferDialogProps {
   onClose: () => void;
 }
 
-function PlayerChoice({
+export function PlayerChoice({
   label,
   players,
   value,

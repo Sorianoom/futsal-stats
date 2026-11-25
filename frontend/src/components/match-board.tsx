@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { ClearStatsDialog } from "@/components/clear-stats-dialog";
 import { LivePanel } from "@/components/live-panel";
+import { MatchOptionsMenu } from "@/components/match-options-menu";
+import { MvpDialog } from "@/components/mvp-dialog";
 import { MatchSquadDialog } from "@/components/match-squad-dialog";
 import { MatchSummary } from "@/components/match-summary";
 import { PartBreak } from "@/components/part-break";
@@ -130,6 +132,8 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   const [squadOpen, setSquadOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
+  const [mvpOpen, setMvpOpen] = useState(false);
+  const [mvp, setMvp] = useState<string | null>(data.match.mvp_player_id ?? null);
   const { user } = useAuth();
   const canClear = user?.role === "head_coach";
   const involved = useMemo(() => playersInMatch(log.lineup, log.events), [log.lineup, log.events]);
@@ -158,19 +162,35 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   );
 
   const matchTools = (
-    <div className="mb-4 flex flex-wrap gap-2">
-      <Button variant="outline" size="lg" onClick={() => setSquadOpen(true)}>
-        {squad ? `Convocatoria (${squad.length})` : "Confirmar convocatoria"}
-      </Button>
-      <Button variant="outline" size="lg" onClick={() => setTransferOpen(true)}>
-        Traspasar estadísticas
-      </Button>
-      {canClear ? (
-        <Button variant="outline" size="lg" className="text-destructive" onClick={() => setClearOpen(true)}>
-          Borrar estadísticas
-        </Button>
-      ) : null}
+    <div className="mb-3 flex justify-end">
+      <MatchOptionsMenu
+        options={[
+          {
+            label: squad ? `Convocatoria (${squad.length})` : "Confirmar convocatoria",
+            onSelect: () => setSquadOpen(true),
+          },
+          {
+            label: mvp ? `MVP: ${data.players.find((p) => p.id === mvp)?.name ?? "elegido"}` : "Elegir MVP",
+            onSelect: () => setMvpOpen(true),
+          },
+          { label: "Traspasar estadísticas", onSelect: () => setTransferOpen(true) },
+          ...(canClear
+            ? [{ label: "Borrar estadísticas", onSelect: () => setClearOpen(true), destructive: true }]
+            : []),
+        ]}
+      />
       {squadDialog}
+      <MvpDialog
+        open={mvpOpen}
+        matchId={matchId}
+        players={data.players.filter((p) => involved.has(p.id))}
+        current={mvp}
+        onSaved={(playerId) => {
+          setMvp(playerId);
+          setMvpOpen(false);
+        }}
+        onClose={() => setMvpOpen(false)}
+      />
       <ClearStatsDialog
         open={clearOpen}
         matchId={matchId}

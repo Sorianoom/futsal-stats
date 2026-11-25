@@ -2,6 +2,7 @@
 
 `uv run python -m app.cli create-user EMAIL --role head_coach`
 `uv run python -m app.cli import-matches docs/calendario-2026-27.txt [--dry-run]`
+`uv run python -m app.cli resettle-round 2026-11-22 [--dry-run]`
 """
 
 import argparse
@@ -9,19 +10,23 @@ import asyncio
 import getpass
 import sys
 from collections.abc import Sequence
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.calendar_repo import ImportResult, import_matches
 from app.db.engine import build_engine
+from app.db.models import Match, TeamSession
 from app.db.users_repo import WeakPasswordError, create_user
 from app.domain.calendar_import import CalendarEntry, CalendarError, parse_calendar
 from app.domain.roles import STAFF_ROLES, Role
 from app.schemas.points import MatchCreate
+from app.services.fantasy_resettle import ParticipantChange, ResettleError, resettle_round
 
 
 async def run_create_user(database_url: str, email: str, role: Role, password: str) -> None:
@@ -49,6 +54,48 @@ async def run_import_matches(
             return await import_matches(session, entries, dry_run=dry_run)
     finally:
         await engine.dispose()
+
+
+async def run_resettle_round(
+    database_url: str, held_on: date, dry_run: bool
+) -> list[ParticipantChange]:
+    """Vuelve a cerrar la jornada del partido oficial de ese día. Con `dry_run`, lo deshace."""
+    engine = build_engine(database_url, pooled=False)
+    try:
+        async with AsyncSession(engine) as session:
+            query = (
+                select(Match.id)
+                .join(TeamSession, TeamSession.id == Match.session_id)
+                .where(TeamSession.held_on == held_on, Match.is_official.is_(True))
+            )
+            match_ids = (await session.execute(query)).scalars().all()
+            if len(match_ids) != 1:
+                raise ResettleError(f"Hay {len(match_ids)} partidos oficiales el {held_on}")
+            changes = await resettle_round(session, match_ids[0], datetime.now(UTC))
+            if dry_run:
+                await session.rollback()
+            else:
+                await session.commit()
+            return changes
+    finally:
+        await engine.dispose()
+
+
+def _resettle_round(args: argparse.Namespace) -> int:
+    try:
+        changes = asyncio.run(
+            run_resettle_round(get_settings().migrations_database_url, args.date, args.dry_run)
+        )
+    except (ResettleError, OSError, SQLAlchemyError) as error:
+        print(f"No se ha cambiado nada: {error}", file=sys.stderr)
+        return 1
+    for c in changes:
+        print(
+            f"{c.name}: {c.points_before} → {c.points_after} puntos "
+            f"(cobro {c.payout_before / 1000:g} → {c.payout_after / 1000:g} M)"
+        )
+    print("Simulacro: no se ha guardado nada" if args.dry_run else "Jornada cerrada de nuevo")
+    return 0
 
 
 def _create_user(args: argparse.Namespace) -> int:
@@ -123,10 +170,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     importer.add_argument("file")
     importer.add_argument("--dry-run", action="store_true", help="Cuenta sin escribir nada")
+    resettle = commands.add_parser(
+        "resettle-round", help="Vuelve a cerrar la última jornada cerrada (fecha AAAA-MM-DD)"
+    )
+    resettle.add_argument("date", type=date.fromisoformat)
+    resettle.add_argument("--dry-run", action="store_true", help="Calcula sin guardar nada")
     args = parser.parse_args(argv)
 
     if args.command == "create-user":
         return _create_user(args)
+    if args.command == "resettle-round":
+        return _resettle_round(args)
     return _import_matches(args)
 
 

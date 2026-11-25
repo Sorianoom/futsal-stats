@@ -8,6 +8,8 @@ export interface Match {
   opponent: string;
   /** False en un amistoso: no es jornada del Fantasy. */
   is_official: boolean;
+  /** MVP del partido (+2 en el Fantasy si jugó); null o ausente si no se ha elegido. */
+  mvp_player_id?: string | null;
 }
 
 export interface NewMatch {

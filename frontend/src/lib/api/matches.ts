@@ -98,3 +98,14 @@ export function clearMatchStats(matchId: string): Promise<{ changed: number }> {
     invalidateFantasy();
   });
 }
+
+/** Elige (o quita, con null) el MVP del partido: suma puntos en el Fantasy. */
+export function setMatchMvp(matchId: string, playerId: string | null): Promise<Match> {
+  return apiData<Match>(`/matches/${encodeURIComponent(matchId)}/mvp`, {
+    method: "PUT",
+    body: { player_id: playerId },
+  }).finally(() => {
+    queryCache.invalidate(MATCHES_KEY);
+    invalidateFantasy();
+  });
+}

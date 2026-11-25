@@ -1,6 +1,6 @@
 "use client";
 
-import { RoundLineup } from "@/components/fantasy/round-dialog";
+import { RoundLineup } from "@/components/fantasy/round-lineup";
 import { Spark } from "@/components/fantasy/spark";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";

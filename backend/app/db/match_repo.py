@@ -5,12 +5,13 @@ Las funciones hacen flush; el commit lo decide el endpoint.
 
 import uuid
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import LineupEventRow, MatchEvent, QuintetRatingRow, StintRow
+from app.db.models import LineupEventRow, Match, MatchEvent, QuintetRatingRow, StintRow
 from app.domain.stints.events import EventKind
 from app.domain.stints.events import MatchEvent as DomainEvent
 from app.domain.stints.models import Stint
@@ -183,3 +184,10 @@ async def events_by_match(
     for row in (await db.execute(query)).scalars().all():
         grouped.setdefault(row.match_id, []).append(event_to_domain(row))
     return grouped
+
+
+async def mark_started(db: AsyncSession, match_id: uuid.UUID, at: datetime) -> None:
+    """Anota la hora de inicio del partido si aún no la tenía (la primera es la que vale)."""
+    await db.execute(
+        update(Match).where(Match.id == match_id, Match.started_at.is_(None)).values(started_at=at)
+    )

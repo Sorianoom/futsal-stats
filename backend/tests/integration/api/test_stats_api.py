@@ -264,6 +264,7 @@ async def test_a_field_player_rating_uses_actions_minutes_and_goals_on_court(
             steals=1,
             goals_for_on_court=2,
             goals_against_on_court=1,
+            clean_streaks=3,  # 700 s antes del gol en contra (1 bloque) y 1700 s después (2)
         )
     )
     rating = by_player(stats)[str(p[4].id)]["rating"]
@@ -291,6 +292,7 @@ async def test_a_goalkeeper_rating_counts_saves_and_goals_conceded_on_court(
             saves=2,
             goals_for_on_court=2,
             goals_against_on_court=1,
+            clean_streaks=3,  # 700 s antes del gol en contra (1 bloque) y 1700 s después (2)
         )
     )
     assert expected is not None
@@ -358,6 +360,7 @@ async def test_goals_outside_the_stints_do_not_count_on_court_for_the_rating(
             steals=1,
             goals_for_on_court=2,
             goals_against_on_court=1,
+            clean_streaks=3,  # 700 s antes del gol en contra (1 bloque) y 1700 s después (2)
         )
     )
     assert stats["score"]["goals_against"] == 2

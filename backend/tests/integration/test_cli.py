@@ -270,3 +270,13 @@ async def _run_main(argv: list[str]) -> int:
 def test_create_user_command_does_not_offer_the_player_role() -> None:
     with pytest.raises(SystemExit):
         cli.main(["create-user", "jugador@club.es", "--role", "player"])
+
+
+@pytest.mark.usefixtures("use_test_database")
+async def test_resettle_round_without_an_official_match_that_day_changes_nothing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = await _run_main(["resettle-round", "2026-11-22", "--dry-run"])
+
+    assert code == 1
+    assert "Hay 0 partidos oficiales el 2026-11-22" in capsys.readouterr().err

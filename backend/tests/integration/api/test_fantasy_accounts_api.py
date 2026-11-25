@@ -181,6 +181,41 @@ async def test_a_private_squad_is_flagged_in_me(
     assert (await me(client, player))["me"]["private_squad"] is False
 
 
+async def _started_round(
+    client: AsyncClient, staff: Headers, make_player: MakePlayer, clock: Clock
+) -> str:
+    """Partido oficial del 17/10 ya empezado (su jornada queda bloqueada)."""
+    created = await client.post(
+        "/matches", json={"held_on": "2026-10-17", "opponent": "Rival FS"}, headers=staff
+    )
+    match_id = str(created.json()["data"]["id"])
+    starters = [str((await make_player(40 + n)).id) for n in range(5)]
+    payload = {"type": "part_started", "part": 1, "starters": starters}
+    body = {
+        "events": [],
+        "ratings": [],
+        "lineup_events": [{"id": str(uuid.uuid4()), "seq": 1, "payload": payload}],
+    }
+    started = await client.post(f"/matches/{match_id}/sync", json=body, headers=staff)
+    assert started.status_code == 200, started.text
+    return match_id
+
+
+async def test_nobody_else_sees_the_round_lineup_of_a_private_squad(
+    client: AsyncClient, staff: Headers, join: Join, make_player: MakePlayer, clock: Clock
+) -> None:
+    player, bruno = await _private_league(client, staff, join, make_player, clock)
+    bruno_id = (await me(client, bruno))["me"]["participant_id"]
+    match_id = await _started_round(client, staff, make_player, clock)
+
+    hidden = await client.get(f"/fantasy/rounds/{match_id}/participants/{bruno_id}", headers=player)
+    own = await client.get(f"/fantasy/rounds/{match_id}/participants/{bruno_id}", headers=bruno)
+
+    assert hidden.status_code == 403
+    assert hidden.json()["error"]["code"] == "private_squad"
+    assert own.status_code == 200
+
+
 async def test_nobody_sees_or_buys_the_clause_of_a_private_squad(
     client: AsyncClient, staff: Headers, join: Join, make_player: MakePlayer, clock: Clock
 ) -> None:

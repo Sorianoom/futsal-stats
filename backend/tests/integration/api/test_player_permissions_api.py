@@ -32,6 +32,7 @@ PLAYER_ROUTES = {
     ("GET", "/fantasy/standings"),
     ("GET", "/fantasy/rounds/{match_id}/me"),
     ("GET", "/fantasy/participants/{participant_id}"),
+    ("GET", "/fantasy/rounds/{match_id}/participants/{participant_id}"),
     ("GET", "/fantasy/market"),
     ("PUT", "/fantasy/market/{listing_id}/bid"),
     ("DELETE", "/fantasy/market/{listing_id}/bid"),

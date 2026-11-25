@@ -1,4 +1,4 @@
-"""Jornadas del Fantasy: bloqueo a las 00:00 de Madrid y jornadas de la liga."""
+"""Jornadas del Fantasy: bloqueo al empezar el partido y jornadas de la liga."""
 
 from datetime import UTC, date, datetime
 
@@ -10,22 +10,28 @@ from app.domain.fantasy.calendar import (
     league_rounds,
     lock_time,
     madrid_date,
+    midnight,
     next_open_round,
     round_status,
     visible_rounds,
 )
 
 
-def _round(day: int, match_id: str | None = None) -> Round:
-    return Round(match_id=match_id or f"m{day}", opponent="Rival", held_on=date(2026, 11, day))
+def _round(day: int, match_id: str | None = None, started_at: datetime | None = None) -> Round:
+    return Round(
+        match_id=match_id or f"m{day}",
+        opponent="Rival",
+        held_on=date(2026, 11, day),
+        started_at=started_at,
+    )
 
 
-def test_lock_time_is_midnight_in_madrid_in_winter() -> None:
-    assert lock_time(date(2026, 11, 15)) == datetime(2026, 11, 14, 23, 0, tzinfo=UTC)
+def test_midnight_is_in_madrid_in_winter() -> None:
+    assert midnight(date(2026, 11, 15)) == datetime(2026, 11, 14, 23, 0, tzinfo=UTC)
 
 
-def test_lock_time_is_midnight_in_madrid_in_summer() -> None:
-    assert lock_time(date(2026, 10, 17)) == datetime(2026, 10, 16, 22, 0, tzinfo=UTC)
+def test_midnight_is_in_madrid_in_summer() -> None:
+    assert midnight(date(2026, 10, 17)) == datetime(2026, 10, 16, 22, 0, tzinfo=UTC)
 
 
 def test_madrid_date_changes_at_madrid_midnight() -> None:
@@ -33,11 +39,34 @@ def test_madrid_date_changes_at_madrid_midnight() -> None:
     assert madrid_date(datetime(2026, 10, 16, 22, 0, tzinfo=UTC)) == date(2026, 10, 17)
 
 
-def test_a_round_is_locked_from_its_lock_time_on() -> None:
-    round_ = _round(15)
+KICKOFF = datetime(2026, 11, 22, 16, 39, 48, tzinfo=UTC)  # 17:39 en Madrid
 
-    assert not is_locked(round_, datetime(2026, 11, 14, 22, 59, 59, tzinfo=UTC))
-    assert is_locked(round_, datetime(2026, 11, 14, 23, 0, tzinfo=UTC))
+
+def test_a_round_locks_when_its_match_starts() -> None:
+    round_ = _round(22, started_at=KICKOFF)
+
+    assert lock_time(round_) == KICKOFF
+    assert not is_locked(round_, datetime(2026, 11, 22, 16, 39, 47, tzinfo=UTC))
+    assert is_locked(round_, KICKOFF)
+
+
+def test_the_match_day_morning_is_still_open() -> None:
+    round_ = _round(22)
+
+    assert not is_locked(round_, datetime(2026, 11, 22, 10, 0, tzinfo=UTC))
+
+
+def test_a_match_not_started_on_its_day_locks_at_midnight_after() -> None:
+    round_ = _round(22)
+
+    assert lock_time(round_) == midnight(date(2026, 11, 23))
+    assert is_locked(round_, datetime(2026, 11, 22, 23, 0, tzinfo=UTC))
+
+
+def test_a_start_recorded_after_the_day_does_not_move_the_lock_later() -> None:
+    late = datetime(2026, 11, 24, 9, 0, tzinfo=UTC)
+
+    assert lock_time(_round(22, started_at=late)) == midnight(date(2026, 11, 23))
 
 
 def test_league_rounds_are_official_matches_from_the_league_start_in_date_order() -> None:
@@ -58,6 +87,8 @@ def test_next_open_round_is_the_first_not_locked() -> None:
     rounds = [_round(8), _round(15), _round(22)]
 
     assert next_open_round(rounds, datetime(2026, 11, 10, tzinfo=UTC)) == rounds[1]
+    # El día del partido, antes de empezar, la de ese día sigue abierta.
+    assert next_open_round(rounds, datetime(2026, 11, 15, 10, tzinfo=UTC)) == rounds[1]
     assert next_open_round(rounds, datetime(2026, 11, 23, tzinfo=UTC)) is None
 
 

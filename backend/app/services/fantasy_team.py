@@ -18,7 +18,7 @@ from app.domain.fantasy.calendar import Round, is_locked, lock_time, next_open_r
 from app.domain.fantasy.clauses import protected_until
 from app.domain.fantasy.lineup import Lineup, latest_lineup
 from app.domain.fantasy.rules import FANTASY_TIMEZONE, SQUAD_LIMIT
-from app.domain.fantasy.scoring import player_points
+from app.domain.fantasy.scoring import result_points
 from app.domain.fantasy.standings import display_name
 from app.schemas.fantasy import (
     LastRoundOut,
@@ -91,7 +91,7 @@ def _next_round_out(upcoming: Round | None) -> NextRoundOut | None:
         match_id=uuid.UUID(upcoming.match_id),
         opponent=upcoming.opponent,
         held_on=upcoming.held_on,
-        locks_at=lock_time(upcoming.held_on),
+        locks_at=lock_time(upcoming),
     )
 
 
@@ -104,7 +104,7 @@ async def last_scored(
     for round_ in locked:
         results = (await scored_results(db, [round_], now)).get(round_.match_id)
         if results is not None:
-            return round_, {p: player_points(r.rating, r.goals) for p, r in results.items()}
+            return round_, {p: result_points(r) for p, r in results.items()}
     return None
 
 

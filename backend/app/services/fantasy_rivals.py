@@ -18,7 +18,7 @@ from app.db.models import FantasyLeague, User
 from app.domain.fantasy.access import plays_fantasy
 from app.domain.fantasy.calendar import Round, is_locked
 from app.domain.fantasy.standings import display_name
-from app.schemas.fantasy import LastRoundOut, ParticipantTeamOut
+from app.schemas.fantasy import LastRoundOut, ParticipantTeamOut, RoundDetailOut
 from app.services.fantasy import enter, watch
 from app.services.fantasy_results import recent_points, rounds_of
 from app.services.fantasy_scoring import participant_round
@@ -27,6 +27,14 @@ from app.services.fantasy_team import last_scored, squad_out
 
 class ParticipantNotFoundError(Exception):
     """No hay liga o el participante no es de la liga activa."""
+
+
+class RoundNotVisibleError(Exception):
+    """No es una jornada de la liga o aún no está bloqueada."""
+
+
+class PrivateSquadError(Exception):
+    """Plantilla privada de otro (cuenta del Fantasy del cuerpo técnico)."""
 
 
 async def _league_and_viewer(
@@ -107,3 +115,32 @@ async def participant_team(
             await participant_round(db, league, target.participant, locked, now) if locked else None
         ),
     )
+
+
+async def participant_round_of(
+    db: AsyncSession,
+    user: User,
+    now: datetime,
+    rng: random.Random,
+    match_id: uuid.UUID,
+    participant_id: uuid.UUID,
+) -> RoundDetailOut:
+    """Alineación de cualquier participante en una jornada ya bloqueada, con sus puntos."""
+    league, viewer_id = await _league_and_viewer(db, user, now, rng)
+    target = next(
+        (
+            p.participant
+            for p in await fantasy_repo.list_participants(db, league.id)
+            if p.participant.id == participant_id
+        ),
+        None,
+    )
+    if target is None:
+        raise ParticipantNotFoundError
+    round_ = next((r for r in await rounds_of(db, league) if r.match_id == str(match_id)), None)
+    if round_ is None or not is_locked(round_, now):
+        raise RoundNotVisibleError
+    private = participant_id in await fantasy_repo.private_participant_ids(db, league.id)
+    if private and participant_id != viewer_id:
+        raise PrivateSquadError
+    return await participant_round(db, league, target, round_, now)

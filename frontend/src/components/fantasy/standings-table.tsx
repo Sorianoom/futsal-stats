@@ -157,9 +157,11 @@ export function Standings({ myId }: { myId: string | null }) {
       {standings ? (
         <>
           <p className="text-sm text-muted-foreground">
-            {standings.rounds.length > 0 && myId
-              ? "Toca una jornada para ver tu alineación y sus puntos, o un nombre para ver su equipo. Las provisionales se congelan al cerrarse la jornada."
-              : "Toca un nombre para ver su equipo."}
+            {standings.rounds.length === 0
+              ? "Toca un nombre para ver su equipo."
+              : myId
+                ? "Toca una jornada para ver tu alineación y la de los demás, o un nombre para ver su equipo. Las provisionales se congelan al cerrarse la jornada."
+                : "Toca una jornada para ver lo que alineó cada uno, o un nombre para ver su equipo."}
           </p>
           {standings.rounds.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aún no se ha jugado ninguna jornada.</p>
@@ -169,12 +171,12 @@ export function Standings({ myId }: { myId: string | null }) {
           <Table
             standings={standings}
             myId={myId}
-            onOpenRound={myId ? setOpenRound : undefined}
+            onOpenRound={setOpenRound}
             onOpenParticipant={setOpenRow}
           />
         </>
       ) : null}
-      <RoundDialog round={openRound} onClose={() => setOpenRound(null)} />
+      <RoundDialog round={openRound} myId={myId} onClose={() => setOpenRound(null)} />
       <ParticipantDialog row={openRow} onClose={() => setOpenRow(null)} />
     </section>
   );

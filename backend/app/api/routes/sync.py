@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, NowDep, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.db import match_repo, points_repo
@@ -197,9 +197,18 @@ async def _process_ratings(
     return rows
 
 
+def _starts_the_match(row: MatchEvent | LineupEventRow | QuintetRatingRow) -> bool:
+    """El inicio de la 1ª parte: bloquea las alineaciones del Fantasy de esta jornada."""
+    return (
+        isinstance(row, LineupEventRow)
+        and row.kind == "part_started"
+        and row.payload.get("part") == 1
+    )
+
+
 @router.post("/{match_id}/sync", response_model=Envelope[SyncResult])
 async def sync_match(
-    match_id: uuid.UUID, payload: SyncRequest, db: SessionDep, _: CurrentUser
+    match_id: uuid.UUID, payload: SyncRequest, db: SessionDep, _: CurrentUser, now: NowDep
 ) -> Envelope[SyncResult]:
     await _existing_match(db, match_id)
     outcome = Outcome()
@@ -210,6 +219,8 @@ async def sync_match(
     ]
     try:
         await match_repo.add_rows(db, rows)
+        if any(_starts_the_match(r) for r in rows):
+            await match_repo.mark_started(db, match_id, now)
     except IntegrityError as error:
         await db.rollback()
         raise ApiError(409, "conflict", "Envío simultáneo; vuelve a intentarlo") from error

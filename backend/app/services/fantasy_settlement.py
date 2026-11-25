@@ -18,7 +18,7 @@ from app.db.models import FantasyLeague, FantasyParticipant
 from app.domain.fantasy.calendar import Round, lock_time, settle_time
 from app.domain.fantasy.lineup import SavedLineup, lineup_in_force
 from app.domain.fantasy.market import LedgerKind
-from app.domain.fantasy.scoring import PlayerResult, SlotScore
+from app.domain.fantasy.scoring import BonusPart, PlayerResult, SlotScore, result_points
 from app.domain.fantasy.settlement import (
     LedgerEntry,
     RoundScore,
@@ -29,6 +29,7 @@ from app.domain.fantasy.settlement import (
 )
 from app.domain.fantasy.values import next_value, round_payout
 from app.domain.points.callup import Position
+from app.domain.rating.score import RatingPart
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +52,7 @@ async def load_context(
         c
         for history in histories.values()
         for r in rounds
-        for c in lineup_in_force(history, lock_time(r.held_on)).copy_ids()
+        for c in lineup_in_force(history, lock_time(r)).copy_ids()
     }
     copies = await fantasy_repo.copies_with_players(db, copy_ids)
     return ScoringContext(
@@ -64,7 +65,7 @@ async def load_context(
 
 
 def negative_at_lock(ctx: ScoringContext, participant_id: uuid.UUID, round_: Round) -> bool:
-    lock = lock_time(round_.held_on)
+    lock = lock_time(round_)
     balance = ctx.balances.get(participant_id, 0)
     return balance_at(balance, ctx.ledger.get(participant_id, []), lock) < 0
 
@@ -77,7 +78,7 @@ def live_score(
 ) -> RoundScore:
     """Puntos de la alineación bloqueada: solo las copias suyas en el bloqueo, y 0 si tenía
     saldo negativo en el bloqueo."""
-    lock = lock_time(round_.held_on)
+    lock = lock_time(round_)
     lineup = lineup_in_force(ctx.histories.get(participant_id, []), lock)
     owners = owners_at(ctx.transfers, lock)
     owned = {c for c in lineup.copy_ids() if owners.get(c) == str(participant_id)}
@@ -99,6 +100,10 @@ def slot_to_json(slot: SlotScore) -> dict[str, Any]:
         "goals": slot.goals,
         "points": slot.points,
         "captain": slot.captain,
+        "score": slot.score,
+        "mvp": slot.mvp,
+        "breakdown": [[p.key, p.count, p.hundredths] for p in slot.breakdown],
+        "bonus": [[p.key, p.count, p.points] for p in slot.bonus],
     }
 
 
@@ -111,6 +116,11 @@ def slot_from_json(data: Mapping[str, Any]) -> SlotScore:
         goals=data["goals"],
         points=data["points"],
         captain=data.get("captain", False),
+        # Las jornadas cerradas antes del 2026-11-25 no guardaban el porqué.
+        score=data.get("score"),
+        mvp=data.get("mvp", False),
+        breakdown=tuple(RatingPart(k, c, h) for k, c, h in data.get("breakdown", [])),
+        bonus=tuple(BonusPart(k, c, p) for k, c, p in data.get("bonus", [])),
     )
 
 
@@ -155,6 +165,7 @@ def _value_changes(
     changes: dict[str, tuple[int, int]] = {}
     for player_id, before in values.items():
         result = results.get(player_id)
-        rating, goals = (result.rating, result.goals) if result else (None, 0)
-        changes[player_id] = (before, next_value(before, rating, goals))
+        rated = result is not None and result.fantasy_score is not None
+        points = result_points(result) if rated and result is not None else None
+        changes[player_id] = (before, next_value(before, points))
     return changes

@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 
+import { FantasyPitch, SHORT_ROLE, SPOT } from "@/components/fantasy/pitch";
 import { FANTASY_CARD, FANTASY_HEADING } from "@/components/fantasy/styles";
-import { Spark } from "@/components/fantasy/spark";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ApiError } from "@/lib/api/client";
 import { saveLineup } from "@/lib/api/fantasy";
-import type { FantasyLineup, LastRound, SquadCopy } from "@/lib/api/fantasy-types";
+import type { FantasyLineup, SquadCopy } from "@/lib/api/fantasy-types";
 import { formatMoney } from "@/lib/fantasy/format";
-import { tierOf } from "@/lib/fantasy/form";
 import {
   assignSlot,
   copyIn,
@@ -23,7 +22,7 @@ import {
 } from "@/lib/fantasy/lineup";
 import { cn } from "@/lib/utils";
 
-const EMPTY_SLOT = "Vacío · 0 puntos";
+const EMPTY_SLOT = "Vacío";
 const INVALID_LINEUP =
   "La alineación no es válida: el portero tiene que ser portero, los de campo, de campo, y sin repetir a nadie.";
 const SAVE_ERROR = "No se pudo guardar la alineación. Comprueba la conexión e inténtalo de nuevo.";
@@ -38,18 +37,6 @@ function errorMessage(failure: unknown): string {
   return clientError ? failure.message : SAVE_ERROR;
 }
 
-const POINTS_BADGE = { good: "bg-gold text-[#0a1633]", mid: "bg-white text-[#0a1633]", poor: "bg-[#8a97b8] text-[#0a1633]" } as const;
-
-/** Sitio de cada hueco en la media pista: pívot arriba, alas, cierre y portero abajo. */
-const SPOT: Record<string, { left: string; top: number }> = {
-  Pívot: { left: "50%", top: 22 },
-  "Ala izquierda": { left: "21%", top: 104 },
-  "Ala derecha": { left: "79%", top: 104 },
-  Cierre: { left: "50%", top: 190 },
-  Portero: { left: "50%", top: 284 },
-};
-/** Nombre corto del puesto bajo la ficha. */
-const SHORT_ROLE: Record<string, string> = { "Ala izquierda": "Ala", "Ala derecha": "Ala" };
 
 interface CourtCardProps {
   label: string;
@@ -59,11 +46,10 @@ interface CourtCardProps {
   onOpen: () => void;
 }
 
-/** Un puesto de la pista: foto (o dorsal), puntos de la última jornada, capitán y nombre. */
+/** Un puesto de la pista: foto (o dorsal), capitán y nombre. Sin puntos: aquí solo se elige. */
 function CourtCard({ label, copy, captain, disabled, onOpen }: CourtCardProps) {
   const name = copy ? `${label}: ${copy.name}${captain ? ", capitán" : ""}` : `${label}: vacío`;
   const spot = SPOT[label];
-  const tier = tierOf(copy?.last_points ?? null);
   return (
     <button
       type="button"
@@ -80,7 +66,7 @@ function CourtCard({ label, copy, captain, disabled, onOpen }: CourtCardProps) {
             dorsal={copy.dorsal}
             photoUrl={copy.photo_url}
             className={cn(
-              `tier-${tier} size-14 border-3 text-2xl shadow-lg transition-transform group-active:scale-95`,
+              "size-14 border-3 text-2xl shadow-lg transition-transform group-active:scale-95",
               captain ? "border-gold" : "border-white",
             )}
           />
@@ -89,17 +75,6 @@ function CourtCard({ label, copy, captain, disabled, onOpen }: CourtCardProps) {
             <span aria-hidden="true">+</span>
           </span>
         )}
-        {copy && copy.last_points !== null ? (
-          <span
-            aria-label={`${copy.name}: ${copy.last_points} puntos en la última jornada`}
-            className={cn(
-              "absolute -top-1 -right-3 grid h-5 min-w-6 place-items-center rounded-full border-2 border-[#0a1633] px-1 text-[11px] font-extrabold tabular-nums",
-              POINTS_BADGE[tier],
-            )}
-          >
-            {copy.last_points}
-          </span>
-        ) : null}
         {captain ? (
           <span
             aria-hidden="true"
@@ -119,9 +94,8 @@ function CourtCard({ label, copy, captain, disabled, onOpen }: CourtCardProps) {
   );
 }
 
-/** Una ficha grande de la hoja: foto o dorsal, puntos de la última jornada, nombre y valor. */
+/** Una ficha grande de la hoja: foto o dorsal, nombre y valor. */
 function PickCard({ copy, here, onPick }: { copy: SquadCopy; here: boolean; onPick: () => void }) {
-  const tier = tierOf(copy.last_points);
   return (
     <button
       type="button"
@@ -137,24 +111,13 @@ function PickCard({ copy, here, onPick }: { copy: SquadCopy; here: boolean; onPi
         name={copy.name}
         dorsal={copy.dorsal}
         photoUrl={copy.photo_url}
-        className={`tier-${tier} h-24 w-full rounded-xl text-4xl`}
+        className="h-24 w-full rounded-xl text-4xl"
       />
-      {copy.last_points !== null ? (
-        <span
-          className={cn(
-            "absolute top-4 right-4 rounded-full px-2 py-0.5 text-xs font-extrabold tabular-nums",
-            POINTS_BADGE[tier],
-          )}
-        >
-          {`${copy.last_points} pts`}
-        </span>
-      ) : null}
       <span className="text-base leading-tight font-extrabold">{copy.name}</span>
       <span className="flex items-center justify-between gap-2 text-xs font-bold text-muted-foreground">
         <span>{here ? "Aquí" : `Dorsal ${copy.dorsal}`}</span>
         <span>{formatMoney(copy.value)}</span>
       </span>
-      <Spark points={copy.recent_points ?? []} />
     </button>
   );
 }
@@ -242,12 +205,11 @@ interface LineupEditorProps {
   squad: readonly SquadCopy[];
   /** La alineación guardada en el servidor. */
   lineup: FantasyLineup;
-  lastRound: LastRound | null;
   onSaved: () => void;
 }
 
 /** 1 portero y 4 de campo sobre la pista, con capitán opcional; los huecos vacíos puntúan 0. */
-export function LineupEditor({ squad, lineup, lastRound, onSaved }: LineupEditorProps) {
+export function LineupEditor({ squad, lineup, onSaved }: LineupEditorProps) {
   // Cambios sin guardar; null = se enseña lo del servidor.
   const [draft, setDraft] = useState<FantasyLineup | null>(null);
   const [lastSaved, setLastSaved] = useState<FantasyLineup | null>(null);
@@ -298,26 +260,7 @@ export function LineupEditor({ squad, lineup, lastRound, onSaved }: LineupEditor
         </h2>
         <p className="text-sm font-semibold text-muted-foreground">Toca un puesto para elegir jugador o capitán.</p>
       </div>
-      {lastRound ? (
-        <p className="text-sm font-semibold text-muted-foreground">{`Puntos de la última jornada, vs ${lastRound.opponent}`}</p>
-      ) : null}
-      <div className="fantasy-pitch relative mx-auto h-[392px] max-w-md overflow-hidden rounded-3xl shadow-lg">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-b-2xl border-2 border-t-0 border-white/20" />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-3 border-t-2 border-white/35" />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-3 left-1/2 h-11 w-24 -translate-x-1/2 rounded-b-full border-2 border-t-0 border-white/20"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-3 left-1/2 h-16 w-40 -translate-x-1/2 rounded-t-full border-2 border-b-0 border-white/20"
-        />
-        <div aria-hidden="true" className="pointer-events-none absolute bottom-3 left-1/2 h-1.5 w-11 -translate-x-1/2 rounded-t bg-gold" />
-        <span aria-hidden="true" className="absolute top-4 left-5 text-[10px] font-extrabold tracking-widest text-gold">
-          1-2-1
-        </span>
-        {cards}
-      </div>
+      <FantasyPitch>{cards}</FantasyPitch>
       <div className="flex flex-wrap items-center gap-3">
         <Button
           size="lg"

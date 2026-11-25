@@ -81,7 +81,7 @@ export function MyRounds({ myId }: { myId: string }) {
           </ul>
         </>
       ) : null}
-      <RoundDialog round={open} onClose={() => setOpen(null)} />
+      <RoundDialog round={open} myId={myId} onClose={() => setOpen(null)} />
     </section>
   );
 }

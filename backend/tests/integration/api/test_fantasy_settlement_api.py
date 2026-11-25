@@ -1,8 +1,8 @@
 """Fantasy, paso 3: cierre de jornada (puntos, cobros y valores congelados), propiedad de la copia
 en el bloqueo y saldo negativo al bloquear.
 
-El partido de `played_match` es el 17/10/2026: se bloquea a las 00:00 del 17 y se cierra a las
-00:00 del 18 (hora de Madrid).
+El partido de `played_match` es el 17/10/2026: se juega (y bloquea) a las 18:00 del 17 y se
+cierra a las 00:00 del 18 (hora de Madrid).
 """
 
 import random
@@ -24,7 +24,9 @@ from app.domain.stints.events import EventKind
 from app.services.fantasy_processing import catch_up
 from tests.integration.api.conftest import Join, Login, MakePlayer
 from tests.integration.api.fantasy_support import (
+    AFTER_KICKOFF,
     LEAGUE_DAY,
+    MATCH_MORNING,
     Clock,
     bid,
     buyable,
@@ -34,12 +36,10 @@ from tests.integration.api.fantasy_support import (
     get_data,
     market,
     me,
+    play_at_kickoff,
 )
-from tests.integration.api.test_stats_api import played_match
 
 Headers = dict[str, str]
-BEFORE_LOCK = datetime(2026, 10, 16, 21, 59, tzinfo=UTC)  # 23:59 del 16 en Madrid
-AFTER_LOCK = datetime(2026, 10, 16, 22, 0, tzinfo=UTC)  # 00:00 del 17 en Madrid
 MATCH_EVENING = datetime(2026, 10, 17, 20, 0, tzinfo=UTC)  # jornada provisional
 SETTLED = datetime(2026, 10, 18, 10, 0, tzinfo=UTC)  # jornada ya cerrada
 
@@ -62,11 +62,18 @@ async def _stats(client: AsyncClient, headers: Headers, match_id: str) -> dict[s
 
 def _points(rows: dict[str, Any], player_id: str) -> int:
     row = rows.get(player_id)
-    return player_points(row["rating"], row["goals"]) if row else 0
+    return player_points(row["score"]) if row else 0
+
+
+def _points_or_none(rows: dict[str, Any], player_id: str) -> int | None:
+    """Puntos del jugador, o None si no tuvo nota (su valor baja igual)."""
+    row = rows.get(player_id)
+    return _points(rows, player_id) if row and row["score"] is not None else None
 
 
 async def _round_with_lineup(
     client: AsyncClient,
+    clock: Clock,
     join: Join,
     staff: Headers,
     make_player: MakePlayer,
@@ -86,7 +93,9 @@ async def _round_with_lineup(
         "captain_copy_id": field[captain] if captain is not None else None,
     }
     await client.put("/fantasy/lineup", json=body, headers=headers)
-    match_id, _ = await played_match(client, staff, make_player, players=players, finalize=finalize)
+    match_id, _ = await play_at_kickoff(
+        clock, client, staff, make_player, players=players, finalize=finalize
+    )
     return headers, match_id, team
 
 
@@ -130,7 +139,7 @@ async def test_a_round_is_provisional_until_midnight_and_then_settled(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     clock.now = MATCH_EVENING
     rows = await _stats(client, headers, match_id)
     expected = sum(_points(rows, c["player_id"]) for c in team["squad"])
@@ -163,7 +172,9 @@ async def test_the_captain_scores_double_in_standings_payout_and_detail(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player, captain=0)
+    headers, match_id, team = await _round_with_lineup(
+        client, clock, join, staff, make_player, captain=0
+    )
     clock.now = MATCH_EVENING
     rows = await _stats(client, headers, match_id)
     captain = team["squad"][0]
@@ -192,7 +203,7 @@ async def test_me_shows_each_copys_points_in_the_last_scored_round(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     before = await me(client, headers)
     clock.now = MATCH_EVENING
     rows = await _stats(client, headers, match_id)
@@ -218,7 +229,7 @@ async def test_recent_points_list_each_player_last_scored_rounds(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     before = await me(client, headers)
     clock.now = MATCH_EVENING
     rows = await _stats(client, headers, match_id)
@@ -240,26 +251,20 @@ async def test_values_change_when_the_round_settles(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     clock.now = SETTLED
     rows = await _stats(client, headers, match_id)
 
     after = await me(client, headers)
 
     for entry in after["squad"]:
-        row = rows.get(entry["player_id"])
-        expected = next_value(
-            INITIAL_PLAYER_VALUE, row["rating"] if row else None, row["goals"] if row else 0
-        )
+        expected = next_value(INITIAL_PLAYER_VALUE, _points_or_none(rows, entry["player_id"]))
         assert entry["value"] == expected
         assert entry["value_change"] == expected - INITIAL_PLAYER_VALUE
     assert after["me"]["team_value"] == sum(c["value"] for c in after["squad"])
     listing_values = {x["player_id"]: x["value"] for x in await market(client, headers)}
     for player_id, value in listing_values.items():
-        row = rows.get(player_id)
-        assert value == next_value(
-            INITIAL_PLAYER_VALUE, row["rating"] if row else None, row["goals"] if row else 0
-        )
+        assert value == next_value(INITIAL_PLAYER_VALUE, _points_or_none(rows, player_id))
 
 
 def _without_last_points(view: dict[str, Any]) -> dict[str, Any]:
@@ -277,7 +282,7 @@ async def test_correcting_stats_after_the_close_does_not_change_frozen_points(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, _ = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, _ = await _round_with_lineup(client, clock, join, staff, make_player)
     clock.now = SETTLED
     before = await _standings(client, headers)
     before_detail = await _detail(client, headers, match_id)
@@ -302,7 +307,7 @@ async def test_settling_waits_for_the_match_to_close(
     staff: dict[str, str],
 ) -> None:
     headers, match_id, _ = await _round_with_lineup(
-        client, join, staff, make_player, finalize=False
+        client, clock, join, staff, make_player, finalize=False
     )
     clock.now = SETTLED
 
@@ -324,7 +329,7 @@ async def test_a_round_with_incoherent_events_does_not_lock_the_league_until_fix
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, _ = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, _ = await _round_with_lineup(client, clock, join, staff, make_player)
     broken = await _undo_twice(client, session, staff, match_id)
     clock.now = SETTLED
     await me(client, headers)  # abre el mercado de hoy: ya no queda nada procesable
@@ -351,7 +356,7 @@ async def test_settling_runs_once(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, _, _ = await _round_with_lineup(client, join, staff, make_player)
+    headers, _, _ = await _round_with_lineup(client, clock, join, staff, make_player)
     clock.now = SETTLED
 
     first = await me(client, headers)
@@ -371,9 +376,9 @@ async def test_a_copy_sold_before_the_lock_scores_zero_for_the_seller(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     sold, kept = team["squad"]
-    clock.now = BEFORE_LOCK
+    clock.now = MATCH_MORNING
     await client.post(f"/fantasy/copies/{sold['copy_id']}/sell", headers=headers)
     clock.now = MATCH_EVENING
     rows = await _stats(client, headers, match_id)
@@ -394,8 +399,8 @@ async def test_a_copy_sold_after_the_lock_keeps_its_points(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
-    clock.now = AFTER_LOCK
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
+    clock.now = AFTER_KICKOFF
     await client.post(f"/fantasy/copies/{team['squad'][0]['copy_id']}/sell", headers=headers)
     clock.now = SETTLED
     rows = await _stats(client, headers, match_id)
@@ -413,7 +418,7 @@ async def test_a_negative_balance_at_the_lock_scores_zero(
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     first, second = buyable(await market(client, headers), team)[:2]
     await bid(client, headers, first["listing_id"], 15000)
     await bid(client, headers, second["listing_id"], 15000)
@@ -437,8 +442,9 @@ async def test_an_open_round_previews_my_current_lineup_without_sold_copies(
     make_player: MakePlayer,
     join: Join,
     staff: dict[str, str],
+    clock: Clock,
 ) -> None:
-    headers, match_id, team = await _round_with_lineup(client, join, staff, make_player)
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
     sold, kept = team["squad"]
     await client.post(f"/fantasy/copies/{sold['copy_id']}/sell", headers=headers)
 
@@ -457,7 +463,7 @@ async def test_a_late_participant_has_no_points_in_rounds_settled_before_joining
     join: Join,
     staff: dict[str, str],
 ) -> None:
-    coach, match_id, _ = await _round_with_lineup(client, join, staff, make_player)
+    coach, match_id, _ = await _round_with_lineup(client, clock, join, staff, make_player)
     clock.now = SETTLED
     await _standings(client, coach)  # cierra la jornada
     late = await join("assistant_coach")
@@ -470,3 +476,24 @@ async def test_a_late_participant_has_no_points_in_rounds_settled_before_joining
     assert all(s["copy_id"] is None for s in detail["slots"])
     late_row = next(r for r in standings["rows"] if r["display_name"] == "assistant_coach")
     assert late_row["points_by_round"] == {match_id: 0}
+
+
+async def test_a_settled_round_keeps_why_each_player_scored(
+    client: AsyncClient,
+    login: Login,
+    make_player: MakePlayer,
+    clock: Clock,
+    join: Join,
+    staff: dict[str, str],
+) -> None:
+    headers, match_id, team = await _round_with_lineup(client, clock, join, staff, make_player)
+    clock.now = SETTLED
+
+    detail = await _detail(client, headers, match_id)
+
+    assert detail["status"] == "settled"
+    filled = [s for s in detail["slots"] if s["copy_id"]]
+    assert {s["copy_id"] for s in filled} == {c["copy_id"] for c in team["squad"]}
+    for slot in filled:
+        assert slot["breakdown"][0]["key"] == "base"
+        assert sum(p["points"] for p in slot["breakdown"]) == pytest.approx(slot["score"])

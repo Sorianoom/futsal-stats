@@ -13,14 +13,22 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import fantasy_money_repo as money
-from app.db import fantasy_repo
-from app.db.models import FantasyLeague, FantasyParticipant, FantasyRoundScore, User
+from app.db import fantasy_repo, photos_repo
+from app.db.models import FantasyLeague, FantasyParticipant, FantasyRoundScore, Player, User
 from app.domain.fantasy.access import plays_fantasy
 from app.domain.fantasy.calendar import Round, RoundStatus, is_locked, visible_rounds
 from app.domain.fantasy.lineup import EMPTY_LINEUP, latest_lineup
 from app.domain.fantasy.scoring import SlotScore, score_lineup
 from app.domain.fantasy.standings import StandingRow, display_name, rank
-from app.schemas.fantasy import RoundDetailOut, RoundOut, SlotOut, StandingRowOut, StandingsOut
+from app.domain.rating.score import HUNDREDTHS_PER_POINT
+from app.schemas.fantasy import (
+    BreakdownItemOut,
+    RoundDetailOut,
+    RoundOut,
+    SlotOut,
+    StandingRowOut,
+    StandingsOut,
+)
 from app.services.fantasy import NoLeagueError, enter, require_membership, watch
 from app.services.fantasy_results import Results, rounds_of, scored_results
 from app.services.fantasy_settlement import (
@@ -196,25 +204,38 @@ async def _detail_out(
     negative_balance: bool,
 ) -> RoundDetailOut:
     copies = await fantasy_repo.copies_with_players(db, [s.copy_id for s in slots if s.copy_id])
-    names = {str(player.id): player.name for _, player in copies.values()}
+    players = {str(player.id): player for _, player in copies.values()}
+    photos = await photos_repo.photo_urls(db, [p.id for p in players.values()])
     return RoundDetailOut(
         match_id=match_id,
         status=status,
         total=sum(s.points for s in slots),
         payout=payout,
         negative_balance=negative_balance,
-        slots=[_slot_out(s, names) for s in slots],
+        slots=[_slot_out(s, players, photos) for s in slots],
     )
 
 
-def _slot_out(slot: SlotScore, names: Mapping[str, str]) -> SlotOut:
+def _slot_out(
+    slot: SlotScore, players: Mapping[str, Player], photos: Mapping[uuid.UUID, str]
+) -> SlotOut:
+    player = players.get(slot.player_id) if slot.player_id else None
     return SlotOut(
         slot=slot.slot,
         copy_id=uuid.UUID(slot.copy_id) if slot.copy_id else None,
         player_id=uuid.UUID(slot.player_id) if slot.player_id else None,
-        name=names.get(slot.player_id) if slot.player_id else None,
+        name=player.name if player else None,
+        dorsal=player.dorsal if player else None,
+        photo_url=photos.get(player.id) if player else None,
         rating=slot.rating,
+        score=slot.score,
         goals=slot.goals,
         points=slot.points,
         captain=slot.captain,
+        mvp=slot.mvp,
+        breakdown=[
+            BreakdownItemOut(key=p.key, count=p.count, points=p.hundredths / HUNDREDTHS_PER_POINT)
+            for p in slot.breakdown
+        ],
+        bonus=[BreakdownItemOut(key=p.key, count=p.count, points=p.points) for p in slot.bonus],
     )

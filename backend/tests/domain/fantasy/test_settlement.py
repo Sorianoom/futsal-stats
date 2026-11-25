@@ -2,7 +2,7 @@
 
 from datetime import UTC, date, datetime, timedelta
 
-from app.domain.fantasy.calendar import RoundStatus, lock_time, settle_time
+from app.domain.fantasy.calendar import RoundStatus, midnight, settle_time
 from app.domain.fantasy.lineup import Lineup
 from app.domain.fantasy.scoring import PlayerResult
 from app.domain.fantasy.settlement import (
@@ -18,7 +18,7 @@ LOCK = datetime(2026, 11, 14, 23, 0, tzinfo=UTC)
 
 
 def test_the_round_settles_at_midnight_after_the_match() -> None:
-    assert settle_time(date(2026, 11, 14)) == lock_time(date(2026, 11, 15))
+    assert settle_time(date(2026, 11, 14)) == midnight(date(2026, 11, 15))
     assert RoundStatus.SETTLED == "settled"
 
 
@@ -62,8 +62,8 @@ RESULTS = {"p-gk": PlayerResult(7.5, 0), "p-a": PlayerResult(6.3, 1), "p-b": Pla
 def test_round_score_adds_the_owned_slots() -> None:
     score = round_score(LINEUP, {"c-gk", "c-a", "c-b"}, PLAYERS, RESULTS, negative_balance=False)
 
-    assert [s.points for s in score.slots] == [8, 8, 6, 0, 0]
-    assert score.points == 22
+    assert [s.points for s in score.slots] == [8, 6, 6, 0, 0]
+    assert score.points == 20
     assert score.negative_balance is False
 
 

@@ -103,19 +103,19 @@ describe("Fantasy con liga", () => {
 
     expect(await screen.findByText("20,0 M")).toBeInTheDocument();
     expect(screen.getByText("vs Nevada")).toBeInTheDocument();
-    expect(screen.getByText("Se bloquea el domingo, 15 de noviembre a las 00:00")).toBeInTheDocument();
+    expect(screen.getByText("Se bloquea al empezar el partido (domingo, 15 de noviembre)")).toBeInTheDocument();
     const squad = screen.getByRole("list", { name: "Mi plantilla" });
     expect(within(squad).getAllByRole("listitem")).toHaveLength(4);
     expect(within(squad).getByText("Bea Soto").closest("li")).toHaveTextContent("4,2 M");
   });
 
-  it("marca los huecos vacíos y que puntúan 0", async () => {
+  it("marca los huecos vacíos", async () => {
     api();
 
     renderWithAuth(<FantasyPage />, { user: fakeUser("player") });
 
     const editor = await screen.findByRole("region", { name: "Alineación" });
-    expect(within(editor).getAllByText("Vacío · 0 puntos")).toHaveLength(3);
+    expect(within(editor).getAllByText("Vacío")).toHaveLength(3);
     expect(within(editor).getByRole("button", { name: "Portero: vacío" })).toBeInTheDocument();
     expect(within(editor).getByRole("button", { name: "Pívot: Ana Ruiz" })).toBeInTheDocument();
   });
@@ -142,29 +142,22 @@ describe("Fantasy con liga", () => {
     });
   });
 
-  it("cada alineado enseña sus puntos de la última jornada", async () => {
+  it("la alineación no enseña puntos aunque ya haya jornadas puntuadas", async () => {
     const scored = {
       ...ME,
       last_round: { match_id: "m2", opponent: "Rival FS", held_on: "2026-11-08" },
-      squad: ME.squad.map((copy) => ({ ...copy, last_points: copy.copy_id === "c1" ? 9 : 3 })),
+      squad: ME.squad.map((copy) => ({ ...copy, last_points: copy.copy_id === "c1" ? 9 : 3, recent_points: [9, 3] })),
     };
     api({ "GET /fantasy/me": { data: scored } });
     renderWithAuth(<FantasyPage />, { user: fakeUser("player") });
 
     const editor = await screen.findByRole("region", { name: "Alineación" });
+    expect(editor).not.toHaveTextContent(/puntos|pts/i);
+    expect(within(editor).queryByLabelText(/puntos/)).not.toBeInTheDocument();
 
-    expect(editor).toHaveTextContent("Puntos de la última jornada, vs Rival FS");
-    expect(within(editor).getByLabelText("Ana Ruiz: 9 puntos en la última jornada")).toBeInTheDocument();
-    expect(within(editor).getByLabelText("Bea Soto: 3 puntos en la última jornada")).toBeInTheDocument();
-  });
-
-  it("sin jornadas puntuadas no enseña puntos", async () => {
-    api();
-    renderWithAuth(<FantasyPage />, { user: fakeUser("player") });
-
-    const editor = await screen.findByRole("region", { name: "Alineación" });
-
-    expect(within(editor).queryByLabelText(/puntos en la última jornada/)).not.toBeInTheDocument();
+    await userEvent.click(within(editor).getByRole("button", { name: /Ana Ruiz/ }));
+    const sheet = await screen.findByRole("dialog");
+    expect(sheet).not.toHaveTextContent(/pts/);
   });
 
   it("elige capitán entre los alineados y lo guarda", async () => {
@@ -266,7 +259,7 @@ describe("Fantasy con liga", () => {
     expect(within(rows[0]).getByText("Pendiente")).toBeInTheDocument();
   });
 
-  it("tocar una jornada enseña mi alineación con nota, goles y puntos", async () => {
+  it("tocar una jornada enseña mi alineación en la pista con los puntos", async () => {
     api();
     renderWithAuth(<FantasyPage />, { user: fakeUser("player") });
     await userEvent.click(await screen.findByRole("tab", { name: "Clasificación" }));
@@ -274,16 +267,14 @@ describe("Fantasy con liga", () => {
 
     await userEvent.click(within(table).getByRole("button", { name: /Betis/ }));
 
-    const dialog = await screen.findByRole("dialog");
-    const ana = await within(dialog).findByRole("row", { name: /Ana Ruiz/ });
-    expect(ana).toHaveTextContent("9,3");
-    expect(ana).toHaveTextContent("2");
-    expect(ana).toHaveTextContent("13");
-    expect(within(dialog).getAllByText("Vacío · 0 puntos")).toHaveLength(2);
-    expect(dialog).toHaveTextContent("25 puntos");
+    const lineup = await within(await screen.findByRole("dialog")).findByRole("region", { name: "Mi alineación" });
+    expect(within(lineup).getByRole("button", { name: "Ana Ruiz: 13 puntos" })).toBeInTheDocument();
+    expect(within(lineup).getByRole("button", { name: "Bea Soto: 6 puntos" })).toBeInTheDocument();
+    expect(within(lineup).getAllByText("Vacío")).toHaveLength(2);
+    expect(lineup).toHaveTextContent("Total: 25 puntos");
   });
 
-  it("en el detalle de una jornada se ve quién fue capitán", async () => {
+  it("en el detalle de una jornada se ve quién fue capitán y que dobla", async () => {
     const withCaptain = {
       ...ROUND,
       slots: ROUND.slots.map((slot) => (slot.copy_id === "c2" ? { ...slot, captain: true, points: 12 } : slot)),
@@ -295,10 +286,11 @@ describe("Fantasy con liga", () => {
 
     await userEvent.click(within(table).getByRole("button", { name: /Betis/ }));
 
-    const dialog = await screen.findByRole("dialog");
-    const bea = await within(dialog).findByRole("row", { name: /Bea Soto/ });
-    expect(within(bea).getByText("Capitán · ×2")).toBeInTheDocument();
-    expect(bea).toHaveTextContent("12");
+    const lineup = await within(await screen.findByRole("dialog")).findByRole("region", { name: "Mi alineación" });
+    await userEvent.click(within(lineup).getByRole("button", { name: "Bea Soto: 12 puntos" }));
+    const why = within(lineup).getByRole("region", { name: "Por qué: Bea Soto" });
+    expect(why).toHaveTextContent("Capitán×2");
+    expect(why).toHaveTextContent("Total12");
   });
 
   it("sin próxima jornada lo dice", async () => {
@@ -332,15 +324,19 @@ describe("Fantasy con liga", () => {
 });
 
 describe("Cuenta de partidos del cuerpo técnico", () => {
-  it("solo ve la clasificación, sin equipo ni jornadas que abrir, pero sí el equipo de cada uno", async () => {
+  it("solo ve la clasificación, sin equipo propio, pero sí lo que alineó cada uno", async () => {
     api({ "GET /fantasy/me": { data: { league: ME.league, spectator: true } } });
 
     renderWithAuth(<FantasyPage />, { user: fakeUser("assistant_coach") });
 
     expect(await screen.findByText(/solo ves la clasificación/)).toBeInTheDocument();
     const table = await screen.findByRole("table", { name: "Clasificación" });
-    expect(within(table).queryByRole("button", { name: /Betis|Almería|Cádiz/ })).not.toBeInTheDocument();
     expect(within(table).getByRole("button", { name: "Carla Ruiz" })).toBeInTheDocument();
+    await userEvent.click(within(table).getByRole("button", { name: /Betis/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("list", { name: "Equipos de esta jornada" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("region", { name: "Mi alineación" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("tab", { name: "Mercado" })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Mi plantilla" })).not.toBeInTheDocument();
   });

@@ -23,10 +23,10 @@ const LOCK_TIME = new Intl.DateTimeFormat("es-ES", {
   timeZone: CLUB_TIME_ZONE,
 });
 
-/** "Se bloquea el domingo, 15 de noviembre a las 00:00", en hora de Madrid. */
-export function lockText(locksAt: string): string {
-  const moment = new Date(locksAt);
-  return `Se bloquea el ${LOCK_DAY.format(moment)} a las ${LOCK_TIME.format(moment)}`;
+/** "Se bloquea al empezar el partido (domingo, 15 de noviembre)". `heldOn` es la fecha del
+ * partido (AAAA-MM-DD); se lee a mediodía para que ninguna zona horaria la mueva de día. */
+export function lockText(heldOn: string): string {
+  return `Se bloquea al empezar el partido (${LOCK_DAY.format(new Date(`${heldOn}T12:00:00Z`))})`;
 }
 
 export function formatPoints(points: number): string {
