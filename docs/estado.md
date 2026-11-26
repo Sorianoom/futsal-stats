@@ -216,7 +216,7 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
 
 ## En curso
 
-- **Detalle de los goles** (2026-11-26, sin subir; **migración 0017**, aplicarla en Neon antes del
+- **Detalle de los goles** (2026-11-26, en producción; **migración 0017** aplicada en Neon antes del
   push). Petición del entrenador. Al anotar un gol (nuestro o del rival) se abre una ventana con
   hasta 3 tipos (balón parado, jugada ensayada, contraataque, pérdida en campo propio / robo en
   campo rival, segundo palo, tiro lejano, 1 contra 1, rebote, portero-jugador, penalti o doble
