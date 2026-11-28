@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     Attendance,
     Exclusion,
+    LineupEventRow,
     Match,
     MovementRow,
     Player,
@@ -174,6 +175,19 @@ async def match_date(db: AsyncSession, match: Match) -> date:
     team_session = await db.get(TeamSession, match.session_id)
     assert team_session is not None
     return team_session.held_on
+
+
+async def match_has_lineup(db: AsyncSession, match_id: uuid.UUID) -> bool:
+    """Si ya hay algo anotado en la alineación (el partido ha empezado)."""
+    query = select(LineupEventRow.id).where(LineupEventRow.match_id == match_id).limit(1)
+    return (await db.execute(query)).first() is not None
+
+
+async def set_session_date(db: AsyncSession, session_id: uuid.UUID, held_on: date) -> None:
+    team_session = await db.get(TeamSession, session_id)
+    assert team_session is not None
+    team_session.held_on = held_on
+    await db.flush()
 
 
 async def create_exclusion(

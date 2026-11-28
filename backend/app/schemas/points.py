@@ -166,7 +166,16 @@ class MatchCreate(StrictModel):
 
 
 class MatchUpdate(StrictModel):
-    is_official: bool
+    """Oficial o amistoso, y la fecha (solo de un partido que aún no ha empezado)."""
+
+    is_official: bool | None = None
+    held_on: PlausibleDate | None = None
+
+    @model_validator(mode="after")
+    def _something_to_change(self) -> "MatchUpdate":
+        if self.is_official is None and self.held_on is None:
+            raise ValueError("Indica qué cambiar del partido")
+        return self
 
 
 class MatchOut(BaseModel):

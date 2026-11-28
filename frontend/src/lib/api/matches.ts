@@ -40,6 +40,20 @@ export function setMatchOfficial(matchId: string, isOfficial: boolean): Promise<
   });
 }
 
+/**
+ * Cambia el día de un partido que aún no ha empezado (personal técnico). Su jornada del Fantasy se
+ * mueve con él, así que se olvidan la lista de partidos y lo cacheado del Fantasy.
+ */
+export function rescheduleMatch(matchId: string, heldOn: string): Promise<Match> {
+  return apiData<Match>(`/matches/${encodeURIComponent(matchId)}`, {
+    method: "PATCH",
+    body: { held_on: heldOn },
+  }).finally(() => {
+    queryCache.invalidate(MATCHES_KEY);
+    invalidateFantasy();
+  });
+}
+
 export function listMatchEvents(matchId: string): Promise<LoggedEvent[]> {
   return apiData<LoggedEvent[]>(`/matches/${encodeURIComponent(matchId)}/events`);
 }

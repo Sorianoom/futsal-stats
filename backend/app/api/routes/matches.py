@@ -1,15 +1,17 @@
 """Partidos y exclusiones (sanciones confirmadas por el entrenador)."""
 
 import uuid
+from datetime import date, datetime
 
 from fastapi import APIRouter
 
-from app.api.deps import AnyUser, CurrentUser, HeadCoach, SessionDep
+from app.api.deps import AnyUser, CurrentUser, HeadCoach, NowDep, SessionDep
 from app.api.envelope import Envelope, Meta, ok
 from app.api.errors import ApiError
 from app.api.idempotency import IdempotencyKey, run_idempotent
 from app.db import points_repo
 from app.db.models import Match, Player
+from app.domain.fantasy.calendar import madrid_date
 from app.schemas.points import (
     ExclusionCreate,
     ExclusionOut,
@@ -58,15 +60,32 @@ async def list_matches(db: SessionDep, _: AnyUser) -> Envelope[list[MatchOut]]:
     return ok([_match_out(m, held_on) for m, held_on in rows], Meta(total=len(rows)))
 
 
+async def _reschedule(db: SessionDep, match: Match, held_on: date, now: datetime) -> None:
+    """Cambia el día de un partido que aún no ha empezado. Su jornada del Fantasy se mueve con él:
+    no puede estar cerrada, porque solo se cierra con el partido jugado."""
+    if held_on == await points_repo.match_date(db, match):
+        return
+    if held_on < madrid_date(now):
+        raise ApiError(422, "date_in_past", "La nueva fecha no puede ser anterior a hoy")
+    if match.started_at is not None or await points_repo.match_has_lineup(db, match.id):
+        raise ApiError(
+            409, "match_started", "El partido ya ha empezado: no se le puede cambiar el día"
+        )
+    await points_repo.set_session_date(db, match.session_id, held_on)
+
+
 @router.patch("/matches/{match_id}", response_model=Envelope[MatchOut])
 async def update_match(
-    match_id: uuid.UUID, payload: MatchUpdate, db: SessionDep, _: CurrentUser
+    match_id: uuid.UUID, payload: MatchUpdate, db: SessionDep, _: CurrentUser, now: NowDep
 ) -> Envelope[MatchOut]:
-    """Marca un partido como oficial (jornada del Fantasy) o amistoso."""
+    """Marca un partido como oficial (jornada del Fantasy) o amistoso, o le cambia el día."""
     match = await points_repo.get_match(db, match_id)
     if match is None:
         raise _not_found("Partido")
-    match.is_official = payload.is_official
+    if payload.held_on is not None:
+        await _reschedule(db, match, payload.held_on, now)
+    if payload.is_official is not None:
+        match.is_official = payload.is_official
     await db.flush()
     held_on = await points_repo.match_date(db, match)
     await db.commit()

@@ -216,6 +216,14 @@ partido (0016) y jornada en la pista. 0014, 0015 y 0016 aplicadas en Neon el 202
 
 ## En curso
 
+- **Cambiar el día de un partido programado** (2026-11-28, sin migración). En la pantalla del
+  partido antes de empezar sale su fecha y «Cambiar fecha» (personal técnico, sin anotaciones
+  pendientes de enviar). `PATCH /matches/{id}` admite ahora `held_on` además de `is_official`
+  (los dos opcionales, al menos uno). Cambia `sessions.held_on`. Solo si el partido no ha empezado
+  (`started_at` nulo y sin eventos de alineación: 409 `match_started`) y a hoy o después en Madrid
+  (422 `date_in_past`). La jornada del Fantasy va por `match_id`, así que se mueve con el partido
+  (bloqueo y cierre se calculan con la fecha nueva); una jornada solo se cierra con el partido
+  jugado, por eso no hace falta mirar si está cerrada.
 - **Detalle de los goles** (2026-11-26, en producción; **migración 0017** aplicada en Neon antes del
   push). Petición del entrenador. Al anotar un gol (nuestro o del rival) se abre una ventana con
   hasta 3 tipos (balón parado, jugada ensayada, contraataque, pérdida en campo propio / robo en

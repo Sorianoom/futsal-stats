@@ -13,6 +13,7 @@ import { PartBreak } from "@/components/part-break";
 import { PlayerActionsDialog } from "@/components/player-actions-dialog";
 import { PlayerTransferDialog } from "@/components/player-transfer-dialog";
 import { RatingDialog } from "@/components/rating-dialog";
+import { RescheduleMatchDialog } from "@/components/reschedule-match-dialog";
 import { StartersPicker } from "@/components/starters-picker";
 import { SyncStatus } from "@/components/sync-status";
 import { SubstitutionDialog, type SubstitutionAnchor } from "@/components/substitution-dialog";
@@ -58,6 +59,8 @@ import type { ConfirmedLog, Outbox } from "@/lib/match/outbox";
 import { loadSquad, playersInMatch, saveSquad } from "@/lib/match/squad";
 import { useMatchLog } from "@/lib/match/use-match-log";
 import { useWakeLock } from "@/lib/use-wake-lock";
+import { isPlayer } from "@/lib/roles";
+import { formatLongDay } from "@/lib/weeks";
 
 export interface BoardData {
   match: Match;
@@ -145,9 +148,12 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
   const [transferOpen, setTransferOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [mvpOpen, setMvpOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [mvp, setMvp] = useState<string | null>(data.match.mvp_player_id ?? null);
   const { user } = useAuth();
   const canClear = user?.role === "head_coach";
+  // Solo antes de empezar y sin nada pendiente de enviar: el servidor lo rechaza si ya hay alineación.
+  const canReschedule = !isPlayer(user?.role) && log.pending === 0;
   const involved = useMemo(() => playersInMatch(log.lineup, log.events), [log.lineup, log.events]);
   /**
    * Puede salir al campo. Con convocatoria confirmada: los convocados y quien ya ha jugado. Sin
@@ -477,6 +483,29 @@ export function MatchBoard({ matchId, data, onReload, onRefresh, onActivity, onC
     return (
       <>
         <RejectionNotice items={rejected} onDismiss={log.dismissRejections} />
+        <section
+          aria-label="Fecha del partido"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4"
+        >
+          <p className="text-base font-bold first-letter:uppercase">{formatLongDay(data.match.held_on)}</p>
+          {canReschedule ? (
+            <Button size="lg" variant="outline" onClick={() => setRescheduleOpen(true)}>
+              Cambiar fecha
+            </Button>
+          ) : null}
+        </section>
+        {canReschedule ? (
+          <RescheduleMatchDialog
+            open={rescheduleOpen}
+            matchId={matchId}
+            heldOn={data.match.held_on}
+            onClose={() => setRescheduleOpen(false)}
+            onSaved={() => {
+              setRescheduleOpen(false);
+              onReload();
+            }}
+          />
+        ) : null}
         <section
           aria-label="Convocatoria del partido"
           className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4"
